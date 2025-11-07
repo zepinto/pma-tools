@@ -48,10 +48,9 @@ import pt.omst.neptus.util.GuiUtils;
  * <p>
  * <p>
  * <b>Important note: </b> you should always implement all the methods in the
- * interface {@link pt.lsts.neptus.types.XmlOutputMethods} and the
- * variable {@link #DEFAULT_ROOT_ELEMENT}. If not the root element of the output
- * XML will be the one of the parent class.<br/>
- * You should also implement the constructors and the {@link #load(String)} to
+ * XmlOutputMethods interface and the DEFAULT_ROOT_ELEMENT variable. 
+ * If not, the root element of the output XML will be the one of the parent class.<br/>
+ * You should also implement the constructors and the load(String) method to
  * perfect results. It can be something like this: <code><br/>
  * &nbsp;&nbsp;public boolean load (String xml)<br/>
  * &nbsp;&nbsp;{<br/>

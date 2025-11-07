@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.IOException;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
@@ -13,9 +14,11 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
 
 import javax0.license3j.License;
+import pt.omst.gui.LoadingPanel;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
@@ -130,56 +133,139 @@ public class RasterFallApp extends JFrame {
     }
     
     private void loadRasterFolder(File folder) {
-        SwingUtilities.invokeLater(() -> {
+        // Show loading splash screen centered on this window
+        JWindow splash = LoadingPanel.showSplashScreen("Loading raster data...", this);
+        LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
+        
+        // Force the splash screen to render before starting heavy work
+        splash.toFront();
+        splash.repaint();
+        
+        // Perform loading in background thread to keep UI responsive
+        new Thread(() -> {
             try {
+                // Give splash screen time to render and start animation
+                Thread.sleep(150);
+                
                 // Close existing panel if one is open
                 if (rasterfallPanel != null) {
-                    remove(rasterfallPanel);
-                    rasterfallPanel.close();
+                    if (loadingPanel != null) {
+                        SwingUtilities.invokeLater(() -> loadingPanel.setStatus("Closing previous session..."));
+                    }
+                    SwingUtilities.invokeLater(() -> {
+                        remove(rasterfallPanel);
+                        try {
+                            rasterfallPanel.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    });
+                    Thread.sleep(100);
                 }
                 
-                // Create progress callback
+                // Create progress callback that updates splash screen
                 Consumer<String> progressCallback = (String message) -> {
-                    // You can add a progress dialog here if needed
+                    if (loadingPanel != null) {
+                        SwingUtilities.invokeLater(() -> loadingPanel.setStatus(message));
+                    }
                     System.out.println("Loading: " + message);
                 };
                 
-                // Create new rasterfall panel with selected folder
-                rasterfallPanel = new RasterfallPanel(folder, progressCallback);
-                add(rasterfallPanel, BorderLayout.CENTER);
+                // Create new rasterfall panel with selected folder (in background)
+                if (loadingPanel != null) {
+                    SwingUtilities.invokeLater(() -> loadingPanel.setStatus("Initializing rasterfall panel..."));
+                }
                 
-                // Update window title
-                setTitle("Sidescan RasterFall - " + folder.getName());
+                RasterfallPanel newPanel = new RasterfallPanel(folder, progressCallback);
                 
-                // Refresh the display
-                revalidate();
-                repaint();
+                // Add panel to UI on EDT
+                SwingUtilities.invokeLater(() -> {
+                    rasterfallPanel = newPanel;
+                    add(rasterfallPanel, BorderLayout.CENTER);
+                    
+                    // Update window title
+                    setTitle("Sidescan RasterFall - " + folder.getName());
+                    
+                    // Refresh the display
+                    if (loadingPanel != null) loadingPanel.setStatus("Finalizing...");
+                    revalidate();
+                    repaint();
+                    
+                    // Close splash screen after a brief delay
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(500);
+                            SwingUtilities.invokeLater(() -> LoadingPanel.hideSplashScreen(splash));
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }).start();
+                });
                 
             } catch (Exception ex) {
                 ex.printStackTrace();
-                JOptionPane.showMessageDialog(this, 
-                    "Error loading raster folder: " + ex.getMessage(), 
-                    "Error", 
-                    JOptionPane.ERROR_MESSAGE);
+                SwingUtilities.invokeLater(() -> {
+                    LoadingPanel.hideSplashScreen(splash);
+                    JOptionPane.showMessageDialog(this, 
+                        "Error loading raster folder: " + ex.getMessage(), 
+                        "Error", 
+                        JOptionPane.ERROR_MESSAGE);
+                });
             }
-        });
+        }).start();
     }
 
     public static void main(String[] args) {
-        GuiUtils.setLookAndFeel();
-        try {
-            LicenseChecker.checkLicense(NeptusLicense.RASTERFALL);
-        }
-        catch (Exception ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(null, 
-                "License check failed: " + ex.getMessage(), 
-                "License Error", 
-                JOptionPane.ERROR_MESSAGE);
-            System.exit(1);
-        }        
-        RasterFallApp app = new RasterFallApp();        
-        app.setVisible(true);
+        // Show splash screen during startup
+        JWindow splash = LoadingPanel.showSplashScreen("Starting Sidescan RasterFall...");
+        LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
+        
+        // Initialize application in background
+        new Thread(() -> {
+            try {
+                if (loadingPanel != null) loadingPanel.setStatus("Setting look and feel...");
+                GuiUtils.setLookAndFeel();
+                
+                if (loadingPanel != null) loadingPanel.setStatus("Checking license...");
+                try {
+                    LicenseChecker.checkLicense(NeptusLicense.RASTERFALL);
+                }
+                catch (Exception ex) {
+                    ex.printStackTrace();
+                    SwingUtilities.invokeLater(() -> {
+                        LoadingPanel.hideSplashScreen(splash);
+                        JOptionPane.showMessageDialog(null, 
+                            "License check failed: " + ex.getMessage(), 
+                            "License Error", 
+                            JOptionPane.ERROR_MESSAGE);
+                    });
+                    System.exit(1);
+                    return;
+                }
+                
+                if (loadingPanel != null) loadingPanel.setStatus("Initializing application...");
+                Thread.sleep(500); // Brief delay for smoother experience
+                
+                SwingUtilities.invokeLater(() -> {
+                    RasterFallApp app = new RasterFallApp();
+                    app.setVisible(true);
+                    
+                    // Close splash screen
+                    LoadingPanel.hideSplashScreen(splash);
+                });
+                
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    LoadingPanel.hideSplashScreen(splash);
+                    JOptionPane.showMessageDialog(null, 
+                        "Application initialization failed: " + ex.getMessage(), 
+                        "Error", 
+                        JOptionPane.ERROR_MESSAGE);
+                });
+                System.exit(1);
+            }
+        }).start();
     }
     
 }

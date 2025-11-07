@@ -59,12 +59,9 @@ public interface SidescanParser {
     long lastPingTimestamp();
 
     /**
-     * Returns the sidescan lines between two timestamps for a given subsystem
-     * @param timestamp1 start timestamp in milliseconds
-     * @param timestamp2 end timestamp in milliseconds
-     * @param subsystem the subsystem to get lines from
-     * @param config the sidescan parameters configuration
-     * @return list of sidescan lines
+     * Returns the timestamp of the first ping for a given subsystem
+     * @param subsystem the subsystem to query
+     * @return timestamp in milliseconds
      */
     long firstPingTimestamp(int subsystem);
 
@@ -76,8 +73,7 @@ public interface SidescanParser {
     long lastPingTimestamp(int subsystem);
 
     /**
-     * Returns the timestamp of the last ping for a given subsystem
-     * @param subsystem the subsystem to query
+     * Returns the sidescan lines between two timestamps for a given subsystem
      * @param timestamp1 the start timestamp in milliseconds
      * @param timestamp2 the end timestamp in milliseconds
      * @param subsystem the subsystem to get lines from

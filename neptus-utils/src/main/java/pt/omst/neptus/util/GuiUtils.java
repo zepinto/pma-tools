@@ -210,7 +210,7 @@ public class GuiUtils {
     }
 
     /**
-     * Gets the default font size for the current L&F.
+     * Gets the default font size for the current Look and Feel.
      * 
      * @return Default font size
      */
