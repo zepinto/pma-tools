@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.util.function.Consumer;
+import java.util.prefs.Preferences;
 
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -14,6 +15,10 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
+import javax0.license3j.License;
+import pt.omst.licences.LicenseChecker;
+import pt.omst.licences.LicensePanel;
+import pt.omst.licences.NeptusLicense;
 import pt.omst.neptus.util.GuiUtils;
 
 public class RasterFallApp extends JFrame {
@@ -60,23 +65,66 @@ public class RasterFallApp extends JFrame {
         fileMenu.addSeparator();
         fileMenu.add(exitItem);
         
-        menuBar.add(fileMenu);
+        menuBar.add(fileMenu);        
+        
+        // Help menu
+        JMenu helpMenu = new JMenu("Help");
+        
+        // Software License menu item
+        JMenuItem licenseItem = new JMenuItem("Software License");
+        licenseItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showLicenseDialog();
+            }
+        });
+        
+        helpMenu.add(licenseItem);
+        
+        menuBar.add(helpMenu);
         setJMenuBar(menuBar);
+    }
+    
+    private void showLicenseDialog() {
+        JFrame licenseFrame = new JFrame("Software License");
+        LicensePanel panel = new LicensePanel();
+        licenseFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        try {
+            License mainLicense = LicenseChecker.getMainLicense();
+            if (mainLicense != null) {
+                License activation = LicenseChecker.getLicenseActivation();
+                panel.setLicense(mainLicense, activation);
+            }
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        licenseFrame.add(panel);
+        licenseFrame.pack();
+        licenseFrame.setLocationRelativeTo(this);
+        licenseFrame.setVisible(true);
     }
     
     private void openFolder() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fileChooser.setDialogTitle("Select Raster Folder");
-        
-        // Set default directory if available
-        String userHome = System.getProperty("user.home");
-        fileChooser.setCurrentDirectory(new File(userHome));
+
+        Preferences prefs = Preferences.userNodeForPackage(RasterFallApp.class);
+        String lastDir = prefs.get("lastRasterFolder", null);
+        if (lastDir != null) {
+            File lastFolder = new File(lastDir);
+            if (lastFolder.exists() && lastFolder.isDirectory()) {
+                fileChooser.setCurrentDirectory(lastFolder);
+            }
+        }
         
         int result = fileChooser.showOpenDialog(this);
         
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFolder = fileChooser.getSelectedFile();
+            prefs.put("lastRasterFolder", selectedFolder.getAbsolutePath());
             loadRasterFolder(selectedFolder);
         }
     }
@@ -119,7 +167,18 @@ public class RasterFallApp extends JFrame {
 
     public static void main(String[] args) {
         GuiUtils.setLookAndFeel();
-        RasterFallApp app = new RasterFallApp();
+        try {
+            LicenseChecker.checkLicense(NeptusLicense.RASTERFALL);
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(null, 
+                "License check failed: " + ex.getMessage(), 
+                "License Error", 
+                JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }        
+        RasterFallApp app = new RasterFallApp();        
         app.setVisible(true);
     }
     
