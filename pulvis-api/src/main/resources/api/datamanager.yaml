@@ -1,0 +1,1623 @@
+openapi: 3.0.1
+info:
+  title: Data Manager API
+  description: "API for managing georeferenced contacts following the RasterLib specification.\n\
+    \nThis API supports:\n- Contact management with observations and annotations\n\
+    - Raster data processing and storage  \n- Geographic queries (bounding box, distance-based)\n\
+    - Depth-based filtering\n- Label-based searching\n\nThe system follows the RasterLib\
+    \ JSON schema for georeferenced contacts,\nsupporting sonar echoes, photographs,\
+    \ and other georeferenced observations\nwith their associated measurement and\
+    \ classification annotations."
+  contact:
+    name: Oceanscan-MST
+    email: support@oceanscan-mst.com
+  license:
+    name: MIT License
+    url: https://opensource.org/licenses/MIT
+  version: 1.0.0
+servers:
+- url: http://localhost:8080
+  description: Development server
+- url: https://api.example.com
+  description: Production server
+tags:
+- name: Contacts
+  description: "Contact management API for georeferenced contacts following RasterLib\
+    \ specification. Supports sonar echoes, photographs, and other georeferenced observations\
+    \ with associated annotations."
+- name: Raster Management
+  description: APIs for managing sonar raster data and processing
+- name: Health
+  description: Application health and status endpoints
+- name: API Root
+  description: API information and available endpoints
+paths:
+  /api/rasters/{id}/status:
+    get:
+      tags:
+      - Raster Management
+      summary: Get processing status
+      description: Get the current processing status of a raster
+      operationId: getProcessingStatus
+      parameters:
+      - name: id
+        in: path
+        description: Raster UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProcessingStatusResponse'
+    put:
+      tags:
+      - Raster Management
+      summary: Update processing status
+      description: Update the processing status of a raster (for processing workers)
+      operationId: updateProcessingStatus
+      parameters:
+      - name: id
+        in: path
+        description: Raster UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        description: New processing status
+        required: true
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - QUEUED
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+      - name: error
+        in: query
+        description: Error message if status is FAILED
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProcessingStatusResponse'
+  /api/contacts/{id}:
+    get:
+      tags:
+      - Contacts
+      summary: Get contact by ID
+      description: Retrieve a specific contact by its UUID
+      operationId: getContact
+      parameters:
+      - name: id
+        in: path
+        description: Contact UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ContactResponse'
+    put:
+      tags:
+      - Contacts
+      summary: Update contact basic information
+      description: "Update a contact's basic information including label, coordinates,\
+        \ and depth. Only provided fields will be updated."
+      operationId: updateContact
+      parameters:
+      - name: id
+        in: path
+        description: Contact UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactUpdateRequest'
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ContactResponse'
+    delete:
+      tags:
+      - Contacts
+      summary: Delete contact
+      description: Delete a contact and its associated observations and annotations.
+        File cleanup is currently disabled due to model changes.
+      operationId: deleteContact
+      parameters:
+      - name: id
+        in: path
+        description: Contact UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+  /api/contacts/annotations/{annotationId}:
+    get:
+      tags:
+      - Contacts
+      summary: Get annotation by ID
+      description: Retrieve a specific annotation by its UUID
+      operationId: getAnnotation
+      parameters:
+      - name: annotationId
+        in: path
+        description: Annotation UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AnnotationResponse'
+    put:
+      tags:
+      - Contacts
+      summary: Update annotation
+      description: "Update an annotation's properties. Only provided fields will be\
+        \ updated. Note: This creates a new annotation instance due to immutable fields\
+        \ in the model."
+      operationId: updateAnnotation
+      parameters:
+      - name: annotationId
+        in: path
+        description: Annotation UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnotationUpdateRequest'
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AnnotationResponse'
+    delete:
+      tags:
+      - Contacts
+      summary: Delete annotation
+      description: Delete an annotation by its UUID
+      operationId: deleteAnnotation
+      parameters:
+      - name: annotationId
+        in: path
+        description: Annotation UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+  /api/rasters/upload:
+    post:
+      tags:
+      - Raster Management
+      summary: Upload raster data
+      description: Upload a raster.json index file and corresponding image file for
+        processing
+      operationId: uploadRaster
+      parameters:
+      - name: vehicleName
+        in: query
+        description: Name of the vehicle that collected the data
+        required: false
+        schema:
+          type: string
+      - name: missionName
+        in: query
+        description: Name of the mission
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - imageFile
+              - rasterJson
+              type: object
+              properties:
+                rasterJson:
+                  type: string
+                  description: Raster index JSON file
+                  format: binary
+                imageFile:
+                  type: string
+                  description: Raster image file
+                  format: binary
+      responses:
+        "200":
+          description: Raster uploaded successfully
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RasterIndexResponse'
+        "400":
+          description: Invalid file format or missing required files
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RasterIndexResponse'
+  /api/contacts:
+    get:
+      tags:
+      - Contacts
+      summary: List all contacts
+      description: "Get paginated list of all contacts. Valid sort fields: uuid, label,\
+        \ latitude, longitude, depth, createdAt, updatedAt"
+      operationId: listContacts
+      parameters:
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+          default:
+          - "label,ASC"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContactResponse'
+    post:
+      tags:
+      - Contacts
+      summary: Upload contact data
+      description: Upload a ZIP file containing contact.json and associated raster
+        images. The contact will be created following the RasterLib specification
+        with observations for each raster file.
+      operationId: createContact
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - file
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: ZIP file containing contact data (contact.json) and
+                    associated raster images
+                  format: binary
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ContactResponse'
+  /api:
+    get:
+      tags:
+      - API Root
+      summary: Get API information
+      description: Returns information about the DataManager API and available endpoints
+      operationId: getApiInfo
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiInfo'
+  /api/rasters/{id}:
+    get:
+      tags:
+      - Raster Management
+      summary: Get raster by ID
+      description: Retrieve a specific raster index by its UUID
+      operationId: getRasterById
+      parameters:
+      - name: id
+        in: path
+        description: Raster UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RasterIndexResponse'
+  /api/rasters/{id}/download/index:
+    get:
+      tags:
+      - Raster Management
+      summary: Download raster index
+      description: Download the JSON index file associated with a raster
+      operationId: downloadRasterIndex
+      parameters:
+      - name: id
+        in: path
+        description: Raster UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+  /api/rasters/{id}/download/image:
+    get:
+      tags:
+      - Raster Management
+      summary: Download raster image
+      description: Download the image file associated with a raster
+      operationId: downloadRasterImage
+      parameters:
+      - name: id
+        in: path
+        description: Raster UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+  /api/rasters/query:
+    get:
+      tags:
+      - Raster Management
+      summary: Query raster data
+      description: "Search for raster data by time range, bounding box, vehicle, or\
+        \ mission"
+      operationId: queryRasters
+      parameters:
+      - name: startTime
+        in: query
+        description: Start time (ISO 8601 format)
+        required: false
+        schema:
+          type: string
+      - name: endTime
+        in: query
+        description: End time (ISO 8601 format)
+        required: false
+        schema:
+          type: string
+      - name: minLatitude
+        in: query
+        description: Minimum latitude of bounding box
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: maxLatitude
+        in: query
+        description: Maximum latitude of bounding box
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: minLongitude
+        in: query
+        description: Minimum longitude of bounding box
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: maxLongitude
+        in: query
+        description: Maximum longitude of bounding box
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: vehicleName
+        in: query
+        description: Vehicle name filter
+        required: false
+        schema:
+          type: string
+      - name: missionName
+        in: query
+        description: Mission name filter
+        required: false
+        schema:
+          type: string
+      - name: processingStatus
+        in: query
+        description: Processing status filter
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - QUEUED
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RasterIndexResponse'
+  /api/health:
+    get:
+      tags:
+      - Health
+      summary: Health check
+      description: Check if the application is running
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+  /api/health/ready:
+    get:
+      tags:
+      - Health
+      summary: Readiness check
+      description: Check if the application is ready to serve requests
+      operationId: ready
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+  /api/contacts/updated-since:
+    get:
+      tags:
+      - Contacts
+      summary: Find contacts updated since timestamp
+      description: Retrieve contacts that have been created or modified since the
+        specified timestamp. Returns contacts ordered by most recently updated first.
+      operationId: findContactsUpdatedSince
+      parameters:
+      - name: since
+        in: query
+        description: Timestamp (Unix timestamp in seconds) to query from
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+          default:
+          - "updatedAt,DESC"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContactResponse'
+  /api/contacts/time-range:
+    get:
+      tags:
+      - Contacts
+      summary: Find contacts by time range
+      description: "Find contacts within a specified time range. Note: In the RasterLib\
+        \ model, timestamps are stored in observations rather than contacts."
+      operationId: findContactsByTimeRange
+      parameters:
+      - name: startTime
+        in: query
+        description: Start time (Unix timestamp)
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: endTime
+        in: query
+        description: End time (Unix timestamp)
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContact'
+  /api/contacts/search:
+    get:
+      tags:
+      - Contacts
+      summary: Search contacts by label
+      description: Search contacts by label containing the specified text (case-insensitive)
+      operationId: searchContactsByLabel
+      parameters:
+      - name: query
+        in: query
+        description: Text to search for in contact labels
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+          default:
+          - "label,ASC"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContact'
+  /api/contacts/query:
+    get:
+      tags:
+      - Contacts
+      summary: Query contacts with filters
+      description: "Query contacts using multiple filter criteria including geographic\
+        \ bounds, depth range, and label search"
+      operationId: queryContacts
+      parameters:
+      - name: minLatitude
+        in: query
+        description: Minimum latitude (decimal degrees)
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: maxLatitude
+        in: query
+        description: Maximum latitude (decimal degrees)
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: minLongitude
+        in: query
+        description: Minimum longitude (decimal degrees)
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: maxLongitude
+        in: query
+        description: Maximum longitude (decimal degrees)
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: minDepth
+        in: query
+        description: Minimum depth in meters
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: maxDepth
+        in: query
+        description: Maximum depth in meters
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: label
+        in: query
+        description: Label to search for (case-insensitive partial match)
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContactResponse'
+  /api/contacts/observations/{observationId}/raster-index:
+    get:
+      tags:
+      - Contacts
+      summary: Get raster index by observation ID
+      description: Retrieve the raster index JSON file for a specific observation
+      operationId: getRasterIndexByObservation
+      parameters:
+      - name: observationId
+        in: path
+        description: Observation UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/IndexedRaster'
+  /api/contacts/observations/{observationId}/raster-file:
+    get:
+      tags:
+      - Contacts
+      summary: Get raster file by observation ID
+      description: Download the actual raster image file for a specific observation
+      operationId: getRasterFileByObservation
+      parameters:
+      - name: observationId
+        in: path
+        description: Observation UUID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+  /api/contacts/nearby:
+    get:
+      tags:
+      - Contacts
+      summary: Find contacts nearby
+      description: Find contacts within a specified distance from a point using accurate
+        PostGIS distance calculations in meters
+      operationId: findContactsNearby
+      parameters:
+      - name: lat
+        in: query
+        description: Latitude (decimal degrees)
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: lon
+        in: query
+        description: Longitude (decimal degrees)
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: distance
+        in: query
+        description: Distance in meters
+        required: false
+        schema:
+          type: number
+          format: double
+          default: 1000.0
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContact'
+  /api/contacts/depth-range:
+    get:
+      tags:
+      - Contacts
+      summary: Find contacts by depth range
+      description: Find contacts within a specified depth range in meters
+      operationId: findContactsByDepthRange
+      parameters:
+      - name: minDepth
+        in: query
+        description: Minimum depth in meters
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: maxDepth
+        in: query
+        description: Maximum depth in meters
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+          default:
+          - "depth,ASC"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContact'
+  /api/contacts/bbox:
+    get:
+      tags:
+      - Contacts
+      summary: Find contacts by bounding box
+      description: Find contacts within a geographic bounding box using latitude and
+        longitude coordinates
+      operationId: findContactsByBoundingBox
+      parameters:
+      - name: minLon
+        in: query
+        description: Minimum longitude (decimal degrees)
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: minLat
+        in: query
+        description: Minimum latitude (decimal degrees)
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: maxLon
+        in: query
+        description: Maximum longitude (decimal degrees)
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: maxLat
+        in: query
+        description: Maximum latitude (decimal degrees)
+        required: true
+        schema:
+          type: number
+          format: double
+      - name: page
+        in: query
+        description: Zero-based page index (0..N)
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          default: 0
+      - name: size
+        in: query
+        description: The size of the page to be returned
+        required: false
+        schema:
+          minimum: 1
+          type: integer
+          default: 20
+      - name: sort
+        in: query
+        description: "Sorting criteria in the format: property,(asc|desc). Default\
+          \ sort order is ascending. Multiple sort criteria are supported."
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageContactResponse'
+components:
+  schemas:
+    ProcessingStatusResponse:
+      required:
+      - id
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PENDING
+          - QUEUED
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+    ContactUpdateRequest:
+      type: object
+      properties:
+        label:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        depth:
+          type: number
+          format: double
+    AnnotationResponse:
+      required:
+      - uuid
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        annotationType:
+          type: string
+        measurementType:
+          type: string
+        normalizedX:
+          type: number
+          format: double
+        normalizedX2:
+          type: number
+          format: double
+        normalizedY:
+          type: number
+          format: double
+        normalizedY2:
+          type: number
+          format: double
+        timestamp:
+          type: string
+        text:
+          type: string
+        value:
+          type: number
+          format: double
+        category:
+          type: string
+        subCategory:
+          type: string
+        confidence:
+          type: number
+          format: double
+    ContactResponse:
+      required:
+      - label
+      - latitude
+      - longitude
+      - uuid
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        label:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        depth:
+          type: number
+          format: double
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservationResponse'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ObservationResponse:
+      required:
+      - depth
+      - latitude
+      - longitude
+      - systemName
+      - timestamp
+      - userName
+      - uuid
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        depth:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        rasterFilename:
+          type: string
+        systemName:
+          type: string
+        timestamp:
+          type: string
+        userName:
+          type: string
+        annotations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnotationResponse'
+    AnnotationUpdateRequest:
+      type: object
+      properties:
+        annotationType:
+          type: string
+        measurementType:
+          type: string
+        normalizedX:
+          type: number
+          format: double
+        normalizedX2:
+          type: number
+          format: double
+        normalizedY:
+          type: number
+          format: double
+        normalizedY2:
+          type: number
+          format: double
+        timestamp:
+          type: string
+        userName:
+          type: string
+        value:
+          type: number
+          format: double
+        text:
+          type: string
+        category:
+          type: string
+        confidence:
+          type: number
+          format: double
+        subCategory:
+          type: string
+    BoundingBoxDto:
+      required:
+      - maxLatitude
+      - maxLongitude
+      - minLatitude
+      - minLongitude
+      type: object
+      properties:
+        minLatitude:
+          type: number
+          format: double
+        maxLatitude:
+          type: number
+          format: double
+        minLongitude:
+          type: number
+          format: double
+        maxLongitude:
+          type: number
+          format: double
+    RasterIndexResponse:
+      required:
+      - createdAt
+      - endTime
+      - filename
+      - id
+      - processingStatus
+      - startTime
+      - updatedAt
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        vehicleName:
+          type: string
+        missionName:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        boundingBox:
+          $ref: '#/components/schemas/BoundingBoxDto'
+        imageWidth:
+          type: integer
+          format: int32
+        imageHeight:
+          type: integer
+          format: int32
+        processingStatus:
+          type: string
+          enum:
+          - PENDING
+          - QUEUED
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+        processingStartedAt:
+          type: string
+          format: date-time
+        processingCompletedAt:
+          type: string
+          format: date-time
+        processingError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ApiInfo:
+      required:
+      - description
+      - endpoints
+      - name
+      - version
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        endpoints:
+          type: object
+          additionalProperties:
+            type: string
+    PageContactResponse:
+      type: object
+      properties:
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int32
+        pageable:
+          $ref: '#/components/schemas/PageableObject'
+        first:
+          type: boolean
+        last:
+          type: boolean
+        size:
+          type: integer
+          format: int32
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactResponse'
+        number:
+          type: integer
+          format: int32
+        sort:
+          $ref: '#/components/schemas/SortObject'
+        numberOfElements:
+          type: integer
+          format: int32
+        empty:
+          type: boolean
+    PageableObject:
+      type: object
+      properties:
+        pageNumber:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        paged:
+          type: boolean
+        unpaged:
+          type: boolean
+        offset:
+          type: integer
+          format: int64
+        sort:
+          $ref: '#/components/schemas/SortObject'
+    SortObject:
+      type: object
+      properties:
+        sorted:
+          type: boolean
+        unsorted:
+          type: boolean
+        empty:
+          type: boolean
+    Annotation:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        annotation-type:
+          type: string
+          enum:
+          - Classification
+          - Measurement
+          - Text
+        measurement-type:
+          type: string
+          enum:
+          - Box
+          - Height
+          - Length
+          - Size
+          - Width
+        normalized-x:
+          type: number
+          format: double
+        normalized-x2:
+          type: number
+          format: double
+        normalized-y:
+          type: number
+          format: double
+        normalized-y2:
+          type: number
+          format: double
+        timestamp:
+          type: string
+        user-name:
+          type: string
+        value:
+          type: number
+          format: double
+        text:
+          type: string
+        category:
+          type: string
+        confidence:
+          type: number
+          format: double
+        sub-category:
+          type: string
+    Contact:
+      required:
+      - label
+      - latitude
+      - longitude
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        depth:
+          type: number
+          format: double
+        label:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Observation'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Observation:
+      required:
+      - depth
+      - latitude
+      - longitude
+      - raster-filename
+      - system-name
+      - timestamp
+      - user-name
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        annotations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Annotation'
+        depth:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        raster-filename:
+          type: string
+        system-name:
+          type: string
+        timestamp:
+          type: string
+        user-name:
+          type: string
+    PageContact:
+      type: object
+      properties:
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int32
+        pageable:
+          $ref: '#/components/schemas/PageableObject'
+        first:
+          type: boolean
+        last:
+          type: boolean
+        size:
+          type: integer
+          format: int32
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contact'
+        number:
+          type: integer
+          format: int32
+        sort:
+          $ref: '#/components/schemas/SortObject'
+        numberOfElements:
+          type: integer
+          format: int32
+        empty:
+          type: boolean
+    IndexedRaster:
+      required:
+      - filename
+      - raster-type
+      - samples
+      - sensor-info
+      type: object
+      properties:
+        filename:
+          type: string
+        raster-type:
+          type: string
+          enum:
+          - Image
+          - Scanline
+          - Video
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/SampleDescription'
+        sensor-info:
+          $ref: '#/components/schemas/SensorInfo'
+    Pose:
+      required:
+      - latitude
+      - longitude
+      type: object
+      properties:
+        altitude:
+          type: number
+          format: double
+        depth:
+          type: number
+          format: double
+        hacc:
+          type: number
+          format: double
+        height:
+          type: number
+          format: double
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        p:
+          type: number
+          format: double
+        phi:
+          type: number
+          format: double
+        psi:
+          type: number
+          format: double
+        q:
+          type: number
+          format: double
+        r:
+          type: number
+          format: double
+        theta:
+          type: number
+          format: double
+        u:
+          type: number
+          format: double
+        v:
+          type: number
+          format: double
+        w:
+          type: number
+          format: double
+    SampleDescription:
+      required:
+      - pose
+      - timestamp
+      type: object
+      properties:
+        index:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        pose:
+          $ref: '#/components/schemas/Pose'
+        timestamp:
+          type: string
+    SensorInfo:
+      required:
+      - sensor-model
+      type: object
+      properties:
+        color-mode:
+          type: string
+        filters:
+          type: array
+          items:
+            type: string
+        frequency:
+          type: number
+          format: double
+        hfov:
+          type: number
+          format: double
+        max-range:
+          type: number
+          format: double
+        min-range:
+          type: number
+          format: double
+        sensor-model:
+          type: string
+        system-name:
+          type: string
+        vfov:
+          type: number
+          format: double

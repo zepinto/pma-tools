@@ -1,0 +1,116 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'org.openapi.generator' version '7.9.0'
+}
+
+group 'pt.omst'
+version '2025.11.00'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withJavadocJar()
+    withSourcesJar()
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    
+    maven {
+        url "https://omst.direct.quickconnect.to/software/maven"
+    }
+}
+
+// Task to download OpenAPI spec from local Spring server
+task downloadOpenApiSpec {
+    doLast {
+        def specFile = file("$projectDir/src/main/resources/api/datamanager.yaml")
+        specFile.parentFile.mkdirs()
+        
+        try {
+            println "Downloading OpenAPI spec from http://localhost:8080/v3/api-docs.yaml"
+            def url = new URL('http://localhost:8080/v3/api-docs.yaml')
+            specFile.text = url.text
+            println "OpenAPI spec downloaded successfully to ${specFile}"
+        } catch (Exception e) {
+            println "Warning: Could not download OpenAPI spec from server: ${e.message}"
+            println "Using existing spec file or generating with placeholder"
+        }
+    }
+}
+
+// OpenAPI Generator configuration
+openApiGenerate {
+    generatorName = 'java'
+    inputSpec = "$projectDir/src/main/resources/api/datamanager.yaml"
+    outputDir = "$buildDir/generated/openapi"
+
+    // Define packages for the generated classes
+    apiPackage = 'pt.omst.pulvis.api'
+    modelPackage = 'pt.omst.pulvis.model'
+    invokerPackage = 'pt.omst.pulvis.invoker'
+
+    configOptions = [
+        library          : 'native',
+        dateLibrary      : 'java8',
+        useJakartaEe     : 'false',
+        useRecordTypes   : 'false',
+        useLombok        : 'false'
+    ]
+}
+
+// Add generated sources to source sets
+sourceSets {
+    main {
+        java {
+            srcDir "$buildDir/generated/openapi/src/main/java"
+        }
+    }
+}
+
+// Ensure code is generated before compilation
+tasks.openApiGenerate.dependsOn downloadOpenApiSpec
+compileJava.dependsOn tasks.openApiGenerate
+
+dependencies {
+    // Logging
+    api 'org.slf4j:slf4j-api:2.0.0'
+    implementation 'ch.qos.logback:logback-classic:1.4.12'
+    
+    // OpenAPI generator dependencies
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'io.gsonfire:gson-fire:1.9.0'
+    implementation 'jakarta.annotation:jakarta.annotation-api:2.1.1'
+    
+    // Testing
+    testImplementation(platform('org.junit:junit-bom:5.11.1'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher')
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach { 
+    options.encoding = 'UTF-8'
+}
+
+compileJava.options.encoding = 'UTF-8'
+
+// Configure publishing
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                name = 'Pulvis API'
+                description = 'OMST Pulvis API client generated from OpenAPI specification'
+                packaging = 'jar'
+            }
+        }
+    }
+}
