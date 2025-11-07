@@ -1,0 +1,178 @@
+plugins {
+    id 'java'
+}
+
+group 'pt.omst'
+version '2025.11.00'
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'maven-publish'
+    
+    group 'pt.omst'
+    version '2025.11.00'
+    
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+        withJavadocJar()
+        withSourcesJar()
+    }
+    
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        
+        flatDir {
+            dirs rootProject.file('lib')
+        }
+        
+        maven {
+            url "https://omst.direct.quickconnect.to/software/maven"
+        }
+    }
+    
+    tasks.withType(JavaCompile).configureEach { 
+        options.encoding = 'UTF-8' 
+    }
+    
+    tasks.withType(Javadoc).configureEach {
+        options.addStringOption('Xdoclint:none', '-quiet')
+        failOnError = false
+    }
+    
+    test {
+        useJUnitPlatform()
+    }
+    
+    // Configure Maven publishing
+    // Skip standard publication for projects that use shadow jar
+    if (!(project.name in ['rasterfall', 'contactbrowser'])) {
+        publishing {
+            publications {
+                maven(MavenPublication) {
+                    from components.java
+                    
+                    pom {
+                        name = project.name
+                        description = "OMST ${project.name} module"
+                        url = 'https://github.com/omst/rasterfall'
+                        
+                        licenses {
+                            license {
+                                name = 'Proprietary'
+                                url = 'https://www.oceanscan-mst.com/'
+                            }
+                        }
+                        
+                        developers {
+                            developer {
+                                id = 'omst'
+                                name = 'OMST Team'
+                                email = 'dev@omst.pt'
+                            }
+                        }
+                    }
+                }
+            }
+            
+            repositories {
+                mavenLocal()
+            }
+        }
+    } else {
+        // For shadow jar projects, configure repository only
+        publishing {
+            repositories {
+                mavenLocal()
+            }
+        }
+    }
+    
+    // Configure clean task to also remove bin/ folders
+    clean {
+        doLast {
+            def binDir = file('bin')
+            if (binDir.exists()) {
+                println "Cleaning bin directory: ${binDir.absolutePath}"
+                binDir.deleteDir()
+            }
+        }
+    }
+}
+
+// Task to compile all subprojects
+task compileAll {
+    dependsOn subprojects.collect { it.tasks.named('compileJava') }
+    description = 'Compile all subprojects'
+    group = 'build'
+}
+
+// Task to build all subprojects
+task buildAll {
+    dependsOn subprojects.collect { it.tasks.named('build') }
+    description = 'Build all subprojects'
+    group = 'build'
+}
+
+// Task to clean all subprojects
+task cleanAll {
+    dependsOn subprojects.collect { it.tasks.named('clean') }
+    description = 'Clean all subprojects'
+    group = 'build'
+    
+    doLast {
+        // Also clean root-level bin directories if they exist
+        subprojects.each { subproject ->
+            def binDir = file("${subproject.name}/bin")
+            if (binDir.exists()) {
+                println "Cleaning bin directory: ${binDir.absolutePath}"
+                binDir.deleteDir()
+            }
+        }
+    }
+}
+
+// Configure root clean task to remove bin directories
+clean {
+    doLast {
+        // Clean bin directories in all subprojects from root level
+        subprojects.each { subproject ->
+            def binDir = file("${subproject.name}/bin")
+            if (binDir.exists()) {
+                println "Cleaning bin directory: ${binDir.absolutePath}"
+                binDir.deleteDir()
+            }
+        }
+    }
+}
+
+// Task to build shadow jars for rasterfall and contactbrowser
+task buildShadowJars {
+    dependsOn ':rasterfall:shadowJar', ':contactbrowser:shadowJar'
+    description = 'Build shadow (fat) jars for rasterfall and contactbrowser applications'
+    group = 'build'
+    
+    doLast {
+        println "Shadow jars built successfully:"
+        println "  - rasterfall: ${project(':rasterfall').tasks.shadowJar.archiveFile.get()}"
+        println "  - contactbrowser: ${project(':contactbrowser').tasks.shadowJar.archiveFile.get()}"
+    }
+}
+
+// Task to publish all subprojects
+task publishAll {
+    dependsOn subprojects.collect { it.tasks.named('publish') }
+    description = 'Publish all subprojects to configured repositories'
+    group = 'publishing'
+}
+
+// Task to publish all subprojects to local repository
+task publishToMavenLocalAll {
+    dependsOn subprojects.collect { it.tasks.named('publishToMavenLocal') }
+    description = 'Publish all subprojects to local Maven repository'
+    group = 'publishing'
+}
+
+

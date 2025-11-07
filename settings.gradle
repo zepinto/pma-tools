@@ -1,0 +1,15 @@
+rootProject.name = 'pma-tools'
+
+include 'neptus-utils'
+include 'rasterlib'
+include 'rasterfall'
+//include 'contactbrowser'
+include 'pulvis-api'
+include 'omst-licences'
+
+project(':neptus-utils').projectDir = file('neptus-utils')
+project(':rasterlib').projectDir = file('rasterlib')
+project(':rasterfall').projectDir = file('rasterfall')
+//project(':contactbrowser').projectDir = file('contactbrowser')
+project(':pulvis-api').projectDir = file('pulvis-api')
+project(':omst-licences').projectDir = file('omst-licences')

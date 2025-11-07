@@ -1,0 +1,75 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id "io.freefair.lombok" version "8.10.2"
+}
+
+group 'pt.omst'
+version '2025.11.00'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withJavadocJar()
+    withSourcesJar()
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    
+    flatDir {
+        dirs rootProject.file('lib')
+    }
+    
+    maven {
+        url "https://omst.direct.quickconnect.to/software/maven"
+    }
+}
+
+dependencies {
+    // Logging
+    api 'org.slf4j:slf4j-api:2.0.0'
+    implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.4.12'
+    
+    // License3j
+    implementation 'com.javax0.license3j:license3j:3.2.0'
+    
+    // OSHI - System and hardware information
+    implementation 'com.github.oshi:oshi-core:6.4.6'
+    
+    // Gson for JSON
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Neptus utilities (from local project)
+    implementation project(':neptus-utils')
+    
+    // Testing
+    testImplementation(platform('org.junit:junit-bom:5.11.1'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher')
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach { 
+    options.encoding = 'UTF-8' 
+}
+
+compileJava.options.encoding = 'UTF-8'
+
+// Configure publishing for this library
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                name = 'OMST Licences'
+                description = 'OMST licensing library for Neptus applications'
+                packaging = 'jar'
+            }
+        }
+    }
+}

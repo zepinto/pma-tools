@@ -1,0 +1,84 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id "io.freefair.lombok" version "8.10.2"
+}
+
+group 'pt.omst'
+version '2025.11.00'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withJavadocJar()
+    withSourcesJar()
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    
+    flatDir {
+        dirs rootProject.file('lib')
+    }
+    
+    maven {
+        url "https://omst.direct.quickconnect.to/software/maven"
+    }
+}
+
+dependencies {
+    // Logging
+    api 'org.slf4j:slf4j-api:2.0.0'
+    implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.4.12'
+    
+    // Jackson for JSON serialization
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.15.2'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2'
+    
+    // Local project dependencies
+    implementation project(':neptus-utils')
+    
+    // UI dependencies
+    implementation name: 'flatlaf-3.5.2'
+    implementation 'org.swinglabs.swingx:swingx-core:1.6.5-1'
+    
+    // Image scaling
+    implementation 'org.imgscalr:imgscalr-lib:4.2'
+    
+    // CSV Reader
+    implementation 'net.sourceforge.javacsv:javacsv:2.0'
+    
+    // Guava
+    implementation 'com.google.guava:guava:33.0.0-jre'
+    
+    // Testing
+    testImplementation(platform('org.junit:junit-bom:5.11.1'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher')
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach { 
+    options.encoding = 'UTF-8' 
+}
+
+compileJava.options.encoding = 'UTF-8'
+
+// Configure publishing for this library
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                name = 'Raster Library'
+                description = 'OMST raster data structures and utilities for sidescan and contact management'
+                packaging = 'jar'
+            }
+        }
+    }
+}
