@@ -13,7 +13,7 @@ java {
     }
     withJavadocJar()
     withSourcesJar()
-}
+} 
 
 repositories {
     mavenLocal()
@@ -33,13 +33,9 @@ dependencies {
     api 'org.slf4j:slf4j-api:2.0.0'
     implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.4.12'
     
-    // Jackson for JSON serialization
-    api 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
-    api 'com.fasterxml.jackson.core:jackson-annotations:2.15.2'
-    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2'
-    
     // Local project dependencies
     implementation project(':neptus-utils')
+    implementation project(':rasterlib')
     
     // UI dependencies
     implementation name: 'flatlaf-3.5.2'
@@ -50,9 +46,6 @@ dependencies {
     
     // CSV Reader
     implementation 'net.sourceforge.javacsv:javacsv:2.0'
-    
-    // Guava
-    implementation 'com.google.guava:guava:33.0.0-jre'
     
     // Testing
     testImplementation(platform('org.junit:junit-bom:5.11.1'))
@@ -75,8 +68,8 @@ publishing {
     publications {
         maven(MavenPublication) {
             pom {
-                name = 'Raster Library'
-                description = 'OMST raster data structures and utilities for sidescan and contact management'
+                name = 'Contacts'
+                description = 'OMST contacts management library for marine data visualization'
                 packaging = 'jar'
             }
         }

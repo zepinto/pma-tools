@@ -13,13 +13,13 @@ import javax.swing.JComponent;
 
 import pt.omst.neptus.sidescan.SidescanParser;
 import pt.omst.neptus.sidescan.SidescanParserFactory;
-import pt.omst.rasterfall.MraVehiclePosHud;
 import pt.omst.rasterfall.RasterfallTiles;
+import pt.omst.rasterfall.VehiclePositionHUD;
 
 public class HudOverlay extends AbstractOverlay {
 
     private RasterfallTiles waterfall;
-    private MraVehiclePosHud hud = null;
+    private VehiclePositionHUD hud = null;
     @Override
     public void cleanup(RasterfallTiles waterfall) {
 
@@ -34,7 +34,7 @@ public class HudOverlay extends AbstractOverlay {
     private synchronized void createHud() {
         if (hud == null) {
             SidescanParser parser = SidescanParserFactory.build(waterfall.getRastersFolder().getParentFile());
-            hud = new MraVehiclePosHud(parser, 200, 200);
+            hud = new VehiclePositionHUD(parser, 200, 200);
             hud.setPathColor(new Color(255,255,255,128));
         }
     }

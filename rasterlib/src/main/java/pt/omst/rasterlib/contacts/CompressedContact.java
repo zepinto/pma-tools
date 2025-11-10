@@ -22,7 +22,6 @@ import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.Observation;
-import pt.omst.rasterlib.contacts.browser.ContactObject;
 
 /**
  * A compressed contact is a contact that is stored in a compressed (.zct) file.

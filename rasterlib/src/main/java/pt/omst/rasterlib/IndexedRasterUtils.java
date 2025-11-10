@@ -26,6 +26,8 @@ import java.util.concurrent.Future;
 import java.util.function.Consumer;
 
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.neptus.core.LocationType;
 import pt.omst.neptus.sidescan.ISidescanLine;
@@ -319,6 +321,8 @@ public class IndexedRasterUtils {
         private Annotation boxAnnotation = null;
         private Annotation classification = null;
         private SensorInfo sensorInfo = null;
+        @Getter
+        @Setter
         private LocationType center;
         private double minRange;
         private double maxRange;
