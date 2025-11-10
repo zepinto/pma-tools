@@ -57,7 +57,7 @@ import pt.omst.neptus.sidescan.SidescanParser;
  * @author zp
  */
 @Slf4j
-public class MraVehiclePosHud {
+public class VehiclePositionHUD {
 
     protected Vector<SystemPositionAndAttitude> states = new Vector<>();
     protected double startTime, endTime;
@@ -72,7 +72,7 @@ public class MraVehiclePosHud {
 
     protected Color pathColor = Color.black;
 
-    public MraVehiclePosHud(SidescanParser ssparser, int width, int height) {
+    public VehiclePositionHUD(SidescanParser ssparser, int width, int height) {
         this.width = width;
         this.height = height;
         loadSidescanPositions(ssparser);
