@@ -1,3 +1,8 @@
+//***************************************************************************
+// Copyright 2025 OceanScan - Marine Systems & Technology, Lda.             *
+//***************************************************************************
+// Author: José Pinto                                                       *
+//***************************************************************************
 package pt.omst.rasterfall.overlays;
 
 import pt.omst.rasterfall.RasterfallTiles;

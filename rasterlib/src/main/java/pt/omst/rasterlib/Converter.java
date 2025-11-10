@@ -1,3 +1,8 @@
+//***************************************************************************
+// Copyright 2025 OceanScan - Marine Systems & Technology, Lda.             *
+//***************************************************************************
+// Author: José Pinto                                                       *
+//***************************************************************************
 // To use this code, add the following Maven dependency to your project:
 //
 //     org.projectlombok : lombok : 1.18.2
