@@ -73,6 +73,7 @@ compileJava.options.encoding = 'UTF-8'
 shadowJar {
     archiveBaseName.set('rasterfall')
     archiveClassifier.set('all')
+    archiveVersion.set('')  // Remove version from filename
     manifest {
         attributes 'Main-Class': 'pt.omst.rasterfall.RasterFallApp'
     }

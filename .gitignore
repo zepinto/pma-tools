@@ -23,3 +23,6 @@ Thumbs.db
 *.tmp
 *.swp
 *~
+
+# Installer executables (build artifacts)
+*.exe
