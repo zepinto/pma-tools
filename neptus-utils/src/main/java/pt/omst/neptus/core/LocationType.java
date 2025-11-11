@@ -576,7 +576,7 @@ public class LocationType implements Serializable, Comparable<LocationType>, Clo
     public double getLatitudeDegs() {
         return Math.toDegrees(latitudeRads);
     }
-
+    
     /**
      * @param latitude The latitude to set in decimal degrees.
      */

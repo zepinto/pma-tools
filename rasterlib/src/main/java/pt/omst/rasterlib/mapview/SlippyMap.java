@@ -28,14 +28,10 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.prefs.Preferences;
+import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
-import javax.swing.ButtonGroup;
-import javax.swing.JMenu;
-import javax.swing.JMenuItem;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JRadioButtonMenuItem;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.slf4j.Slf4j;
@@ -46,55 +42,6 @@ import pt.omst.rasterlib.contacts.ContactObject;
 @Slf4j
 public class SlippyMap extends JPanel implements AutoCloseable {
     
-    /**
-     * Enumeration of available tile sources with their URLs and attribution.
-     */
-    public enum TileSource {
-        OPENSTREETMAP("OpenStreetMap", 
-                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                "© OpenStreetMap contributors"),
-        CARTO_LIGHT("CartoDB Positron",
-                "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
-                "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
-        CARTO_DARK("CartoDB Dark Matter",
-                "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
-                "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
-        ESRI_WORLD_IMAGERY("ESRI World Imagery",
-                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                "Tiles © Esri");
-        
-        private final String displayName;
-        private final String urlPattern;
-        private final String attribution;
-        
-        TileSource(String displayName, String urlPattern, String attribution) {
-            this.displayName = displayName;
-            this.urlPattern = urlPattern;
-            this.attribution = attribution;
-        }
-        
-        public String getDisplayName() {
-            return displayName;
-        }
-        
-        public String getUrlPattern() {
-            return urlPattern;
-        }
-        
-        public String getAttribution() {
-            return attribution;
-        }
-        
-        public String getTileUrl(int z, int x, int y) {
-            return urlPattern.replace("{z}", String.valueOf(z))
-                           .replace("{x}", String.valueOf(x))
-                           .replace("{y}", String.valueOf(y));
-        }
-        
-        public String getCacheName() {
-            return name().toLowerCase();
-        }
-    }
     private int z = 2;              // Initial zoom level
     private double cx = 512.0;      // Center x at z=2 (mapWidth = 1024)
     private double cy = 512.0;      // Center y at z=2
@@ -108,21 +55,20 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private boolean darkMode = false; // Dark mode flag
     private int mouseHoverIndex = -1; // Index of the hovered point (-1 if none)
     private final ArrayList<ContactObject> points = new ArrayList<>(); // List of points to display
-    private TileSource currentTileSource = TileSource.OPENSTREETMAP; // Current tile source
+    private final BaseMapManager baseMapManager; // Manages tile source selection
     
     public SlippyMap(List<? extends ContactObject> points) {
         this.points.addAll(points);
         setDarkMode(GuiUtils.isDarkTheme());
         
-        // Load saved tile source preference
+        // Get preferences for zoom and center
         Preferences prefs = Preferences.userNodeForPackage(SlippyMap.class);
-        String savedSource = prefs.get("tileSource", TileSource.OPENSTREETMAP.name());
-        try {
-            currentTileSource = TileSource.valueOf(savedSource);
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid tile source preference: {}, using default", savedSource);
-            currentTileSource = TileSource.OPENSTREETMAP;
-        }
+        
+        // Initialize base map manager
+        baseMapManager = new BaseMapManager(newSource -> {
+            memoryCache.clear(); // Clear memory cache to reload with new source
+            repaint();
+        });
         
         // Initialize base cache directory
         baseCacheDir = new File(System.getProperty("user.home"), "tile_cache");
@@ -158,7 +104,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                         image = ImageIO.read(tileFile);
                     } else {
                         // Download tile if not cached
-                        String url = currentTileSource.getTileUrl(tz, tx, ty);
+                        String url = baseMapManager.getCurrentTileSource().getTileUrl(tz, tx, ty);
                         URL tileUrl = new URL(url);
                         HttpURLConnection conn = (HttpURLConnection) tileUrl.openConnection();
                         conn.setRequestProperty("User-Agent", "SlippyMapWithCoords/1.0 (your.email@example.com)");
@@ -335,79 +281,21 @@ public class SlippyMap extends JPanel implements AutoCloseable {
      * Setup the popup menu for map options.
      */
     private void setupPopupMenu() {
-        JPopupMenu popup = new JPopupMenu();
-        
-        // Create Base Map submenu
-        JMenu baseMapMenu = new JMenu("Base Map");
-        ButtonGroup group = new ButtonGroup();
-        
-        for (TileSource source : TileSource.values()) {
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(source.getDisplayName());
-            item.setSelected(source == currentTileSource);
-            item.addActionListener(e -> {
-                if (currentTileSource != source) {
-                    setTileSource(source);
-                }
-            });
-            group.add(item);
-            baseMapMenu.add(item);
-        }
-        
-        popup.add(baseMapMenu);
-        
-        // Add popup menu trigger
-        addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showPopup(e);
-                }
-            }
-            
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showPopup(e);
-                }
-            }
-            
-            private void showPopup(MouseEvent e) {
-                // Update selection state in submenu
-                for (int i = 0; i < baseMapMenu.getItemCount(); i++) {
-                    JRadioButtonMenuItem item = (JRadioButtonMenuItem) baseMapMenu.getItem(i);
-                    for (TileSource source : TileSource.values()) {
-                        if (item.getText().equals(source.getDisplayName())) {
-                            item.setSelected(source == currentTileSource);
-                            break;
-                        }
-                    }
-                }
-                popup.show(e.getComponent(), e.getX(), e.getY());
-            }
-        });
+        baseMapManager.setupPopupMenu(this);
     }
     
     /**
      * Set the tile source and reload tiles.
      */
     public void setTileSource(TileSource source) {
-        if (source != currentTileSource) {
-            currentTileSource = source;
-            
-            // Save preference
-            Preferences prefs = Preferences.userNodeForPackage(SlippyMap.class);
-            prefs.put("tileSource", source.name());
-            
-            memoryCache.clear(); // Clear memory cache to reload with new source
-            repaint();
-        }
+        baseMapManager.setTileSource(source);
     }
     
     /**
      * Get the current tile source.
      */
     public TileSource getTileSource() {
-        return currentTileSource;
+        return baseMapManager.getCurrentTileSource();
     }
     
     /**
@@ -427,6 +315,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         z = zoom;
         repaint();
         mouseHoverIndex = -1; // Reset hover index
+    }
+
+    public void focus(LocationType loc) {
+        double lld[] = loc.getAbsoluteLatLonDepth();
+        focus(lld[0], lld[1], z);        
     }
 
     public void addPainter(MapPainter painter) {
@@ -520,7 +413,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             if (ty >= 0 && ty < numTiles) {
                 for (int tx = txMin; tx <= txMax; tx++) {
                     int wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-                    String tileKey = currentTileSource.getCacheName() + "/" + z + "/" + wrappedTx + "/" + ty;
+                    String tileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + z + "/" + wrappedTx + "/" + ty;
                     BufferedImage tile = memoryCache.get(tileKey);
                     double screenX = wrappedTx * 256 - px;
                     double screenY = ty * 256 - py;
@@ -634,7 +527,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             int factor = (int) Math.pow(2, deltaZ);
             int lowerTx = tx / factor;
             int lowerTy = ty / factor;
-            String lowerTileKey = currentTileSource.getCacheName() + "/" + lowerZoom + "/" + lowerTx + "/" + lowerTy;
+            String lowerTileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + lowerZoom + "/" + lowerTx + "/" + lowerTy;
             BufferedImage lowerTile = memoryCache.get(lowerTileKey);
             
             if (lowerTile != null) {
@@ -668,7 +561,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 for (int dy = 0; dy < factor; dy++) {
                     int higherTx = tx * factor + dx;
                     int higherTy = ty * factor + dy;
-                    String higherTileKey = currentTileSource.getCacheName() + "/" + higherZoom + "/" + higherTx + "/" + higherTy;
+                    String higherTileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + higherZoom + "/" + higherTx + "/" + higherTy;
                     BufferedImage higherTile = memoryCache.get(higherTileKey);
                     
                     if (higherTile != null) {
@@ -683,7 +576,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                             for (int cy = 0; cy < factor; cy++) {
                                 int childTx = tx * factor + cx;
                                 int childTy = ty * factor + cy;
-                                String childKey = currentTileSource.getCacheName() + "/" + higherZoom + "/" + childTx + "/" + childTy;
+                                String childKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + higherZoom + "/" + childTx + "/" + childTy;
                                 BufferedImage childTile = memoryCache.get(childKey);
                                 if (childTile != null) {
                                     g.drawImage(childTile, cx * tileSize, cy * tileSize, tileSize, tileSize, null);
