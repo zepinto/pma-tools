@@ -29,7 +29,12 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.imageio.ImageIO;
+import javax.swing.ButtonGroup;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +44,68 @@ import pt.omst.rasterlib.contacts.ContactObject;
 
 @Slf4j
 public class SlippyMap extends JPanel implements AutoCloseable {
+    
+    /**
+     * Enumeration of available tile sources with their URLs and attribution.
+     */
+    public enum TileSource {
+        OPENSTREETMAP("OpenStreetMap", 
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                "© OpenStreetMap contributors"),
+        OPENTOPO("OpenTopoMap",
+                "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+                "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)"),
+        STAMEN_TERRAIN("Stamen Terrain",
+                "https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png",
+                "Map tiles by Stamen Design (CC BY 3.0) | © OpenStreetMap contributors"),
+        STAMEN_TONER("Stamen Toner",
+                "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png",
+                "Map tiles by Stamen Design (CC BY 3.0) | © OpenStreetMap contributors"),
+        CARTO_LIGHT("CartoDB Positron",
+                "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
+                "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
+        CARTO_DARK("CartoDB Dark Matter",
+                "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+                "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
+        ESRI_WORLD_IMAGERY("ESRI World Imagery",
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                "Tiles © Esri"),
+        HUMANITARIAN("Humanitarian OSM",
+                "https://tile-a.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+                "© OpenStreetMap contributors | Tiles courtesy of HOT");
+        
+        private final String displayName;
+        private final String urlPattern;
+        private final String attribution;
+        
+        TileSource(String displayName, String urlPattern, String attribution) {
+            this.displayName = displayName;
+            this.urlPattern = urlPattern;
+            this.attribution = attribution;
+        }
+        
+        public String getDisplayName() {
+            return displayName;
+        }
+        
+        public String getUrlPattern() {
+            return urlPattern;
+        }
+        
+        public String getAttribution() {
+            return attribution;
+        }
+        
+        public String getTileUrl(int z, int x, int y) {
+            return urlPattern.replace("{z}", String.valueOf(z))
+                           .replace("{x}", String.valueOf(x))
+                           .replace("{y}", String.valueOf(y));
+        }
+        
+        public String getCacheName() {
+            return name().toLowerCase();
+        }
+    }
     private int z = 2;              // Initial zoom level
     private double cx = 512.0;      // Center x at z=2 (mapWidth = 1024)
     private double cy = 512.0;      // Center y at z=2
@@ -47,19 +114,28 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private final BlockingQueue<String> downloadQueue = new LinkedBlockingQueue<>();
     private double mouseLat = 0.0;  // Current mouse latitude
     private double mouseLon = 0.0;  // Current mouse longitude
-    private final File cacheDir;    // Directory for disk cache
+    private final File baseCacheDir;    // Base directory for disk cache
     private int clickedPointIndex = -1; // Index of the clicked point (-1 if none)
     private boolean darkMode = false; // Dark mode flag
     private int mouseHoverIndex = -1; // Index of the hovered point (-1 if none)
     private final ArrayList<ContactObject> points = new ArrayList<>(); // List of points to display
+    private TileSource currentTileSource = TileSource.OPENSTREETMAP; // Current tile source
     
     public SlippyMap(List<? extends ContactObject> points) {
         this.points.addAll(points);
         setDarkMode(GuiUtils.isDarkTheme());
-        // Initialize disk cache directory
-        cacheDir = new File(System.getProperty("user.home"), "osm_tile_cache");
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs();
+        // Initialize base cache directory
+        baseCacheDir = new File(System.getProperty("user.home"), "tile_cache");
+        if (!baseCacheDir.exists()) {
+            baseCacheDir.mkdirs();
+        }
+        
+        // Create subdirectories for each tile source
+        for (TileSource source : TileSource.values()) {
+            File sourceDir = new File(baseCacheDir, source.getCacheName());
+            if (!sourceDir.exists()) {
+                sourceDir.mkdirs();
+            }
         }
 
         // Start the tile downloader thread
@@ -69,18 +145,20 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 try {
                     tileKey = downloadQueue.take();
                     String[] parts = tileKey.split("/");
-                    int tz = Integer.parseInt(parts[0]);
-                    int tx = Integer.parseInt(parts[1]);
-                    int ty = Integer.parseInt(parts[2]);
+                    // tileKey format: "tilesource/z/x/y"
+                    String tileSourceName = parts[0];
+                    int tz = Integer.parseInt(parts[1]);
+                    int tx = Integer.parseInt(parts[2]);
+                    int ty = Integer.parseInt(parts[3]);
 
                     // Check disk cache first
-                    File tileFile = new File(cacheDir, tileKey + ".png");
+                    File tileFile = new File(baseCacheDir, tileKey + ".png");
                     BufferedImage image = null;
                     if (tileFile.exists()) {
                         image = ImageIO.read(tileFile);
                     } else {
                         // Download tile if not cached
-                        String url = "https://tile.openstreetmap.org/" + tz + "/" + tx + "/" + ty + ".png";
+                        String url = currentTileSource.getTileUrl(tz, tx, ty);
                         URL tileUrl = new URL(url);
                         HttpURLConnection conn = (HttpURLConnection) tileUrl.openConnection();
                         conn.setRequestProperty("User-Agent", "SlippyMapWithCoords/1.0 (your.email@example.com)");
@@ -122,6 +200,9 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         });
         downloader.setDaemon(true);
         downloader.start();
+        
+        // Setup popup menu for map options
+        setupPopupMenu();
 
         // Zoom with mouse wheel
         addMouseWheelListener(e -> {
@@ -153,6 +234,10 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // Don't handle left clicks if it's a popup trigger
+                if (e.isPopupTrigger()) {
+                    return;
+                }
                 lastPos[0] = e.getX();
                 lastPos[1] = e.getY();
 
@@ -217,6 +302,80 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 }
             }
         });
+    }
+    
+    /**
+     * Setup the popup menu for map options.
+     */
+    private void setupPopupMenu() {
+        JPopupMenu popup = new JPopupMenu();
+        
+        // Create Base Map submenu
+        JMenu baseMapMenu = new JMenu("Base Map");
+        ButtonGroup group = new ButtonGroup();
+        
+        for (TileSource source : TileSource.values()) {
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(source.getDisplayName());
+            item.setSelected(source == currentTileSource);
+            item.addActionListener(e -> {
+                if (currentTileSource != source) {
+                    setTileSource(source);
+                }
+            });
+            group.add(item);
+            baseMapMenu.add(item);
+        }
+        
+        popup.add(baseMapMenu);
+        
+        // Add popup menu trigger
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showPopup(e);
+                }
+            }
+            
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showPopup(e);
+                }
+            }
+            
+            private void showPopup(MouseEvent e) {
+                // Update selection state in submenu
+                for (int i = 0; i < baseMapMenu.getItemCount(); i++) {
+                    JRadioButtonMenuItem item = (JRadioButtonMenuItem) baseMapMenu.getItem(i);
+                    for (TileSource source : TileSource.values()) {
+                        if (item.getText().equals(source.getDisplayName())) {
+                            item.setSelected(source == currentTileSource);
+                            break;
+                        }
+                    }
+                }
+                popup.show(e.getComponent(), e.getX(), e.getY());
+            }
+        });
+    }
+    
+    /**
+     * Set the tile source and reload tiles.
+     */
+    public void setTileSource(TileSource source) {
+        if (source != currentTileSource) {
+            currentTileSource = source;
+            memoryCache.clear(); // Clear memory cache to reload with new source
+            repaint();
+        }
+    }
+    
+    /**
+     * Get the current tile source.
+     */
+    public TileSource getTileSource() {
+        return currentTileSource;
     }
 
     public void focus(double lat, double lon, int zoom) {
@@ -319,7 +478,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             if (ty >= 0 && ty < numTiles) {
                 for (int tx = txMin; tx <= txMax; tx++) {
                     int wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-                    String tileKey = z + "/" + wrappedTx + "/" + ty;
+                    String tileKey = currentTileSource.getCacheName() + "/" + z + "/" + wrappedTx + "/" + ty;
                     BufferedImage tile = memoryCache.get(tileKey);
                     double screenX = wrappedTx * 256 - px;
                     double screenY = ty * 256 - py;
