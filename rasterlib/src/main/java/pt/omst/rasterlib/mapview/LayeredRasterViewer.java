@@ -81,6 +81,7 @@ public class LayeredRasterViewer extends JFrame {
     private final SlippyMap map;
     private final JPanel layerPanel;
     private final List<RasterLayer> rasterLayers = new ArrayList<>();
+    private final List<JPanel> layerControlPanels = new ArrayList<>();
     private FilterableContactCollection filterableContactCollection;
     private JCheckBox showContactsCheckbox;
     private JCheckBox showRastersCheckbox;
@@ -239,8 +240,24 @@ public class LayeredRasterViewer extends JFrame {
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFolder = fileChooser.getSelectedFile();
-            loadFromFolder(selectedFolder);
+            loadFromFolderAsync(selectedFolder);
         }
+    }
+    
+    /**
+     * Loads rasters and contacts from a folder in a background thread.
+     */
+    private void loadFromFolderAsync(File rootFolder) {
+        // Disable UI during loading
+        setEnabled(false);
+        
+        new Thread(() -> {
+            try {
+                loadFromFolder(rootFolder);
+            } finally {
+                SwingUtilities.invokeLater(() -> setEnabled(true));
+            }
+        }, "FolderLoader").start();
     }
     
     /**
@@ -250,27 +267,26 @@ public class LayeredRasterViewer extends JFrame {
     public void loadFromFolder(File rootFolder) {
         log.info("Loading data from folder: {}", rootFolder.getAbsolutePath());
         
-        // Clear existing layers
-        rasterLayers.clear();
-        layerPanel.removeAll();
-        
-        // Find all folders containing rasterIndex subdirectories
+        // Find all folders containing rasterIndex subdirectories (background thread)
         List<File> layerFolders = findLayerFolders(rootFolder);
         log.info("Found {} layer folders", layerFolders.size());
         
         LocationType firstCenter = null;
+        List<RasterLayer> newLayers = new ArrayList<>();
+        FilterableContactCollection newContactCollection = null;
+        long minTimestamp = Long.MAX_VALUE;
+        long maxTimestamp = Long.MIN_VALUE;
         
-        // Load each layer
+        // Load each layer (background thread)
         for (File layerFolder : layerFolders) {
             try {
                 RasterLayer layer = new RasterLayer(layerFolder);
                 if (!layer.getRasterPainters().isEmpty()) {
-                    rasterLayers.add(layer);
-                    map.addRasterPainter(layer);
+                    newLayers.add(layer);
                     
-                    // Update global timestamp range
-                    globalMinTimestamp = Math.min(globalMinTimestamp, layer.getMinTimestamp());
-                    globalMaxTimestamp = Math.max(globalMaxTimestamp, layer.getMaxTimestamp());
+                    // Update timestamp range
+                    minTimestamp = Math.min(minTimestamp, layer.getMinTimestamp());
+                    maxTimestamp = Math.max(maxTimestamp, layer.getMaxTimestamp());
                     
                     // Get center from first raster if not set
                     if (firstCenter == null && !layer.getRasterPainters().isEmpty()) {
@@ -283,39 +299,66 @@ public class LayeredRasterViewer extends JFrame {
                             );
                         }
                     }
-                    
-                    // Add layer control to sidebar
-                    addLayerControl(layer);
                 }
             } catch (IOException e) {
                 log.error("Error loading layer from {}: {}", layerFolder.getAbsolutePath(), e.getMessage());
             }
         }
         
-        // Load contacts from the entire folder tree
+        // Load contacts from the entire folder tree (background thread)
         try {
             ContactCollection contactCollection = new ContactCollection(rootFolder);
-            filterableContactCollection = new FilterableContactCollection(contactCollection);
-            map.addRasterPainter(filterableContactCollection);
+            newContactCollection = new FilterableContactCollection(contactCollection);
             log.info("Loaded {} contacts", contactCollection.getAllContacts().size());
         } catch (IOException e) {
             log.error("Error loading contacts: {}", e.getMessage());
         }
         
-        // Update time filter spinners with global range
-        if (globalMinTimestamp != Long.MAX_VALUE) {
-            startDateSpinner.setValue(new Date(globalMinTimestamp));
-            endDateSpinner.setValue(new Date(globalMaxTimestamp));
-        }
+        // Update UI on EDT
+        final LocationType finalCenter = firstCenter;
+        final FilterableContactCollection finalContactCollection = newContactCollection;
+        final long finalMinTimestamp = minTimestamp;
+        final long finalMaxTimestamp = maxTimestamp;
         
-        // Focus map on first raster center
-        if (firstCenter != null) {
-            map.focus(firstCenter);
-        }
-        
-        layerPanel.revalidate();
-        layerPanel.repaint();
-        map.repaint();
+        SwingUtilities.invokeLater(() -> {
+            // Clear existing layers
+            rasterLayers.clear();
+            layerControlPanels.clear();
+            layerPanel.removeAll();
+            
+            // Clear existing painters from map
+            // Add new layers to map and UI
+            for (RasterLayer layer : newLayers) {
+                rasterLayers.add(layer);
+                map.addRasterPainter(layer);
+                addLayerControl(layer);
+            }
+            
+            // Add contacts
+            if (finalContactCollection != null) {
+                filterableContactCollection = finalContactCollection;
+                map.addRasterPainter(filterableContactCollection);
+            }
+            
+            // Update global timestamp range
+            globalMinTimestamp = finalMinTimestamp;
+            globalMaxTimestamp = finalMaxTimestamp;
+            
+            // Update time filter spinners with global range
+            if (globalMinTimestamp != Long.MAX_VALUE) {
+                startDateSpinner.setValue(new Date(globalMinTimestamp));
+                endDateSpinner.setValue(new Date(globalMaxTimestamp));
+            }
+            
+            // Focus map on first raster center
+            if (finalCenter != null) {
+                map.focus(finalCenter);
+            }
+            
+            layerPanel.revalidate();
+            layerPanel.repaint();
+            map.repaint();
+        });
     }
     
     /**
@@ -370,6 +413,9 @@ public class LayeredRasterViewer extends JFrame {
         
         layerPanel.add(layerControlPanel);
         layerPanel.add(new JSeparator(SwingConstants.HORIZONTAL));
+        
+        // Store reference to control panel
+        layerControlPanels.add(layerControlPanel);
     }
     
     /**
@@ -382,9 +428,25 @@ public class LayeredRasterViewer extends JFrame {
         long startTimestamp = startDate.getTime();
         long endTimestamp = endDate.getTime();
         
-        for (RasterLayer layer : rasterLayers) {
+        for (int i = 0; i < rasterLayers.size(); i++) {
+            RasterLayer layer = rasterLayers.get(i);
             layer.setStartTimestampFilter(startTimestamp);
             layer.setEndTimestampFilter(endTimestamp);
+            
+            // Check if layer has any visible rasters in the time range
+            boolean hasVisibleRasters = false;
+            for (IndexedRasterPainter painter : layer.getRasterPainters()) {
+                long rasterTimestamp = painter.getStartTimestamp();
+                if (rasterTimestamp >= startTimestamp && rasterTimestamp <= endTimestamp) {
+                    hasVisibleRasters = true;
+                    break;
+                }
+            }
+            
+            // Hide/show the layer control panel based on whether it has visible rasters
+            if (i < layerControlPanels.size()) {
+                layerControlPanels.get(i).setVisible(hasVisibleRasters);
+            }
         }
         
         // Filter contacts as well
@@ -393,6 +455,8 @@ public class LayeredRasterViewer extends JFrame {
             filterableContactCollection.setEndTimestampFilter(endTimestamp);
         }
         
+        layerPanel.revalidate();
+        layerPanel.repaint();
         map.repaint();
         log.info("Applied time filter: {} to {}", startDate, endDate);
     }
@@ -412,12 +476,19 @@ public class LayeredRasterViewer extends JFrame {
             filterableContactCollection.setEndTimestampFilter(null);
         }
         
+        // Show all layer control panels
+        for (JPanel panel : layerControlPanels) {
+            panel.setVisible(true);
+        }
+        
         // Reset spinners to global range
         if (globalMinTimestamp != Long.MAX_VALUE) {
             startDateSpinner.setValue(new Date(globalMinTimestamp));
             endDateSpinner.setValue(new Date(globalMaxTimestamp));
         }
         
+        layerPanel.revalidate();
+        layerPanel.repaint();
         map.repaint();
         log.info("Cleared time filter");
     }

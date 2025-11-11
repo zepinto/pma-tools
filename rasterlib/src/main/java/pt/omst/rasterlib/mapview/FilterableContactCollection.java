@@ -56,6 +56,11 @@ public class FilterableContactCollection implements MapPainter {
     }
     
     @Override
+    public int getLayerPriority() {
+        return 100; // Paint contacts on top of rasters
+    }
+    
+    @Override
     public void paint(Graphics2D g, SlippyMap map) {
         if (!visible) {
             return;
