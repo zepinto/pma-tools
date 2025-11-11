@@ -33,6 +33,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.omst.neptus.core.LocationType;
 import pt.omst.neptus.util.GuiUtils;
 import pt.omst.rasterlib.contacts.ContactObject;
 
@@ -64,8 +65,9 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         // Start the tile downloader thread
         Thread downloader = new Thread(() -> {
             while (true) {
+                String tileKey = null;
                 try {
-                    String tileKey = downloadQueue.take();
+                    tileKey = downloadQueue.take();
                     String[] parts = tileKey.split("/");
                     int tz = Integer.parseInt(parts[0]);
                     int tx = Integer.parseInt(parts[1]);
@@ -78,27 +80,43 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                         image = ImageIO.read(tileFile);
                     } else {
                         // Download tile if not cached
-                        String url = "http://tile.openstreetmap.org/" + tz + "/" + tx + "/" + ty + ".png";
+                        String url = "https://tile.openstreetmap.org/" + tz + "/" + tx + "/" + ty + ".png";
                         URL tileUrl = new URL(url);
                         HttpURLConnection conn = (HttpURLConnection) tileUrl.openConnection();
                         conn.setRequestProperty("User-Agent", "SlippyMapWithCoords/1.0 (your.email@example.com)");
-                        image = ImageIO.read(conn.getInputStream());
+                        conn.setInstanceFollowRedirects(true);
+                        
+                        // Check response code before reading
+                        int responseCode = conn.getResponseCode();
+                        if (responseCode == HttpURLConnection.HTTP_OK) {
+                            image = ImageIO.read(conn.getInputStream());
+                            
+                            // Only save to disk cache if image was successfully loaded
+                            if (image != null) {
+                                tileFile.getParentFile().mkdirs(); // Ensure directory exists
+                                ImageIO.write(image, "png", tileFile);
+                            }
+                        } else {
+                            log.warn("Failed to download tile {}: HTTP {}", tileKey, responseCode);
+                        }
                         conn.disconnect();
-
-                        // Save to disk cache
-                        tileFile.getParentFile().mkdirs(); // Ensure directory exists
-                        ImageIO.write(image, "png", tileFile);
                     }
 
-                    if (darkMode)
-                        image = applyDarkModeFilter(image);
-
-                    memoryCache.put(tileKey, image);
+                    if (image != null) {
+                        if (darkMode)
+                            image = applyDarkModeFilter(image);
+                        memoryCache.put(tileKey, image);
+                        SwingUtilities.invokeLater(this::repaint);
+                    }
+                    
                     pendingTiles.remove(tileKey);
-                    SwingUtilities.invokeLater(this::repaint);
                 } catch (IOException | InterruptedException e) {
-                    log.error("Error downloading tile: " + e.getMessage());
-                    e.printStackTrace();
+                    if (tileKey != null) {
+                        log.error("Error downloading tile {}: {}", tileKey, e.getMessage());
+                        pendingTiles.remove(tileKey);
+                    } else {
+                        log.error("Error in tile downloader: {}", e.getMessage());
+                    }
                 }
             }
         });
@@ -343,7 +361,9 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         }
 
         // Draw cursor coordinates
-        String coordText = String.format("Lat: %.5f, Lon: %.5f", mouseLat, mouseLon);
+        LocationType cursorLoc = new LocationType(mouseLat, mouseLon);
+
+        String coordText = cursorLoc.getLatitudeAsPrettyString()+ " / " + cursorLoc.getLongitudeAsPrettyString();
         g2d.setFont(font);
         FontMetrics fm = g2d.getFontMetrics();
         int textWidth = fm.stringWidth(coordText) + 10;
@@ -466,5 +486,19 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         downloadQueue.clear();
         // Clear points
         points.clear();        
+    }
+
+    public static void main(String[] args) {
+        GuiUtils.setTheme("light");
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            javax.swing.JFrame frame = new javax.swing.JFrame("Slippy Map with Coordinates");
+            frame.setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
+            GuiUtils.setLookAndFeel();
+            SlippyMap map = new SlippyMap(new ArrayList<>());
+            frame.add(map);
+            frame.setSize(800, 600);
+            frame.setVisible(true);
+            map.initializeMapCenterAndZoom();
+        });
     }
 }

@@ -26,6 +26,113 @@ public class GeotiffUtils {
         gdal.AllRegister();
     }
 
+    /**
+     * Reads a GeoTIFF file from disk and creates a WorldImage.
+     * The GeoTIFF is read as a raster and sampled to populate the WorldImage with data points.
+     * 
+     * @param filePath The path to the GeoTIFF file
+     * @param colorMap The ColorMap to use for the WorldImage
+     * @param cellWidth The cell width for discretization (in meters)
+     * @param sampleStep Step size for sampling the raster (1 = every pixel, 2 = every other pixel, etc.)
+     * @return A WorldImage containing the sampled raster data and geographic information
+     * @throws IOException If there's an error reading the file
+     */
+    public static WorldImage readGeoTiff(String filePath, pt.omst.neptus.colormap.ColorMap colorMap, 
+                                         int cellWidth, int sampleStep) throws IOException {
+        // Open the GeoTIFF file
+        Dataset dataset = gdal.Open(filePath, gdalconst.GA_ReadOnly);
+        if (dataset == null) {
+            throw new IOException("Failed to open GeoTIFF file: " + filePath);
+        }
+
+        try {
+            // Get image dimensions
+            int width = dataset.getRasterXSize();
+            int height = dataset.getRasterYSize();
+            int bandCount = dataset.getRasterCount();
+
+            // Get geotransform (geographic coordinates)
+            double[] geoTransform = dataset.GetGeoTransform();
+            if (geoTransform == null || geoTransform.length != 6) {
+                throw new IOException("Invalid or missing geotransform in GeoTIFF");
+            }
+
+            // Extract geographic parameters from geotransform
+            // geoTransform[0] = top left x (longitude)
+            // geoTransform[1] = pixel width
+            // geoTransform[2] = rotation (usually 0)
+            // geoTransform[3] = top left y (latitude)
+            // geoTransform[4] = rotation (usually 0)
+            // geoTransform[5] = pixel height (negative for north-up)
+            double topLeftLon = geoTransform[0];
+            double topLeftLat = geoTransform[3];
+            double pixelWidth = geoTransform[1];
+            double pixelHeight = geoTransform[5]; // negative for north-up images
+
+            // Create WorldImage
+            WorldImage worldImage = new WorldImage(cellWidth, colorMap);
+
+            // Read first band for intensity values (can be extended to handle all bands)
+            byte[] band1Data = new byte[width * height];
+            dataset.GetRasterBand(1).ReadRaster(0, 0, width, height, width, height, 
+                gdalconst.GDT_Byte, band1Data);
+
+            // Sample the raster and add points to WorldImage
+            int pointCount = 0;
+            for (int y = 0; y < height; y += sampleStep) {
+                for (int x = 0; x < width; x += sampleStep) {
+                    int idx = y * width + x;
+                    
+                    // Calculate geographic coordinates for this pixel
+                    double lon = topLeftLon + (x + 0.5) * pixelWidth;
+                    double lat = topLeftLat + (y + 0.5) * pixelHeight;
+                    
+                    // Get pixel value (0-255 range)
+                    double value = band1Data[idx] & 0xff;
+                    
+                    // Skip fully transparent pixels if alpha channel exists
+                    if (bandCount >= 4) {
+                        byte[] alphaData = new byte[1];
+                        dataset.GetRasterBand(4).ReadRaster(x, y, 1, 1, 1, 1, 
+                            gdalconst.GDT_Byte, alphaData);
+                        int alpha = alphaData[0] & 0xff;
+                        if (alpha == 0) {
+                            continue; // Skip transparent pixels
+                        }
+                    }
+                    
+                    // Create location and add point to WorldImage
+                    LocationType loc = new LocationType(lat, lon);
+                    worldImage.addPoint(loc, value);
+                    pointCount++;
+                }
+            }
+
+            log.info("Successfully read GeoTIFF from: {}", filePath);
+            log.info("Image dimensions: {}x{}, sampled {} points with step={}", 
+                width, height, pointCount, sampleStep);
+
+            return worldImage;
+
+        } finally {
+            // Close and release the dataset
+            dataset.delete();
+        }
+    }
+
+    /**
+     * Reads a GeoTIFF file from disk and creates a WorldImage with default parameters.
+     * Uses a sample step of 1 (every pixel) and cell width of 5 meters.
+     * 
+     * @param filePath The path to the GeoTIFF file
+     * @param colorMap The ColorMap to use for the WorldImage
+     * @return A WorldImage containing the raster data and geographic information
+     * @throws IOException If there's an error reading the file
+     */
+    public static WorldImage readGeoTiff(String filePath, pt.omst.neptus.colormap.ColorMap colorMap) throws IOException {
+        return readGeoTiff(filePath, colorMap, 5, 1);
+    }
+
     public static void exportTif(BufferedImage bufferedImage, LocationType ne, LocationType sw, String outputFilePath)
             throws IOException {
         double[] swCoords = sw.getAbsoluteLatLonDepth();

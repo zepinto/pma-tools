@@ -25,6 +25,7 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.Hashtable;
 import java.util.Locale;
+import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
@@ -38,17 +39,26 @@ import org.slf4j.LoggerFactory;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * GUI utility methods for standalone applications.
  * 
  * @author Paulo Dias
  * @author Ze Carlos
  */
+@Slf4j
 public class GuiUtils {
     /** Log handle. */
     private static final Logger LOG = LoggerFactory.getLogger(GuiUtils.class);
     
     private static boolean lookAndFeelSet = false;
+
+    public static void setTheme(String theme) {
+        Preferences prefs = Preferences.userNodeForPackage(GuiUtils.class);
+        prefs.put("gui.theme", theme);
+        log.warn("GUI theme changed to {}. Restart application to apply changes.", theme);
+    }
 
     /**
      * Sets the Look and Feel to FlatLaf (modern flat UI).
@@ -58,14 +68,20 @@ public class GuiUtils {
         if (lookAndFeelSet) {
             return;
         }
+
+        log.info("Setting Look and Feel to FlatLaf");
         
         try {
+            Preferences prefs = Preferences.userNodeForPackage(GuiUtils.class);
+            String theme = prefs.get("gui.theme", "dark");
             // Check for dark mode preference
-            String theme = System.getProperty("flatlaf.theme", "dark");
+           // String theme = System.getProperty("flatlaf.theme", "dark");
             
             if ("dark".equalsIgnoreCase(theme)) {
+                log.info("Applying dark theme");
                 UIManager.setLookAndFeel(new FlatDarkLaf());
             } else {
+                log.info("Applying light theme");
                 UIManager.setLookAndFeel(new FlatLightLaf());
             }
             
@@ -230,7 +246,7 @@ public class GuiUtils {
      * @return true if dark theme is active
      */
     public static boolean isDarkTheme() {
-        String theme = System.getProperty("flatlaf.theme", "dark");
+        String theme = Preferences.userNodeForPackage(GuiUtils.class).get("gui.theme", "dark");
         return "dark".equalsIgnoreCase(theme);
     }
 
