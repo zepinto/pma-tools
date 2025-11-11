@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
 import javax.swing.ButtonGroup;
@@ -52,15 +53,6 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         OPENSTREETMAP("OpenStreetMap", 
                 "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                 "© OpenStreetMap contributors"),
-        OPENTOPO("OpenTopoMap",
-                "https://tile.opentopomap.org/{z}/{x}/{y}.png",
-                "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)"),
-        STAMEN_TERRAIN("Stamen Terrain",
-                "https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png",
-                "Map tiles by Stamen Design (CC BY 3.0) | © OpenStreetMap contributors"),
-        STAMEN_TONER("Stamen Toner",
-                "https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png",
-                "Map tiles by Stamen Design (CC BY 3.0) | © OpenStreetMap contributors"),
         CARTO_LIGHT("CartoDB Positron",
                 "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
                 "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
@@ -69,10 +61,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
         ESRI_WORLD_IMAGERY("ESRI World Imagery",
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                "Tiles © Esri"),
-        HUMANITARIAN("Humanitarian OSM",
-                "https://tile-a.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-                "© OpenStreetMap contributors | Tiles courtesy of HOT");
+                "Tiles © Esri");
         
         private final String displayName;
         private final String urlPattern;
@@ -124,6 +113,17 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     public SlippyMap(List<? extends ContactObject> points) {
         this.points.addAll(points);
         setDarkMode(GuiUtils.isDarkTheme());
+        
+        // Load saved tile source preference
+        Preferences prefs = Preferences.userNodeForPackage(SlippyMap.class);
+        String savedSource = prefs.get("tileSource", TileSource.OPENSTREETMAP.name());
+        try {
+            currentTileSource = TileSource.valueOf(savedSource);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid tile source preference: {}, using default", savedSource);
+            currentTileSource = TileSource.OPENSTREETMAP;
+        }
+        
         // Initialize base cache directory
         baseCacheDir = new File(System.getProperty("user.home"), "tile_cache");
         if (!baseCacheDir.exists()) {
@@ -201,6 +201,23 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         downloader.setDaemon(true);
         downloader.start();
         
+        // Load saved zoom and center preferences, or initialize from points
+        double savedCx = prefs.getDouble("centerX", Double.NaN);
+        double savedCy = prefs.getDouble("centerY", Double.NaN);
+        int savedZ = prefs.getInt("zoom", -1);
+        
+        if (!Double.isNaN(savedCx) && !Double.isNaN(savedCy) && savedZ >= 0 && savedZ <= 19) {
+            // Use saved preferences
+            cx = savedCx;
+            cy = savedCy;
+            z = savedZ;
+            log.info("Loaded saved map view: zoom={}, cx={}, cy={}", z, cx, cy);
+        } else {
+            // Initialize from points
+            initializeMapCenterAndZoom();
+            log.info("Initialized map view from points: zoom={}, cx={}, cy={}", z, cx, cy);
+        }
+        
         // Setup popup menu for map options
         setupPopupMenu();
 
@@ -217,6 +234,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 z++;
                 cx = newCx;
                 cy = newCy;
+                saveViewPreferences();
                 repaint();
             } else if (rotation > 0 && z > 0) { // Zoom out
                 double newCx = cx / 2.0 + width / 4.0 - mouseX / 2.0;
@@ -224,6 +242,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 z--;
                 cx = newCx;
                 cy = newCy;
+                saveViewPreferences();
                 repaint();
             }
         });
@@ -261,6 +280,14 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                         repaint();
                         break;
                     }
+                }
+            }
+            
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                // Save preferences after drag is complete
+                if (!e.isPopupTrigger()) {
+                    saveViewPreferences();
                 }
             }
         });
@@ -366,6 +393,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     public void setTileSource(TileSource source) {
         if (source != currentTileSource) {
             currentTileSource = source;
+            
+            // Save preference
+            Preferences prefs = Preferences.userNodeForPackage(SlippyMap.class);
+            prefs.put("tileSource", source.name());
+            
             memoryCache.clear(); // Clear memory cache to reload with new source
             repaint();
         }
@@ -376,6 +408,16 @@ public class SlippyMap extends JPanel implements AutoCloseable {
      */
     public TileSource getTileSource() {
         return currentTileSource;
+    }
+    
+    /**
+     * Save current view (zoom and center) preferences.
+     */
+    private void saveViewPreferences() {
+        Preferences prefs = Preferences.userNodeForPackage(SlippyMap.class);
+        prefs.putDouble("centerX", cx);
+        prefs.putDouble("centerY", cy);
+        prefs.putInt("zoom", z);
     }
 
     public void focus(double lat, double lon, int zoom) {
@@ -484,11 +526,21 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                     double screenY = ty * 256 - py;
                     if (tile != null) {
                         g2d.drawImage(tile, (int) screenX, (int) screenY, null);
-                    } else if (!pendingTiles.contains(tileKey)) {
-                        downloadQueue.add(tileKey);
-                        pendingTiles.add(tileKey);
-                        g2d.setColor(Color.GRAY);
-                        g2d.fillRect((int) screenX, (int) screenY, 256, 256);
+                    } else {
+                        // Try to find a fallback tile from lower or higher zoom levels
+                        BufferedImage fallbackTile = findFallbackTile(wrappedTx, ty, z);
+                        if (fallbackTile != null) {
+                            g2d.drawImage(fallbackTile, (int) screenX, (int) screenY, 256, 256, null);
+                        } else {
+                            g2d.setColor(Color.GRAY);
+                            g2d.fillRect((int) screenX, (int) screenY, 256, 256);
+                        }
+                        
+                        // Queue the correct tile for download
+                        if (!pendingTiles.contains(tileKey)) {
+                            downloadQueue.add(tileKey);
+                            pendingTiles.add(tileKey);
+                        }
                     }
                 }
             }
@@ -569,6 +621,83 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             }
         }
         return darkImage;
+    }
+    
+    /**
+     * Find a fallback tile from nearby zoom levels when the exact tile is not available.
+     * Tries lower zoom levels first (showing less detail but bigger area), then higher zoom levels.
+     */
+    private BufferedImage findFallbackTile(int tx, int ty, int zoom) {
+        // Try lower zoom levels first (zoom out - each tile covers 4 tiles of the next zoom level)
+        for (int deltaZ = 1; deltaZ <= 3 && zoom - deltaZ >= 0; deltaZ++) {
+            int lowerZoom = zoom - deltaZ;
+            int factor = (int) Math.pow(2, deltaZ);
+            int lowerTx = tx / factor;
+            int lowerTy = ty / factor;
+            String lowerTileKey = currentTileSource.getCacheName() + "/" + lowerZoom + "/" + lowerTx + "/" + lowerTy;
+            BufferedImage lowerTile = memoryCache.get(lowerTileKey);
+            
+            if (lowerTile != null) {
+                // Extract the relevant portion of the lower zoom tile
+                int subX = (tx % factor) * (256 / factor);
+                int subY = (ty % factor) * (256 / factor);
+                int subSize = 256 / factor;
+                
+                try {
+                    BufferedImage subImage = lowerTile.getSubimage(subX, subY, subSize, subSize);
+                    // Scale up to 256x256
+                    BufferedImage scaledImage = new BufferedImage(256, 256, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g = scaledImage.createGraphics();
+                    g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                    g.drawImage(subImage, 0, 0, 256, 256, null);
+                    g.dispose();
+                    return scaledImage;
+                } catch (Exception e) {
+                    // Continue to next fallback option
+                }
+            }
+        }
+        
+        // Try higher zoom levels (zoom in - 4 tiles make up 1 tile of the lower zoom level)
+        for (int deltaZ = 1; deltaZ <= 2 && zoom + deltaZ <= 19; deltaZ++) {
+            int higherZoom = zoom + deltaZ;
+            int factor = (int) Math.pow(2, deltaZ);
+            
+            // Check if any of the child tiles exist
+            for (int dx = 0; dx < factor; dx++) {
+                for (int dy = 0; dy < factor; dy++) {
+                    int higherTx = tx * factor + dx;
+                    int higherTy = ty * factor + dy;
+                    String higherTileKey = currentTileSource.getCacheName() + "/" + higherZoom + "/" + higherTx + "/" + higherTy;
+                    BufferedImage higherTile = memoryCache.get(higherTileKey);
+                    
+                    if (higherTile != null) {
+                        // Composite all available child tiles
+                        BufferedImage composite = new BufferedImage(256, 256, BufferedImage.TYPE_INT_ARGB);
+                        Graphics2D g = composite.createGraphics();
+                        g.setColor(Color.GRAY);
+                        g.fillRect(0, 0, 256, 256);
+                        
+                        int tileSize = 256 / factor;
+                        for (int cx = 0; cx < factor; cx++) {
+                            for (int cy = 0; cy < factor; cy++) {
+                                int childTx = tx * factor + cx;
+                                int childTy = ty * factor + cy;
+                                String childKey = currentTileSource.getCacheName() + "/" + higherZoom + "/" + childTx + "/" + childTy;
+                                BufferedImage childTile = memoryCache.get(childKey);
+                                if (childTile != null) {
+                                    g.drawImage(childTile, cx * tileSize, cy * tileSize, tileSize, tileSize, null);
+                                }
+                            }
+                        }
+                        g.dispose();
+                        return composite;
+                    }
+                }
+            }
+        }
+        
+        return null; // No fallback tile found
     }
 
     public double[] latLonToPixel(double lat, double lon) {
@@ -657,7 +786,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             frame.add(map);
             frame.setSize(800, 600);
             frame.setVisible(true);
-            map.initializeMapCenterAndZoom();
+            // Note: map center and zoom are already initialized in constructor from preferences or points
         });
     }
 }
