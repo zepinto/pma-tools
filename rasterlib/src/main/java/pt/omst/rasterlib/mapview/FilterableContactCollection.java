@@ -19,6 +19,20 @@ import pt.omst.rasterlib.contacts.ContactCollection;
 
 /**
  * A wrapper around ContactCollection that adds visibility and time filtering support.
+ * 
+ * <p>This class extends the basic ContactCollection functionality with the ability to
+ * toggle visibility and filter contacts by timestamp. It renders contacts as circular
+ * markers on the map, with labels shown at higher zoom levels.</p>
+ * 
+ * <h3>Rendering:</h3>
+ * <ul>
+ *   <li>Contacts are drawn as yellow circles with black outlines</li>
+ *   <li>Labels are shown when zoom level > 10</li>
+ *   <li>Only contacts within the visible map bounds are rendered</li>
+ * </ul>
+ * 
+ * @see ContactCollection
+ * @see LayeredRasterViewer
  */
 public class FilterableContactCollection implements MapPainter {
     

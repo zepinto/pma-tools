@@ -23,6 +23,20 @@ import pt.omst.rasterlib.IndexedRasterUtils;
 
 /**
  * Represents a layer containing multiple indexed rasters from a folder.
+ * 
+ * <p>A RasterLayer groups all rasters found in a folder (via its rasterIndex subdirectory)
+ * and provides visibility control and timestamp filtering capabilities. Each layer is painted
+ * as a single MapPainter that manages its collection of IndexedRasterPainter instances.</p>
+ * 
+ * <h3>Visibility and Filtering:</h3>
+ * <ul>
+ *   <li>Layers can be toggled on/off via the visible property</li>
+ *   <li>Time filters can be applied to show only rasters within a specific timestamp range</li>
+ *   <li>Filtered rasters are simply not painted, but remain loaded in memory</li>
+ * </ul>
+ * 
+ * @see IndexedRasterPainter
+ * @see LayeredRasterViewer
  */
 @Slf4j
 public class RasterLayer implements MapPainter {

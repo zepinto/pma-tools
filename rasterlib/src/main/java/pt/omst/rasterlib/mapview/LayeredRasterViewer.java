@@ -47,8 +47,33 @@ import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.contacts.ContactCollection;
 
 /**
- * A map viewer that loads indexed rasters and contacts from a folder hierarchy,
+ * A map viewer application that loads indexed rasters and contacts from a folder hierarchy,
  * organizing them into layers that can be toggled and filtered by timestamp.
+ * 
+ * <p>This viewer recursively searches for folders containing rasterIndex subdirectories and
+ * groups the rasters within each folder as a separate layer. It also loads all .zct contact
+ * files from the folder hierarchy and displays them on the map.</p>
+ * 
+ * <h3>Features:</h3>
+ * <ul>
+ *   <li>Layer-based organization: Each folder with rasterIndex becomes a layer</li>
+ *   <li>Toggle visibility: Individual layers and contacts can be shown/hidden</li>
+ *   <li>Time filtering: Filter rasters and contacts by timestamp range</li>
+ *   <li>Interactive map: Pan, zoom, and explore the data</li>
+ * </ul>
+ * 
+ * <h3>Usage:</h3>
+ * <pre>
+ * // Run from command line with folder path
+ * LayeredRasterViewer /path/to/data/folder
+ * 
+ * // Or run and use File > Open Folder menu
+ * LayeredRasterViewer
+ * </pre>
+ * 
+ * @see RasterLayer
+ * @see FilterableContactCollection
+ * @see IndexedRasterPainter
  */
 @Slf4j
 public class LayeredRasterViewer extends JFrame {
@@ -405,7 +430,7 @@ public class LayeredRasterViewer extends JFrame {
             viewer.setVisible(true);
             
             // Example: Load from a folder
-            // Replace with actual folder path or add file chooser
+            // Replace with actual folder path or use File > Open Folder menu
             if (args.length > 0) {
                 File folder = new File(args[0]);
                 if (folder.exists() && folder.isDirectory()) {
@@ -415,7 +440,7 @@ public class LayeredRasterViewer extends JFrame {
                 }
             } else {
                 log.info("Usage: LayeredRasterViewer <folder-path>");
-                log.info("No folder specified. Use File menu to open a folder.");
+                log.info("Or use File > Open Folder menu to select a folder.");
             }
         });
     }
