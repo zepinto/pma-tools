@@ -28,7 +28,6 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.prefs.Preferences;
-import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
 import javax.swing.JPanel;
@@ -66,6 +65,9 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         
         // Initialize base map manager
         baseMapManager = new BaseMapManager(newSource -> {
+            // Clear all queued and pending tiles from previous tile source
+            downloadQueue.clear();
+            pendingTiles.clear();
             memoryCache.clear(); // Clear memory cache to reload with new source
             repaint();
         });
@@ -96,6 +98,12 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                     int tz = Integer.parseInt(parts[1]);
                     int tx = Integer.parseInt(parts[2]);
                     int ty = Integer.parseInt(parts[3]);
+                    
+                    // Skip if tile is from a different tile source than currently selected
+                    if (!tileSourceName.equals(baseMapManager.getCurrentTileSource().getCacheName())) {
+                        pendingTiles.remove(tileKey);
+                        continue;
+                    }
 
                     // Check disk cache first
                     File tileFile = new File(baseCacheDir, tileKey + ".png");
@@ -103,20 +111,35 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                     if (tileFile.exists()) {
                         image = ImageIO.read(tileFile);
                     } else {
+                        // Check again if tile source changed before downloading
+                        if (!tileSourceName.equals(baseMapManager.getCurrentTileSource().getCacheName())) {
+                            pendingTiles.remove(tileKey);
+                            continue;
+                        }
+                        
                         // Download tile if not cached
                         String url = baseMapManager.getCurrentTileSource().getTileUrl(tz, tx, ty);
                         URL tileUrl = new URL(url);
                         HttpURLConnection conn = (HttpURLConnection) tileUrl.openConnection();
                         conn.setRequestProperty("User-Agent", "SlippyMapWithCoords/1.0 (your.email@example.com)");
                         conn.setInstanceFollowRedirects(true);
+                        conn.setConnectTimeout(5000); // 5 second connection timeout
+                        conn.setReadTimeout(10000); // 10 second read timeout
                         
                         // Check response code before reading
                         int responseCode = conn.getResponseCode();
                         if (responseCode == HttpURLConnection.HTTP_OK) {
+                            // Final check before reading data
+                            if (!tileSourceName.equals(baseMapManager.getCurrentTileSource().getCacheName())) {
+                                conn.disconnect();
+                                pendingTiles.remove(tileKey);
+                                continue;
+                            }
+                            
                             image = ImageIO.read(conn.getInputStream());
                             
-                            // Only save to disk cache if image was successfully loaded
-                            if (image != null) {
+                            // Only save to disk cache if image was successfully loaded and source hasn't changed
+                            if (image != null && tileSourceName.equals(baseMapManager.getCurrentTileSource().getCacheName())) {
                                 tileFile.getParentFile().mkdirs(); // Ensure directory exists
                                 ImageIO.write(image, "png", tileFile);
                             }
@@ -126,7 +149,8 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                         conn.disconnect();
                     }
 
-                    if (image != null) {
+                    // Only cache and repaint if the tile source hasn't changed
+                    if (image != null && tileSourceName.equals(baseMapManager.getCurrentTileSource().getCacheName())) {
                         if (darkMode)
                             image = applyDarkModeFilter(image);
                         memoryCache.put(tileKey, image);
