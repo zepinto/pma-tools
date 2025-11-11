@@ -18,6 +18,5 @@ public interface MapPainter {
 
     default String getName() {
         return this.getClass().getSimpleName(); // Default name is the class name
-    }
-    
+    }    
 }

@@ -48,9 +48,13 @@ public class IndexedRasterUtils {
     private static final ArrayList<Future<?>> runningTasks = new ArrayList<>();
 
     public synchronized static CompletableFuture<?> background(Runnable task) {
-        if (executor == null)
-            executor = Executors.newFixedThreadPool(5);
-
+        if (executor == null) {
+            int totalProcessors = Runtime.getRuntime().availableProcessors();
+            if (totalProcessors > 4) {
+                totalProcessors -= 2; // leave some CPU for other tasks
+            }
+            executor = Executors.newFixedThreadPool(totalProcessors);
+        }
         CompletableFuture<?> newTask = CompletableFuture.runAsync(task, executor);
         runningTasks.add(newTask);
         return newTask;

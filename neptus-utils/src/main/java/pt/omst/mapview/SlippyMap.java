@@ -60,6 +60,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private boolean isDragging = false; // Track if map is being dragged
 
     private final CopyOnWriteArrayList<MapPainter> rasterPainters = new CopyOnWriteArrayList<>();
+    private javax.swing.Timer repaintTimer;
     
     public SlippyMap(List<? extends MapMarker> points) {
         this.points.addAll(points);
@@ -90,6 +91,10 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 sourceDir.mkdirs();
             }
         }
+        
+        // Start periodic repaint timer (250ms)
+        repaintTimer = new javax.swing.Timer(250, e -> repaint());
+        repaintTimer.start();
 
         // Start the tile downloader thread
         Thread downloader = new Thread(() -> {
@@ -181,7 +186,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         double savedCy = prefs.getDouble("centerY", Double.NaN);
         int savedZ = prefs.getInt("zoom", -1);
         
-        if (!Double.isNaN(savedCx) && !Double.isNaN(savedCy) && savedZ >= 0 && savedZ <= 19) {
+        if (!Double.isNaN(savedCx) && !Double.isNaN(savedCy) && savedZ >= 0 && savedZ <= 20) {
             // Use saved preferences
             cx = savedCx;
             cy = savedCy;
@@ -203,7 +208,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             int height = getHeight();
             int mouseX = e.getX();
             int mouseY = e.getY();
-            if (rotation < 0 && z < 19) { // Zoom in
+            if (rotation < 0 && z < 20) { // Zoom in
                 double newCx = 2 * cx - (width / 2.0) + mouseX;
                 double newCy = 2 * cy - (height / 2.0) + mouseY;
                 z++;
@@ -356,6 +361,20 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
     public void addRasterPainter(MapPainter painter) {
         rasterPainters.add(painter);
+        // Sort painters by timestamp if they're IndexedRasterPainter instances
+        rasterPainters.sort((p1, p2) -> {
+            if (p1.getClass().getSimpleName().equals("IndexedRasterPainter") && 
+                p2.getClass().getSimpleName().equals("IndexedRasterPainter")) {
+                try {
+                    long t1 = (long) p1.getClass().getMethod("getStartTimestamp").invoke(p1);
+                    long t2 = (long) p2.getClass().getMethod("getStartTimestamp").invoke(p2);
+                    return Long.compare(t1, t2);
+                } catch (Exception e) {
+                    return 0;
+                }
+            }
+            return 0;
+        });
         log.info("Added raster painter: {}", painter.getClass().getSimpleName());
     }
 
@@ -447,42 +466,43 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
         // Draw tiles
         for (int ty = tyMin; ty <= tyMax; ty++) {
-            if (ty >= 0 && ty < numTiles) {
-                for (int tx = txMin; tx <= txMax; tx++) {
-                    int wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-                    String tileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + z + "/" + wrappedTx + "/" + ty;
-                    BufferedImage tile = memoryCache.get(tileKey);
-                    double screenX = wrappedTx * 256 - px;
-                    double screenY = ty * 256 - py;
-                    if (tile != null) {
-                        g2d.drawImage(tile, (int) screenX, (int) screenY, null);
+            if (ty < 0 || ty >= numTiles) {
+                continue; // Skip invalid tile y coordinates
+            }
+            for (int tx = txMin; tx <= txMax; tx++) {
+                int wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
+                String tileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + z + "/" + wrappedTx + "/" + ty;
+                BufferedImage tile = memoryCache.get(tileKey);
+                double screenX = wrappedTx * 256 - px;
+                double screenY = ty * 256 - py;
+                if (tile != null) {
+                    g2d.drawImage(tile, (int) screenX, (int) screenY, null);
+                } else {
+                    // Try to find a fallback tile from lower or higher zoom levels
+                    BufferedImage fallbackTile = findFallbackTile(wrappedTx, ty, z);
+                    if (fallbackTile != null) {
+                        g2d.drawImage(fallbackTile, (int) screenX, (int) screenY, 256, 256, null);
                     } else {
-                        // Try to find a fallback tile from lower or higher zoom levels
-                        BufferedImage fallbackTile = findFallbackTile(wrappedTx, ty, z);
-                        if (fallbackTile != null) {
-                            g2d.drawImage(fallbackTile, (int) screenX, (int) screenY, 256, 256, null);
-                        } else {
-                            g2d.setColor(Color.GRAY);
-                            g2d.fillRect((int) screenX, (int) screenY, 256, 256);
-                        }
-                        
-                        // Queue the correct tile for download
-                        if (!pendingTiles.contains(tileKey)) {
-                            downloadQueue.add(tileKey);
-                            pendingTiles.add(tileKey);
-                        }
+                        g2d.setColor(Color.GRAY);
+                        g2d.fillRect((int) screenX, (int) screenY, 256, 256);
+                    }
+                    
+                    // Queue the correct tile for download
+                    if (!pendingTiles.contains(tileKey)) {
+                        downloadQueue.add(tileKey);
+                        pendingTiles.add(tileKey);
                     }
                 }
             }
         }
 
         // Paint registered rasters (skip during drag for better performance)
-        if (!isDragging) {
+        //if (!isDragging) {
             for (MapPainter painter : rasterPainters) {
                 //log.info("Painting raster with {}", painter.getClass().getSimpleName());
                 painter.paint(g2d, this);
             }
-        }
+        //}
 
         // Draw points with labels
         Font font = new Font("SansSerif", Font.PLAIN, 12);
@@ -524,6 +544,16 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         g2d.fillRect(boxX, boxY, textWidth, textHeight);
         g2d.setColor(Color.WHITE);
         g2d.drawString(coordText, boxX + 5, boxY + fm.getAscent() + 2);
+
+        // Draw zoom and level of detail (top left)
+        String zoomText = String.format("LOD: %d | Zoom: %.2f m/px", z, 1.0/getZoom());
+        int zoomTextWidth = fm.stringWidth(zoomText) + 10;
+        int zoomBoxX = 10;
+        int zoomBoxY = 10;
+        g2d.setColor(new Color(0, 0, 0, 150)); // Semi-transparent black
+        g2d.fillRect(zoomBoxX, zoomBoxY, zoomTextWidth, textHeight);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(zoomText, zoomBoxX + 5, zoomBoxY + fm.getAscent() + 2);
     }
 
     private BufferedImage applyDarkModeFilter(BufferedImage original) {
@@ -649,6 +679,20 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         return new Point2D.Double(screenX, screenY);
     }
 
+    public double[] latLonToScreen(double lat, double lon) {
+        double[] xy = latLonToPixel(lat, lon, z);
+        double screenX = xy[0] - (cx - getWidth() / 2.0);
+        double screenY = xy[1] - (cy - getHeight() / 2.0);
+        return new double[]{screenX, screenY};
+    }
+
+    public LocationType getRealWorldPosition(int screenX, int screenY) {
+        double mapX = cx - getWidth() / 2.0 + screenX;
+        double mapY = cy - getHeight() / 2.0 + screenY;
+        double[] latLon = pixelToLatLon(mapX, mapY, z);
+        return new LocationType(latLon[0], latLon[1]);
+    }
+
     public double[] pixelToLatLon(double x, double y) {
         return pixelToLatLon(x, y, z);
     }
@@ -672,8 +716,34 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         return new double[]{x, y};
     }
 
-    public int getZoom() {
+    private static int mapSize(int levelOfDetail) {
+        return 256 << levelOfDetail;
+    }
+
+    private static double clip(double n, double minValue, double maxValue) {
+        return Math.min(Math.max(n, minValue), maxValue);
+    }
+
+    public static double groundResolution(double latitude, int levelOfDetail) {
+        latitude = clip(latitude, -85.05112878, 85.05112878);
+        return Math.cos(latitude * Math.PI / 180) * 2 * Math.PI * 6378137 / mapSize(levelOfDetail);
+    }
+
+    double getCenterLatitude() {
+        double[] latLon = pixelToLatLon(cx, cy, z);
+        return latLon[0];
+    }
+
+    public double getZoom() {
+        return 1.0 / groundResolution(getCenterLatitude(), z);    
+    }
+
+    public int getLevelOfDetail() {
         return z;
+    }
+
+    public double getRotation() {
+        return 0.0;
     }
     
     /**
@@ -706,6 +776,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
     @Override
     public void close() {
+        // Stop repaint timer
+        if (repaintTimer != null) {
+            repaintTimer.stop();
+            repaintTimer = null;
+        }
         // Clear memory cache
         for (BufferedImage img : memoryCache.values()) {
             if (img != null) {
@@ -726,6 +801,8 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         return new Rectangle2D.Double(bounds[1], bounds[0],
                 bounds[3] - bounds[1], bounds[2] - bounds[0]);
     }
+
+    
 
     public static void main(String[] args) {
         GuiUtils.setTheme("light");

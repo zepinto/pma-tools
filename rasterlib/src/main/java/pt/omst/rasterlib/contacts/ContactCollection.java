@@ -5,6 +5,7 @@
 //***************************************************************************
 package pt.omst.rasterlib.contacts;
 
+import java.awt.Graphics2D;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,13 +13,15 @@ import java.util.List;
 import java.util.Objects;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.omst.mapview.MapPainter;
+import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.core.LocationType;
 
 /**
  * A collection of contacts.
  */
 @Slf4j
-public class ContactCollection {
+public class ContactCollection implements MapPainter {
 
     private final ArrayList<CompressedContact> contacts = new ArrayList<>();
     private final File folder;
@@ -184,6 +187,16 @@ public class ContactCollection {
                 log.warn("Error reading contact from {}", contactFile.getAbsolutePath());
             }
         }
+    }
+
+    @Override
+    public void paint(Graphics2D g, SlippyMap map) {
+        double[] bounds = map.getVisibleBounds();
+        List<CompressedContact> visibleContacts = contactsContainedIn(
+            new LocationType(bounds[2], bounds[0]),
+            new LocationType(bounds[3], bounds[1])
+        );
+        MapPainter.super.paint(g, map);
     }
 
     public static void main(String[] args) throws IOException {

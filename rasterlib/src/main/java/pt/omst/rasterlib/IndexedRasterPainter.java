@@ -43,9 +43,16 @@ public class IndexedRasterPainter implements MapPainter {
     public IndexedRasterPainter(File parentFolder, IndexedRaster raster) throws IOException {
         this.raster = raster;
         this.parentFolder = parentFolder;
-        //readPath();
+        readPath();
         readShape();
         bounds = IndexedRasterUtils.getBounds(raster);
+    }
+
+    public long getStartTimestamp() {
+        if (raster.getSamples() != null && !raster.getSamples().isEmpty()) {
+            return raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
+        }
+        return 0;
     }
 
     public void readPath() {
@@ -155,24 +162,11 @@ public class IndexedRasterPainter implements MapPainter {
         shape.setOpaque(true);
     }
 
-    private void simpleFill(Graphics2D g, SlippyMap renderer) {
-        AffineTransform before = g.getTransform();
-        for (int i = 0; i < raster.getSamples().size(); i += 3) {
-            Point2D.Double[] pos = IndexedRasterUtils.getLinePosition(raster, i);
-            double[] startPos = renderer.latLonToPixel(pos[0].x, pos[0].y);
-            double[] endPos = renderer.latLonToPixel(pos[1].x, pos[1].y);
-            Point2D start = new Point2D.Double(startPos[0], startPos[1]);
-            Point2D end = new Point2D.Double(endPos[0], endPos[1]);
-            g.drawLine((int) start.getX(), (int) start.getY(), (int) end.getX(), (int) end.getY());
-        }
-        g.setTransform(before);
-    }
-
     private void paintMosaic(Graphics2D g, SlippyMap renderer) {
         log.info("Painting mosaic at resolution {}", mosaicResolution.get());
         AffineTransform before = g.getTransform();
         if (mosaicImage != null) {
-            double[] cornerPos = renderer.latLonToPixel(mosaicNWcorner.getLatitudeDegs(), mosaicNWcorner.getLongitudeDegs());
+            double[] cornerPos = renderer.latLonToScreen(mosaicNWcorner.getLatitudeDegs(), mosaicNWcorner.getLongitudeDegs());
             Point2D corner = new Point2D.Double(cornerPos[0], cornerPos[1]);
             g.translate(corner.getX(), corner.getY());
             g.scale(renderer.getZoom() / mosaicResolution.get(), renderer.getZoom() / mosaicResolution.get());
@@ -190,42 +184,46 @@ public class IndexedRasterPainter implements MapPainter {
 
     @Override
     public void paint(Graphics2D g, SlippyMap renderer) {
+        g.setRenderingHints(new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF));
+        g.setRenderingHints(new RenderingHints(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED));
         boolean visible = renderer.getVisibleCoordinates().intersects(bounds);
-        log.info("This is IndexedRasterPainter (bounds: "+bounds+") is visible: {}", visible);
-        simplePaint(g, renderer);
-        // if (!renderer.getVisibleCoordinates().intersects(bounds)) {
-        //     cancelMosaicTask();
-        //     image = mosaicImage = null;
-        //     mosaicResolution.set(0);
-        //     return;
-        // }
+        if (!visible) {
+            cancelMosaicTask();
+            image = mosaicImage = null;
+            mosaicResolution.set(0);
+            return;
+        }
+        
 
-        // if (renderer.getZoom() < 2) {
-        //     cancelMosaicTask();
-        //     image = mosaicImage = null;
-        //     mosaicResolution.set(0);
-        //     simplePaint(g, renderer);
-        //     return;
-        // }
+        if (renderer.getZoom() < 2) {
+            simplePaint(g, renderer);
+            return;
+        }
 
-        // int resolution = Math.min(20, (int)renderer.getZoom());
-        // if (mosaicResolution.get() != resolution) {
-        //     cancelMosaicTask();
-        //     mosaicTask = IndexedRasterUtils.background(() -> createMosaic(resolution));
-        //     simplePaint(g, renderer);
-        // }
-        // else {
-        //     paintMosaic(g, renderer);
-        // }
+        int resolution = Math.min(20, (int) renderer.getZoom());
+        if (mosaicResolution.get() != resolution) {
+            cancelMosaicTask();
+            mosaicTask = IndexedRasterUtils.background(() -> createMosaic(resolution));
+            simplePaint(g, renderer);
+        } else {
+            paintMosaic(g, renderer);
+        }
+        
+        // Always draw shape outline at higher zoom levels
+        if (renderer.getZoom() >= 5) {
+            shape.paint(g, renderer);
+        }
     }
 
 
     public void simplePaint(Graphics2D g, SlippyMap renderer) {
+        LocationType center = new LocationType(
+            raster.getSamples().get(raster.getSamples().size() / 2).getPose().getLatitude(),
+            raster.getSamples().get(raster.getSamples().size() / 2).getPose().getLongitude());
         
-
-        AffineTransform before = g.getTransform();
-        shape.paint(g, renderer);
-        g.setTransform(before);
+        Point2D position = renderer.getScreenPosition(center);
+        g.setColor(Color.RED);
+        g.fill(new Rectangle2D.Double(position.getX() - 3, position.getY() - 3, 6, 6));
     }
 
 

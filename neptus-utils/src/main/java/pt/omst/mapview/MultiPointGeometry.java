@@ -13,11 +13,13 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.Point2D;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import pt.omst.neptus.core.LocationType;
 
 /**
@@ -28,6 +30,7 @@ import pt.omst.neptus.core.LocationType;
  * 
  * @author José Pinto
  */
+@Slf4j
 public class MultiPointGeometry implements MapPainter {
     
     @Getter @Setter
@@ -184,10 +187,12 @@ public class MultiPointGeometry implements MapPainter {
     @Override
     public void paint(Graphics2D g, SlippyMap map) {
         if (offsets.isEmpty()) {
+            log.info("No points to paint in MultiPointGeometry");
             return;
         }
         
         if (opaque) {
+            log.info("Painting opaque MultiPointGeometry");
             paintOpaque(g, map);
             return;
         }
@@ -197,7 +202,7 @@ public class MultiPointGeometry implements MapPainter {
         
         // Draw the path by converting each point to screen coordinates
         GeneralPath screenPath = buildScreenPath(map);
-        
+        log.info("Painting MultiPointGeometry with {} points", offsets.size());
         g.setStroke(stroke);
         g.draw(screenPath);
         
@@ -214,8 +219,7 @@ public class MultiPointGeometry implements MapPainter {
      * @param map The map to paint on
      */
     private void paintOpaque(Graphics2D g, SlippyMap map) {
-        GeneralPath screenPath = buildScreenPath(map);
-        
+        GeneralPath screenPath = buildScreenPath(map);        
         g.setColor(color.darker().darker());
         g.setStroke(stroke);
         g.draw(screenPath);
@@ -232,15 +236,12 @@ public class MultiPointGeometry implements MapPainter {
     private GeneralPath buildScreenPath(SlippyMap map) {
         GeneralPath screenPath = new GeneralPath();
         boolean first = true;
-        
-        // Start with center location
-        List<LocationType> allPoints = new ArrayList<>();
-        allPoints.add(new LocationType(centerLocation));
-        allPoints.addAll(getLocations());
-        
+
+        // Get all absolute locations (don't add center as separate point)
+        List<LocationType> allPoints = getLocations();
+
         for (LocationType loc : allPoints) {
-            double[] coords = map.latLonToPixel(loc.getLatitudeDegs(), loc.getLongitudeDegs());
-            
+            double[] coords = map.latLonToScreen(loc.getLatitudeDegs(), loc.getLongitudeDegs());
             if (first) {
                 screenPath.moveTo(coords[0], coords[1]);
                 first = false;
@@ -248,11 +249,11 @@ public class MultiPointGeometry implements MapPainter {
                 screenPath.lineTo(coords[0], coords[1]);
             }
         }
-        
+
         if (shape) {
             screenPath.closePath();
         }
-        
+
         return screenPath;
     }
     
