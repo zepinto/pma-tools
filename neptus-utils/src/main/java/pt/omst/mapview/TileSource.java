@@ -3,7 +3,7 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.rasterlib.mapview;
+package pt.omst.mapview;
 
 /**
  * Enumeration of available tile sources with their URLs and attribution.

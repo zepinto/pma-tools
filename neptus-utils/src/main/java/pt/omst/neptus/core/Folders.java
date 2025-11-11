@@ -21,7 +21,6 @@ public class Folders {
     private final static File FOLDER_USER_HOME =  new File(System.getProperty("user.home"));
     private final static File FOLDER_CFG = new File(FOLDER_ROOT, "conf");
     private final static File FOLDER_LOGS = new File(FOLDER_ROOT, "log");
-    private final static File FOLDER_LOGS_DOWNLOADED = new File(FOLDER_LOGS, "downloaded");
     private final static File FOLDER_NATIVES = new File(FOLDER_ROOT, "natives");
     private final static File FOLDER_USER_CONFIG = findUserConfigFolder();
     private final static File FOLDER_USER_DATA = findUserDataFolder();

@@ -3,7 +3,7 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.rasterlib.mapview;
+package pt.omst.mapview;
 
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;

@@ -3,7 +3,7 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.rasterlib.mapview;
+package pt.omst.mapview;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -14,6 +14,8 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.prefs.Preferences;
 
@@ -36,7 +39,6 @@ import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.neptus.core.LocationType;
 import pt.omst.neptus.util.GuiUtils;
-import pt.omst.rasterlib.contacts.ContactObject;
 
 @Slf4j
 public class SlippyMap extends JPanel implements AutoCloseable {
@@ -53,10 +55,13 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private int clickedPointIndex = -1; // Index of the clicked point (-1 if none)
     private boolean darkMode = false; // Dark mode flag
     private int mouseHoverIndex = -1; // Index of the hovered point (-1 if none)
-    private final ArrayList<ContactObject> points = new ArrayList<>(); // List of points to display
+    private final ArrayList<MapMarker> points = new ArrayList<>(); // List of points to display
     private final BaseMapManager baseMapManager; // Manages tile source selection
+    private boolean isDragging = false; // Track if map is being dragged
+
+    private final CopyOnWriteArrayList<MapPainter> rasterPainters = new CopyOnWriteArrayList<>();
     
-    public SlippyMap(List<? extends ContactObject> points) {
+    public SlippyMap(List<? extends MapMarker> points) {
         this.points.addAll(points);
         setDarkMode(GuiUtils.isDarkTheme());
         
@@ -235,7 +240,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 double px = cx - getWidth() / 2.0;
                 double py = cy - getHeight() / 2.0;
                 for (int i = 0; i < points.size(); i++) {
-                    ContactObject point = points.get(i);
+                    MapMarker point = points.get(i);
                     double[] xy = latLonToPixel(point.getLatitude(), point.getLongitude(), z);
                     int screenX = (int) (xy[0] - px);
                     int screenY = (int) (xy[1] - py);
@@ -255,16 +260,19 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             
             @Override
             public void mouseReleased(MouseEvent e) {
+                isDragging = false;
                 // Save preferences after drag is complete
                 if (!e.isPopupTrigger()) {
                     saveViewPreferences();
                 }
+                repaint(); // Repaint to show rasters
             }
         });
 
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
+                isDragging = true;
                 int x = e.getX();
                 int y = e.getY();
                 cx -= (x - lastPos[0]);
@@ -286,7 +294,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 double px = cx - getWidth() / 2.0;
                 double py = cy - getHeight() / 2.0;
                 for (int i = 0; i < points.size(); i++) {
-                    ContactObject point = points.get(i);
+                    MapMarker point = points.get(i);
                     double[] xy = latLonToPixel(point.getLatitude(), point.getLongitude(), z);
                     int screenX = (int) (xy[0] - px);
                     int screenY = (int) (xy[1] - py);
@@ -346,11 +354,16 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         focus(lld[0], lld[1], z);        
     }
 
+    public void addRasterPainter(MapPainter painter) {
+        rasterPainters.add(painter);
+        log.info("Added raster painter: {}", painter.getClass().getSimpleName());
+    }
+
     public void addPainter(MapPainter painter) {
         painter.paint((Graphics2D) getGraphics(), this);
     }
 
-    public void focus(ContactObject obj, int zoom) {
+    public void focus(MapMarker obj, int zoom) {
         double[] xy = latLonToPixel(obj.getLatitude(), obj.getLongitude(), zoom);
         focus(xy[0], xy[1], zoom);
     }
@@ -378,7 +391,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         double sumLat = 0, sumLon = 0;
         double minLat = Double.MAX_VALUE, maxLat = -Double.MAX_VALUE;
         double minLon = Double.MAX_VALUE, maxLon = -Double.MAX_VALUE;
-        for (ContactObject point : points) {
+        for (MapMarker point : points) {
             double lat = point.getLatitude();
             double lon = point.getLongitude();
             sumLat += lat;
@@ -463,11 +476,19 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             }
         }
 
+        // Paint registered rasters (skip during drag for better performance)
+        if (!isDragging) {
+            for (MapPainter painter : rasterPainters) {
+                //log.info("Painting raster with {}", painter.getClass().getSimpleName());
+                painter.paint(g2d, this);
+            }
+        }
+
         // Draw points with labels
         Font font = new Font("SansSerif", Font.PLAIN, 12);
         g2d.setFont(font);
         for (int i = 0; i < points.size(); i++) {
-            ContactObject point = points.get(i);
+            MapMarker point = points.get(i);
             double[] xy = latLonToPixel(point.getLatitude(), point.getLongitude(), z);
             int screenX = (int) (xy[0] - px);
             int screenY = (int) (xy[1] - py);
@@ -621,6 +642,13 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         return latLonToPixel(lat, lon, z);
     }
 
+    public Point2D getScreenPosition(LocationType loc) {
+        double[] xy = latLonToPixel(loc.getLatitudeDegs(), loc.getLongitudeDegs(), z);
+        double screenX = xy[0] - (cx - getWidth() / 2.0);
+        double screenY = xy[1] - (cy - getHeight() / 2.0);
+        return new Point2D.Double(screenX, screenY);
+    }
+
     public double[] pixelToLatLon(double x, double y) {
         return pixelToLatLon(x, y, z);
     }
@@ -691,6 +719,12 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         downloadQueue.clear();
         // Clear points
         points.clear();        
+    }
+
+    public Rectangle2D getVisibleCoordinates() {
+        double[] bounds = getVisibleBounds();
+        return new Rectangle2D.Double(bounds[1], bounds[0],
+                bounds[3] - bounds[1], bounds[2] - bounds[0]);
     }
 
     public static void main(String[] args) {

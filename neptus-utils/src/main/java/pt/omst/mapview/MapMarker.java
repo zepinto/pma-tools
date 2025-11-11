@@ -3,15 +3,15 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.rasterlib.contacts;
+package pt.omst.mapview;
 
-public interface ContactObject {
+public interface MapMarker {
     double getLatitude();
     double getLongitude();
     String getLabel();
 
     // Class to hold point data (coordinates + label)
-    class Impl implements ContactObject {
+    class Impl implements MapMarker {
         double lat;
         double lon;
         String label;

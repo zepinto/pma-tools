@@ -260,6 +260,7 @@ public class GuiUtils {
      * @return The created frame
      */
     public static JFrame testFrame(Component component, String title, int width, int height) {
+        
         JFrame frame = new JFrame(title);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(width, height);
@@ -287,5 +288,9 @@ public class GuiUtils {
         df.setGroupingUsed(false);
         df.setMaximumFractionDigits(15);
         return df;
+    }
+
+    public static void testFrame(Component component, String title) {
+        testFrame(component, title, 800, 600);
     }
 }

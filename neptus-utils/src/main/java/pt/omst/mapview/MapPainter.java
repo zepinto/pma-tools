@@ -1,4 +1,4 @@
-package pt.omst.rasterlib.mapview;
+package pt.omst.mapview;
 
 import java.awt.Graphics2D;
 import java.awt.geom.Rectangle2D;

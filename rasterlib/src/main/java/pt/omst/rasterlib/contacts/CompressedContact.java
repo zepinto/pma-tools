@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import pt.omst.mapview.MapMarker;
 import pt.omst.neptus.core.LocationType;
 import pt.omst.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
@@ -28,7 +29,7 @@ import pt.omst.rasterlib.Observation;
  */
 @Getter
 @Slf4j
-public class CompressedContact implements ContactObject {
+public class CompressedContact implements MapMarker {
 
     /**
      * The contact object.

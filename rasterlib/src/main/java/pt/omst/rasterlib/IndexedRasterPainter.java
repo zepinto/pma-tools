@@ -1,4 +1,4 @@
-package pt.omst.rasterlib.mapview;
+package pt.omst.rasterlib;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -10,6 +10,10 @@ import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -20,9 +24,7 @@ import pt.omst.mapview.MapPainter;
 import pt.omst.mapview.MultiPointGeometry;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.core.LocationType;
-import pt.omst.rasterlib.IndexedRaster;
-import pt.omst.rasterlib.IndexedRasterUtils;
-import pt.omst.rasterlib.SampleDescription;
+import pt.omst.neptus.util.GuiUtils;
 
 @Slf4j
 public class IndexedRasterPainter implements MapPainter {
@@ -38,7 +40,7 @@ public class IndexedRasterPainter implements MapPainter {
     private final Rectangle2D.Double bounds;
     private Future<?> mosaicTask = null;
 
-    public IndexedRasterPainter(File parentFolder, IndexedRaster raster)  throws IOException{
+    public IndexedRasterPainter(File parentFolder, IndexedRaster raster) throws IOException {
         this.raster = raster;
         this.parentFolder = parentFolder;
         //readPath();
@@ -57,7 +59,7 @@ public class IndexedRasterPainter implements MapPainter {
             LocationType loc = new LocationType(sample.getPose().getLatitude(), sample.getPose().getLongitude());
             path.addPoint(loc);
         }
-        path.setShape(false);
+        path.setShape(false);        
     }
 
     public void readImage() {
@@ -149,7 +151,7 @@ public class IndexedRasterPainter implements MapPainter {
             shape.addPoint(loc);
         }
         shape.addPoint(new LocationType(ptShape[0].x, ptShape[0].y));
-        shape.setShape(true);        
+        shape.setShape(true);
         shape.setOpaque(true);
     }
 
@@ -159,17 +161,19 @@ public class IndexedRasterPainter implements MapPainter {
             Point2D.Double[] pos = IndexedRasterUtils.getLinePosition(raster, i);
             double[] startPos = renderer.latLonToPixel(pos[0].x, pos[0].y);
             double[] endPos = renderer.latLonToPixel(pos[1].x, pos[1].y);
-            g.drawLine((int) startPos[0], (int) startPos[1], (int) endPos[0], (int) endPos[1]);
+            Point2D start = new Point2D.Double(startPos[0], startPos[1]);
+            Point2D end = new Point2D.Double(endPos[0], endPos[1]);
+            g.drawLine((int) start.getX(), (int) start.getY(), (int) end.getX(), (int) end.getY());
         }
         g.setTransform(before);
     }
 
     private void paintMosaic(Graphics2D g, SlippyMap renderer) {
+        log.info("Painting mosaic at resolution {}", mosaicResolution.get());
         AffineTransform before = g.getTransform();
         if (mosaicImage != null) {
-            double[] nw = renderer.latLonToPixel(mosaicNWcorner.getLatitudeDegs(), mosaicNWcorner.getLongitudeDegs());
-            Point2D.Double corner = new Point2D.Double(nw[0], nw[1]);
-
+            double[] cornerPos = renderer.latLonToPixel(mosaicNWcorner.getLatitudeDegs(), mosaicNWcorner.getLongitudeDegs());
+            Point2D corner = new Point2D.Double(cornerPos[0], cornerPos[1]);
             g.translate(corner.getX(), corner.getY());
             g.scale(renderer.getZoom() / mosaicResolution.get(), renderer.getZoom() / mosaicResolution.get());
             g.drawImage(mosaicImage, 0, 0, null);
@@ -186,41 +190,85 @@ public class IndexedRasterPainter implements MapPainter {
 
     @Override
     public void paint(Graphics2D g, SlippyMap renderer) {
-        double[] rendererBounds = renderer.getVisibleBounds();
-        Rectangle2D.Double rBounds = new Rectangle2D.Double(
-                rendererBounds[0], rendererBounds[1],
-                rendererBounds[2] - rendererBounds[0],
-                rendererBounds[3] - rendererBounds[1]);
-        if (!rBounds.intersects(bounds)) {
-            cancelMosaicTask();
-            image = mosaicImage = null;
-            mosaicResolution.set(0);
-            return;
-        }
+        boolean visible = renderer.getVisibleCoordinates().intersects(bounds);
+        log.info("This is IndexedRasterPainter (bounds: "+bounds+") is visible: {}", visible);
+        simplePaint(g, renderer);
+        // if (!renderer.getVisibleCoordinates().intersects(bounds)) {
+        //     cancelMosaicTask();
+        //     image = mosaicImage = null;
+        //     mosaicResolution.set(0);
+        //     return;
+        // }
 
-        if (renderer.getZoom() < 2) {
-            cancelMosaicTask();
-            image = mosaicImage = null;
-            mosaicResolution.set(0);
-            simplePaint(g, renderer);
-            return;
-        }
+        // if (renderer.getZoom() < 2) {
+        //     cancelMosaicTask();
+        //     image = mosaicImage = null;
+        //     mosaicResolution.set(0);
+        //     simplePaint(g, renderer);
+        //     return;
+        // }
 
-        int resolution = Math.min(20, (int)renderer.getZoom());
-        if (mosaicResolution.get() != resolution) {
-            cancelMosaicTask();
-            mosaicTask = IndexedRasterUtils.background(() -> createMosaic(resolution));
-            simplePaint(g, renderer);
-        }
-        else {
-            paintMosaic(g, renderer);
-        }
+        // int resolution = Math.min(20, (int)renderer.getZoom());
+        // if (mosaicResolution.get() != resolution) {
+        //     cancelMosaicTask();
+        //     mosaicTask = IndexedRasterUtils.background(() -> createMosaic(resolution));
+        //     simplePaint(g, renderer);
+        // }
+        // else {
+        //     paintMosaic(g, renderer);
+        // }
     }
 
 
     public void simplePaint(Graphics2D g, SlippyMap renderer) {
+        
+
         AffineTransform before = g.getTransform();
         shape.paint(g, renderer);
         g.setTransform(before);
+    }
+
+
+
+    public static void main(String[] args) {
+        SlippyMap renderer = new SlippyMap(new ArrayList<>());
+        GuiUtils.testFrame(renderer, "Indexed Raster Painter");
+
+        File folder = new File("/LOGS/REP/");
+        LocationType center = null;
+        
+        // Use an executor for parallel processing of raster files
+        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
+        
+        for (File index : IndexedRasterUtils.findRasterFiles(folder)) {
+            System.out.println("Processing: " + index);
+            File indexFile = index;
+            
+            executor.submit(() -> {
+                try {
+                    IndexedRaster raster = Converter.IndexedRasterFromJsonString(Files.readString(indexFile.toPath()));
+                    IndexedRasterPainter painter = new IndexedRasterPainter(indexFile.getParentFile(), raster);
+                    renderer.addRasterPainter(painter);
+                    //renderer.repaint();
+                } catch (IOException e) {
+                    log.error("Error loading raster: " + indexFile, e);
+                }
+            });
+            
+            // Set center from first raster
+            if (center == null) {
+                try {
+                    IndexedRaster raster = Converter.IndexedRasterFromJsonString(Files.readString(index.toPath()));
+                    center = new LocationType(
+                        raster.getSamples().get(raster.getSamples().size() / 2).getPose().getLatitude(), 
+                        raster.getSamples().get(raster.getSamples().size() / 2).getPose().getLongitude());
+                    renderer.focus(center);
+                } catch (IOException e) {
+                    log.error("Error reading center from first raster", e);
+                }
+            }
+        }
+        
+        executor.shutdown();
     }
 }

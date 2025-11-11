@@ -3,7 +3,7 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.rasterlib.mapview;
+package pt.omst.mapview;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -239,13 +239,13 @@ public class MultiPointGeometry implements MapPainter {
         allPoints.addAll(getLocations());
         
         for (LocationType loc : allPoints) {
-            Point2D screenPoint = getScreenPosition(map, loc.getLatitudeDegs(), loc.getLongitudeDegs());
+            double[] coords = map.latLonToPixel(loc.getLatitudeDegs(), loc.getLongitudeDegs());
             
             if (first) {
-                screenPath.moveTo(screenPoint.getX(), screenPoint.getY());
+                screenPath.moveTo(coords[0], coords[1]);
                 first = false;
             } else {
-                screenPath.lineTo(screenPoint.getX(), screenPoint.getY());
+                screenPath.lineTo(coords[0], coords[1]);
             }
         }
         
@@ -256,48 +256,7 @@ public class MultiPointGeometry implements MapPainter {
         return screenPath;
     }
     
-    /**
-     * Converts lat/lon to screen coordinates.
-     * Based on SlippyMap's internal coordinate system.
-     * 
-     * @param map The map
-     * @param lat Latitude in degrees
-     * @param lon Longitude in degrees
-     * @return Screen position
-     */
-    private Point2D getScreenPosition(SlippyMap map, double lat, double lon) {
-        // Use reflection to access private fields and methods
-        try {
-            java.lang.reflect.Field zField = SlippyMap.class.getDeclaredField("z");
-            zField.setAccessible(true);
-            int z = (int) zField.get(map);
-            
-            java.lang.reflect.Field cxField = SlippyMap.class.getDeclaredField("cx");
-            cxField.setAccessible(true);
-            double cx = (double) cxField.get(map);
-            
-            java.lang.reflect.Field cyField = SlippyMap.class.getDeclaredField("cy");
-            cyField.setAccessible(true);
-            double cy = (double) cyField.get(map);
-            
-            java.lang.reflect.Method latLonToPixel = SlippyMap.class.getDeclaredMethod("latLonToPixel", 
-                double.class, double.class, int.class);
-            latLonToPixel.setAccessible(true);
-            double[] xy = (double[]) latLonToPixel.invoke(map, lat, lon, z);
-            
-            double px = cx - map.getWidth() / 2.0;
-            double py = cy - map.getHeight() / 2.0;
-            
-            int screenX = (int) (xy[0] - px);
-            int screenY = (int) (xy[1] - py);
-            
-            return new Point2D.Double(screenX, screenY);
-        } catch (Exception e) {
-            // Fallback to center if reflection fails
-            return new Point2D.Double(map.getWidth() / 2.0, map.getHeight() / 2.0);
-        }
-    }
-    
+   
     @Override
     public int getLayerPriority() {
         return 5;

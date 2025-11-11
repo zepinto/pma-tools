@@ -13,17 +13,17 @@ import java.util.ArrayList;
 import javax.swing.JPanel;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.omst.mapview.MapMarker;
+import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.core.LocationType;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.Pose;
-import pt.omst.rasterlib.contacts.ContactObject;
 import pt.omst.rasterlib.mapview.IndexedRasterPainter;
-import pt.omst.rasterlib.mapview.SlippyMap;
 
 @Slf4j
 public class MapViewer extends JPanel {
 
-    private final SlippyMap renderer2D = new SlippyMap(new ArrayList<ContactObject>());
+    private final SlippyMap renderer2D = new SlippyMap(new ArrayList<MapMarker>());
 
     public MapViewer(File folder, IndexedRaster raster) {
         setLayout(new BorderLayout());
