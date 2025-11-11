@@ -39,6 +39,9 @@ dependencies {
     // Stream utilities
     implementation group: 'commons-io', name: 'commons-io', version: '2.4'
     
+    // GDAL for GeoTIFF support
+    implementation 'org.gdal:gdal:3.8.0'
+    
    // Testing
     testImplementation(platform('org.junit:junit-bom:5.11.1'))
     testImplementation('org.junit.jupiter:junit-jupiter')
@@ -53,7 +56,7 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' 
 }
 
-compileJava.options.encoding = 'UTF-8'
+compileJava.options.encoding = 'UTF-8' 
 
 // Configure publishing for this library
 publishing {
