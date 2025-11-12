@@ -23,6 +23,7 @@ import pt.omst.WGS84Utilities;
 import pt.omst.neptus.core.LocationType;
 import pt.omst.neptus.core.SystemPositionAndAttitude;
 import pt.omst.neptus.sidescan.ISidescanLine;
+import pt.omst.neptus.sidescan.SidescanHistogramNormalizer;
 import pt.omst.neptus.sidescan.SidescanParser;
 import pt.omst.neptus.sidescan.SidescanParserFactory;
 import pt.omst.neptus.util.StreamUtil;
@@ -109,7 +110,8 @@ public class ContactUtils {
         return info;
     }
 
-    public static Contact convert(LogMarker marker, SidescanParser parser, File outputFolder) throws Exception {
+    public static Contact convert(LogMarker marker, SidescanParser parser, SidescanHistogramNormalizer normalizer,
+            File outputFolder) throws Exception {
         Collection<ISidescanLine> lines = parser.getLinesAtTime((long) marker.getTimestamp());
         SystemPositionAndAttitude pose = null;
         if (lines.isEmpty()) {
@@ -117,16 +119,22 @@ public class ContactUtils {
         }
         ISidescanLine line = lines.iterator().next();
         pose = line.getState();
-        return convert(marker, pose, parser, outputFolder);
+        return convert(marker, pose, parser, normalizer, outputFolder);
     }
 
     public static Collection<Contact> convertContacts(File folder) {
         if (folder == null) {
             return null;
         }
-        SidescanParser parser = SidescanParserFactory.build(folder);
+        if (folder.isFile() && folder.getName().equals("marks.dat")) {
+            folder = folder.getParentFile();
+        } else if (folder.isDirectory() && folder.getName().equals("contacts")) {
+            folder = folder.getParentFile();
+        }
         Collection<LogMarker> markers = LogMarker.load(folder);
+        SidescanParser parser = SidescanParserFactory.build(folder);
         ArrayList<Contact> contacts = new ArrayList<>();
+        SidescanHistogramNormalizer normalizer = SidescanHistogramNormalizer.create(parser, folder);
         if (markers.isEmpty()) {
             log.info("No markers found in folder " + folder.getAbsolutePath());
             return new ArrayList<>();
@@ -143,7 +151,7 @@ public class ContactUtils {
             File outDir = new File(output, filename);
             outDir.mkdirs();
             try {
-                Contact contact = convert(marker, parser, outDir);
+                Contact contact = convert(marker, parser, normalizer, outDir);
                 contacts.add(contact);
                 count++;
                 Files.write(new File(outDir, "contact.json").toPath(),
@@ -168,6 +176,7 @@ public class ContactUtils {
      * @throws Exception If an error occurs while converting the marker
      */
     public static Contact convert(LogMarker marker, SystemPositionAndAttitude pose, SidescanParser parser,
+            SidescanHistogramNormalizer normalizer,
             File outputFolder) throws Exception {
         if (marker.getParent() != null)
             return null;
@@ -184,7 +193,7 @@ public class ContactUtils {
         for (LogMarker child : thisAndChildren) {
             if (child instanceof SidescanLogMarker)
                 contact.getObservations()
-                        .addAll(getSidescanObservations((SidescanLogMarker) child, pose, parser, outputFolder));
+                        .addAll(getSidescanObservations((SidescanLogMarker) child, pose, parser, normalizer, outputFolder));
             else
                 contact.getObservations().addAll(getGenericObservations(child, pose));
         }
@@ -224,14 +233,14 @@ public class ContactUtils {
      * @return The observation for the given marker and subsystem
      */
     public static Observation getSidescanObservation(SidescanLogMarker marker, SystemPositionAndAttitude pose,
-            SidescanParser parser, int subsystem, File outputFolder) {
+            SidescanParser parser, SidescanHistogramNormalizer normalizer, int subsystem, File outputFolder) {
         SensorInfo info = new SensorInfo();
         File rasterFile = new File(outputFolder, "marker_" + (long) marker.getTimestamp() + "_" + subsystem + ".json");
         IndexedRasterCreator creator = new IndexedRasterCreator(
                 rasterFile,
                 info);
         int margin = 50;
-        creator.export(marker, parser, subsystem, margin);
+        creator.export(marker, parser, normalizer, subsystem, margin);
         BufferedImage exported = creator.getImage();
 
         double boxX = margin, boxY = margin, boxWidth = exported.getWidth() - margin * 2,
@@ -313,11 +322,12 @@ public class ContactUtils {
      * @throws Exception If an error occurs while getting the observations
      */
     public static ArrayList<Observation> getSidescanObservations(SidescanLogMarker marker,
-            SystemPositionAndAttitude pose, SidescanParser parser, File outputFolder) throws Exception {
+            SystemPositionAndAttitude pose, SidescanParser parser, SidescanHistogramNormalizer normalizer,
+            File outputFolder) throws Exception {
         ArrayList<Observation> observations = new ArrayList<>();
         ArrayList<Integer> subsystems = parser.getSubsystemList();
         for (int subsystem : subsystems) {
-            observations.add(getSidescanObservation(marker, pose, parser, subsystem, outputFolder));
+            observations.add(getSidescanObservation(marker, pose, parser, normalizer, subsystem, outputFolder));
         }
 
         return observations;
@@ -346,7 +356,8 @@ public class ContactUtils {
     }
 
     public static void main(String[] args) {
-        File folder = new File("/LOGS/153320_03-fat-sidescan-depth/");
+        // marine sonics
+        File folder = new File("/home/zp/Desktop/data-samples/153320_03-fat-sidescan-depth/");
         Collection<Contact> contacts = convertContacts(folder);
         log.info("Converted " + contacts.size() + " contacts.");
     }
