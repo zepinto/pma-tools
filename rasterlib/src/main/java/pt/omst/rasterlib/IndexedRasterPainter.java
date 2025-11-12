@@ -3,7 +3,6 @@ package pt.omst.rasterlib;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
-import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
@@ -122,8 +121,8 @@ public class IndexedRasterPainter implements MapPainter {
         double imgHeight = nw.getDistanceInMeters(sw) * resolution;
         BufferedImage tmp = new BufferedImage((int)imgWidth, (int)imgHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = tmp.createGraphics();
-        g.setRenderingHints(new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON));
-        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        //g.setRenderingHints(new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON));
+        //g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         AffineTransform before = g.getTransform();
         int step = 1;
         for (int i = 0; i < raster.getSamples().size(); i+=step) {
@@ -186,7 +185,7 @@ public class IndexedRasterPainter implements MapPainter {
 
     @Override
     public void paint(Graphics2D g, SlippyMap renderer) {
-        g.setRenderingHints(new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF));
+        //g.setRenderingHints(new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF));
         g.setRenderingHints(new RenderingHints(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED));
         boolean visible = renderer.getVisibleCoordinates().intersects(bounds);
         if (!visible) {

@@ -182,12 +182,25 @@ public class MultiPointGeometry implements MapPainter {
         Point2D pt = new Point2D.Double(offsetsNED[1], -offsetsNED[0]);
         return path.contains(pt);
     }
+
+    public void simplePaint(Graphics2D g, SlippyMap map) {
+        if (offsets.isEmpty()) {
+            return;
+        }
+        
+        Color c = color;
+        g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), 175));
+        centerLocation.convertToAbsoluteLatLonDepth();
+        Point2D center = map.getScreenPosition(centerLocation);
+        if (map.getVisibleCoordinates().contains(center)) {
+            g.fillRect((int)center.getX()-3, (int)center.getY()-3, 6, 6 );
+        }
+    }
     
     @Override
     public void paint(Graphics2D g, SlippyMap map) {
-        if (offsets.isEmpty()) {
-            log.info("No points to paint in MultiPointGeometry");
-            return;
+        if (offsets.isEmpty() || map.getLevelOfDetail() < 10) {
+            simplePaint(g, map);
         }
         
         if (opaque) {
