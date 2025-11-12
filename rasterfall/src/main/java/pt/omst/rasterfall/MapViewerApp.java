@@ -52,8 +52,8 @@ public class MapViewerApp extends JFrame {
     private SlippyMap map;
     private DataSourceManagerPanel dataSourcePanel;
     private ZoomableTimeIntervalSelector timeSelector;
-    private List<MapPainter> allPainters = new ArrayList<>();
-    private List<ContactCollection> allContacts = new ArrayList<>();
+    private List<TimeFilteredRasterPainter> allRasterPainters = new ArrayList<>();
+    private List<TimeFilteredContactPainter> allContactPainters = new ArrayList<>();
     private Instant minTime = Instant.now().minus(Duration.ofDays(365));
     private Instant maxTime = Instant.now();
 
@@ -166,14 +166,17 @@ public class MapViewerApp extends JFrame {
             updateTimeBounds();
 
             // Add all painters to map
-            for (MapPainter painter : allPainters) {
+            for (TimeFilteredRasterPainter painter : allRasterPainters) {
                 map.addRasterPainter(painter);
             }
             
-            // Add all contact collections to map
-            for (ContactCollection collection : allContacts) {
-                map.addRasterPainter(collection);
+            // Add all contact painters to map
+            for (TimeFilteredContactPainter painter : allContactPainters) {
+                map.addRasterPainter(painter);
             }
+            
+            // Update display with current time selection
+            updateDisplayedData(timeSelector.getSelectedStartTime(), timeSelector.getSelectedEndTime());
         }
     }
 
@@ -188,7 +191,10 @@ public class MapViewerApp extends JFrame {
 
                 // Create painter for this raster
                 IndexedRasterPainter painter = new IndexedRasterPainter(jsonFile.getParentFile(), raster);
-                allPainters.add(painter);
+                
+                // Wrap in time-filtered painter
+                TimeFilteredRasterPainter filteredPainter = new TimeFilteredRasterPainter(painter);
+                allRasterPainters.add(filteredPainter);
 
                 log.info("Loaded raster: {}", jsonFile.getName());
             } catch (Exception e) {
@@ -201,7 +207,9 @@ public class MapViewerApp extends JFrame {
         try {
             ContactCollection collection = new ContactCollection(folder);
             if (collection.getAllContacts().size() > 0) {
-                allContacts.add(collection);
+                // Wrap in time-filtered painter
+                TimeFilteredContactPainter filteredPainter = new TimeFilteredContactPainter(collection);
+                allContactPainters.add(filteredPainter);
                 log.info("Loaded {} contacts from {}", collection.getAllContacts().size(), folder.getAbsolutePath());
             }
         } catch (Exception e) {
@@ -237,25 +245,24 @@ public class MapViewerApp extends JFrame {
         Instant max = Instant.EPOCH;
 
         // Check raster times
-        for (MapPainter painter : allPainters) {
-            if (painter instanceof IndexedRasterPainter) {
-                IndexedRasterPainter rasterPainter = (IndexedRasterPainter) painter;
-                try {
-                    long startTime = rasterPainter.getStartTimestamp();
-                    long endTime = rasterPainter.getEndTimestamp();
-                    Instant start = Instant.ofEpochMilli(startTime);
-                    Instant end = Instant.ofEpochMilli(endTime);
+        for (TimeFilteredRasterPainter filteredPainter : allRasterPainters) {
+            IndexedRasterPainter painter = filteredPainter.getDelegate();
+            try {
+                long startTime = painter.getStartTimestamp();
+                long endTime = painter.getEndTimestamp();
+                Instant start = Instant.ofEpochMilli(startTime);
+                Instant end = Instant.ofEpochMilli(endTime);
 
-                    if (start.isBefore(min)) min = start;
-                    if (end.isAfter(max)) max = end;
-                } catch (Exception e) {
-                    // Ignore if painter doesn't have timestamp methods
-                }
+                if (start.isBefore(min)) min = start;
+                if (end.isAfter(max)) max = end;
+            } catch (Exception e) {
+                // Ignore if painter doesn't have timestamp methods
             }
         }
 
         // Check contact times
-        for (ContactCollection collection : allContacts) {
+        for (TimeFilteredContactPainter filteredPainter : allContactPainters) {
+            ContactCollection collection = filteredPainter.getDelegate();
             List<CompressedContact> contacts = collection.getAllContacts();
             for (CompressedContact contact : contacts) {
                 Instant contactTime = Instant.ofEpochMilli(contact.getTimestamp());
@@ -277,26 +284,35 @@ public class MapViewerApp extends JFrame {
     }
 
     private void updateDisplayedData(Instant startTime, Instant endTime) {
-        // Remove old painters - we'll need to recreate the map or clear painters
-        // Since SlippyMap doesn't have a clear method, we need to work around it
-        // For now, we'll just add all painters and let them paint
-        // TODO: Add clearRasterPainters method to SlippyMap
+        // Update time filters on all painters
+        int visibleRasters = 0;
+        int visibleContacts = 0;
         
-        // For the initial implementation, we'll add painters only once
-        // and rely on them to handle visibility internally
-        // This is not ideal but works for the MVP
+        for (TimeFilteredRasterPainter painter : allRasterPainters) {
+            painter.setTimeFilter(startTime, endTime);
+            if (painter.isVisible()) {
+                visibleRasters++;
+            }
+        }
         
+        for (TimeFilteredContactPainter painter : allContactPainters) {
+            painter.setTimeFilter(startTime, endTime);
+            visibleContacts += painter.getVisibleContactCount();
+        }
+        
+        // Repaint the map to show updated visibility
         map.repaint();
-        log.info("Updated display with {} painters for time range {} to {}",
-                allPainters.size(), startTime, endTime);
+        
+        log.info("Updated display: {} visible rasters, {} visible contacts for time range {} to {}",
+                visibleRasters, visibleContacts, startTime, endTime);
     }
 
     private void reloadAllData() {
         // Clear all loaded data
-        allPainters.clear();
-        allContacts.clear();
+        allRasterPainters.clear();
+        allContactPainters.clear();
         // Note: We can't easily clear painters from map without a clearRasterPainters method
-        // For now, just clearing the lists is sufficient for the MVP
+        // For now, just clearing the lists is sufficient
 
         // Reload from all current data sources
         for (DataSource source : dataSourcePanel.getDataSources()) {

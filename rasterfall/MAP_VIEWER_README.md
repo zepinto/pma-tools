@@ -70,10 +70,20 @@ MapViewerApp
 
 ### Time-based Filtering
 
-Currently implemented as a simplified MVP approach:
-- All painters are added to the map when data sources are loaded
-- Time selector updates do trigger a repaint
-- Future enhancement: Implement visibility filtering based on time range
+The application now features **fully interactive time-based filtering**:
+
+- **Real-time Updates**: When you adjust the time selector handles, the displayed rasters and contacts update immediately
+- **Visibility Control**: Only rasters and contacts within the selected time range are painted on the map
+- **Performance Optimized**: Uses wrapper classes (TimeFilteredRasterPainter, TimeFilteredContactPainter) that check visibility before painting
+- **Visual Feedback**: Console logs show count of visible rasters and contacts for the current time range
+
+#### How It Works:
+1. User drags time selector handles
+2. `updateDisplayedData()` is called with new time range
+3. Each `TimeFilteredRasterPainter` checks if its raster overlaps the time range
+4. Each `TimeFilteredContactPainter` filters contacts within the time range
+5. Map repaints, showing only visible data
+6. Status logged: "Updated display: X visible rasters, Y visible contacts"
 
 ## Usage
 
@@ -116,7 +126,9 @@ java -jar rasterfall/build/libs/rasterfall-2025.11.00-all.jar
 ### Source Files
 ```
 rasterfall/src/main/java/pt/omst/rasterfall/
-└── MapViewerApp.java          # Main application class
+├── MapViewerApp.java                    # Main application class
+├── TimeFilteredRasterPainter.java       # Time-based raster visibility wrapper
+└── TimeFilteredContactPainter.java      # Time-based contact visibility wrapper
 ```
 
 ### Dependencies
@@ -160,22 +172,29 @@ rasterfall/src/main/java/pt/omst/rasterfall/
 
 ### Design Decisions
 
-1. **MVP Time Filtering**: Current implementation adds all painters to map and relies on repaint for updates. Full time-based visibility filtering can be added in future iterations.
+1. **Time-Filtered Wrappers**: Created `TimeFilteredRasterPainter` and `TimeFilteredContactPainter` wrapper classes that:
+   - Check visibility before painting
+   - Can be updated with new time ranges without recreating the painters
+   - Maintain reference to delegate painters/collections
+   - Provide visibility status methods
 
-2. **Painter Management**: Uses SlippyMap's CopyOnWriteArrayList for thread-safe painter management. No clear method exists, so painters persist once added.
+2. **Efficient Filtering**: Time filtering happens at paint time, avoiding the need to add/remove painters from the map dynamically.
 
-3. **License Integration**: Follows existing pattern from RasterFallApp with RASTERFALL license check.
+3. **Contact Rendering**: Implements simple circle markers for contacts since `CompressedContact` doesn't have a built-in paint method.
 
-4. **Layout**: BorderLayout with map in center and controls at bottom for maximum map visibility.
+4. **License Integration**: Follows existing pattern from RasterFallApp with RASTERFALL license check.
+
+5. **Layout**: BorderLayout with map in center and controls at bottom for maximum map visibility.
 
 ### Future Enhancements
 
-1. **Dynamic Time Filtering**: Add `setTimeRange()` method to painters and implement visibility toggling
-2. **Clear Painters**: Add `clearRasterPainters()` method to SlippyMap
+1. ~~**Dynamic Time Filtering**~~: ✅ **IMPLEMENTED** - Rasters and contacts now filter based on time selection
+2. **Enhanced Contact Rendering**: Add more detailed contact visualizations (labels, icons, details)
 3. **Database Sources**: Extend to support database data sources (already in DataSourceManagerPanel)
 4. **Export**: Add export functionality for selected data ranges
-5. **Layer Control**: Add layer visibility toggles for rasters and contacts
+5. **Layer Control**: Add layer visibility toggles for individual rasters and contacts
 6. **Search**: Add search functionality for contacts and locations
+7. **Statistics Panel**: Show counts of visible vs total data in UI
 
 ## Technical Details
 
@@ -188,6 +207,24 @@ public long getEndTimestamp()    // Returns last sample timestamp
 ```
 
 These methods enable time-based queries on raster data.
+
+#### Time Filtering Wrappers
+
+**TimeFilteredRasterPainter**
+```java
+public TimeFilteredRasterPainter(IndexedRasterPainter delegate)
+public void setTimeFilter(Instant startTime, Instant endTime)
+public boolean isVisible()  // Returns true if raster overlaps time range
+public void paint(Graphics2D g, SlippyMap renderer)  // Only paints if visible
+```
+
+**TimeFilteredContactPainter**
+```java
+public TimeFilteredContactPainter(ContactCollection delegate)
+public void setTimeFilter(Instant startTime, Instant endTime)
+public int getVisibleContactCount()  // Returns number of visible contacts
+public void paint(Graphics2D g, SlippyMap renderer)  // Paints visible contacts as circles
+```
 
 ### Thread Safety
 - SlippyMap uses `CopyOnWriteArrayList` for painters
