@@ -196,6 +196,7 @@ public class ContactCollection implements MapPainter {
             new LocationType(bounds[2], bounds[0]),
             new LocationType(bounds[3], bounds[1])
         );
+        // TODO: implement contact painting
         MapPainter.super.paint(g, map);
     }
 

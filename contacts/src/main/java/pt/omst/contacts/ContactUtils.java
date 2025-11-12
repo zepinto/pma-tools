@@ -9,6 +9,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -82,7 +83,7 @@ public class ContactUtils {
 
                 info.setStartTimeStamp(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli());
                 info.setEndTimeStamp(raster.getSamples().getLast().getTimestamp().toInstant().toEpochMilli());
-                
+
                 if (boxAnnotation != null) {
                     double newMinRange = info.getMinRange()
                             + boxAnnotation.getNormalizedX() * (info.getMaxRange() - info.getMinRange());
@@ -109,7 +110,7 @@ public class ContactUtils {
     }
 
     public static Contact convert(LogMarker marker, SidescanParser parser, File outputFolder) throws Exception {
-        Collection<ISidescanLine> lines = parser.getLinesAtTime((long)marker.getTimestamp());
+        Collection<ISidescanLine> lines = parser.getLinesAtTime((long) marker.getTimestamp());
         SystemPositionAndAttitude pose = null;
         if (lines.isEmpty()) {
             log.warn("No sidescan lines found for marker at time " + marker.getTimestamp());
@@ -123,19 +124,34 @@ public class ContactUtils {
         if (folder == null) {
             return null;
         }
-        File outputFolder = new File(folder, "contacts");
         SidescanParser parser = SidescanParserFactory.build(folder);
         Collection<LogMarker> markers = LogMarker.load(folder);
-        Collection<Contact> contacts = new ArrayList<>();
+        ArrayList<Contact> contacts = new ArrayList<>();
+        if (markers.isEmpty()) {
+            log.info("No markers found in folder " + folder.getAbsolutePath());
+            return new ArrayList<>();
+        }
+
+        int count = 0;
+        File output = new File(folder, "contacts");
+        output.mkdirs();
         for (LogMarker marker : markers) {
+            String label = marker.getLabel();
+            if (label == null || label.isEmpty())
+                label = "contact_" + count;
+            String filename = sanitize(label);
+            File outDir = new File(output, filename);
+            outDir.mkdirs();
             try {
-                Contact contact = convert(marker, parser, outputFolder);
-                if (contact != null) {
-                    contacts.add(contact);
-                }
+                Contact contact = convert(marker, parser, outDir);
+                contacts.add(contact);
+                count++;
+                Files.write(new File(outDir, "contact.json").toPath(),
+                        Converter.ContactToJsonString(contact).getBytes());
             } catch (Exception e) {
-                log.error("Error converting marker " + marker.getLabel(), e);
+                log.error("Error converting marker " + label + ": " + e.getMessage());
             }
+            zipFolderAndDelete(outDir);
         }
         return contacts;
     }
@@ -215,7 +231,7 @@ public class ContactUtils {
                 rasterFile,
                 info);
         int margin = 50;
-        creator.export(marker, parser, subsystem, margin);        
+        creator.export(marker, parser, subsystem, margin);
         BufferedImage exported = creator.getImage();
 
         double boxX = margin, boxY = margin, boxWidth = exported.getWidth() - margin * 2,
