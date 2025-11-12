@@ -40,6 +40,48 @@ public class BronzeColorMap implements ColorMap {
         return cache.get(i);
     }
 
+    public double getValue(Color color) {
+        // Reverse the formula: blue = 255 * value^3
+        // Therefore: value = (blue / 255)^(1/3)
+        double blueNormalized = color.getBlue() / 255.0;
+        double estimatedValue = Math.cbrt(blueNormalized);
+        
+        // Clamp to valid range
+        if (estimatedValue < 0) estimatedValue = 0;
+        if (estimatedValue > 1) estimatedValue = 1;
+        
+        // Find the closest cache index
+        int estimatedIndex = (int) Math.round(estimatedValue * cacheSize);
+        if (estimatedIndex >= cacheSize) estimatedIndex = cacheSize - 1;
+        if (estimatedIndex < 0) estimatedIndex = 0;
+        
+        // Refine by checking a few neighbors for best RGB match
+        int closestIndex = estimatedIndex;
+        double minDistance = Double.MAX_VALUE;
+        int searchRadius = 5; // Small radius since estimation is accurate
+        
+        int searchStart = Math.max(0, estimatedIndex - searchRadius);
+        int searchEnd = Math.min(cacheSize - 1, estimatedIndex + searchRadius);
+        
+        for (int i = searchStart; i <= searchEnd; i++) {
+            Color cached = cache.get(i);
+            int dr = cached.getRed() - color.getRed();
+            int dg = cached.getGreen() - color.getGreen();
+            int db = cached.getBlue() - color.getBlue();
+            double distance = dr * dr + dg * dg + db * db;
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestIndex = i;
+                
+                // Early exit if exact match
+                if (distance == 0) break;
+            }
+        }
+        
+        return closestIndex / (double) cacheSize;
+    }
+
     @Override
     public String toString() {
         return "Bronze";
