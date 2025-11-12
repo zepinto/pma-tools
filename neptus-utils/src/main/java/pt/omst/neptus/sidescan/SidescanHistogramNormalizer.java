@@ -135,15 +135,29 @@ public class SidescanHistogramNormalizer implements Serializable {
         for (int subId : ssParser.getSubsystemList()) {
             LOG.info("Calculating histogram for subsystem "+subId);
             try {
-                SidescanLine pivot = ssParser.getLinesBetween(ssParser.lastPingTimestamp(subId)-1000, ssParser.lastPingTimestamp(subId), subId, ssParser.getDefaultParams()).get(0);
+                long firstTimestamp = ssParser.firstPingTimestamp(subId);
+                long lastTimestamp = ssParser.lastPingTimestamp(subId);
+                int logSeconds = (int) ((lastTimestamp - firstTimestamp) / 1000);
+                
+                // Skip if there's not enough data
+                if (logSeconds <= 0) {
+                    LOG.warn("Insufficient data for subsystem " + subId + ", skipping histogram calculation");
+                    continue;
+                }
+                
+                SidescanLine pivot = ssParser.getLinesBetween(lastTimestamp - 1000, lastTimestamp, subId, ssParser.getDefaultParams()).get(0);
                 float[] avg = new float[pivot.getData().length];
                 int count = 0;
-                int logSeconds = (int) ((ssParser.lastPingTimestamp(subId) - ssParser.firstPingTimestamp(subId)) / 1000);
+                
                 while (count < LINES_TO_COMPUTE_HISTOGRAM) {
-                    long randomPosition = ssParser.firstPingTimestamp(subId) + random.nextInt(logSeconds) * 1000;
+                    long randomPosition = firstTimestamp + random.nextInt(logSeconds) * 1000;
                     ArrayList<SidescanLine> lines = ssParser.getLinesBetween(randomPosition, randomPosition + 1000, subId, ssParser.getDefaultParams());
                     for (int l = 0; l < lines.size(); l++) {
                         double data[] = lines.get(l).getData();
+                        // Only process data if it matches the expected length
+                        if (data.length != avg.length) {
+                            continue;
+                        }
                         for (int i = 0; i < data.length; i++)
                             avg[i] = (float) ((avg[i] * count) + data[i]) / (count+1);
                         count++;

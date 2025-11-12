@@ -350,10 +350,16 @@ public class JsfParser {
         assert index != null;
         LinkedHashMap<Long, ArrayList<Long>> positionMap = (subsystem == SUBSYS_LOW ? index.positionMapLow : index.positionMapHigh);
 
+        // Check if tslist has data for this subsystem
+        Long[] timestamps = tslist.get(subsystem);
+        if (timestamps == null || timestamps.length == 0) {
+            return ping;
+        }
+
         long ts = 0;
         int c = 0;
 
-        for (Long time : tslist.get(subsystem)) {
+        for (Long time : timestamps) {
             if (time >= timestamp) {
                 ts = time;
                 break;
@@ -364,7 +370,11 @@ public class JsfParser {
             return ping;
         }
 
-        nextTimestamp.put(subsystem, tslist.get(subsystem)[c + 1]);
+        // Check bounds before accessing array
+        if (c + 1 < timestamps.length) {
+            nextTimestamp.put(subsystem, timestamps[c + 1]);
+        }
+        
         ArrayList<Long> positions = positionMap.get(ts);
         if (positions == null)
             return ping;

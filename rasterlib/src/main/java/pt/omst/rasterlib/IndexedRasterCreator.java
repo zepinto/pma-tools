@@ -269,17 +269,38 @@ public class IndexedRasterCreator {
     static final int MaxHeight = 500;
 
     public static void exportRasters(File folder, int subsystem, Consumer<String> progress) {
-        SidescanParser ssparser = SidescanParserFactory.build(folder);
-        SidescanParameters params = ssparser.getDefaultParams();
-        progress.accept("Starting raster export for folder " + folder.getAbsolutePath());
-        SidescanHistogramNormalizer normalizer = SidescanHistogramNormalizer.create(ssparser, folder);
+        SidescanParser ssparser = null;
+        ExecutorService executor = null;
+        
+        try {
+            ssparser = SidescanParserFactory.build(folder);
+           
+            if (ssparser.getSubsystemList().isEmpty()) {
+                log.error("No subsystems found in sidescan folder {}", folder.getAbsolutePath());
+                return;
+            }
+            
+
+            SidescanParameters params = ssparser.getDefaultParams();
+            final int sub = subsystem > 0 ? subsystem : ssparser.getSubsystemList().getLast();
+            System.out.println("Using subsystem: " + sub);
+            
+            if (progress == null)
+                progress = (s) -> {
+                };
+            progress.accept("Starting raster export for folder " + folder.getAbsolutePath());
+            SidescanHistogramNormalizer normalizer = SidescanHistogramNormalizer.create(ssparser, folder);
         
         long start = ssparser.firstPingTimestamp();
 
         ISidescanLine line = null;
 
         progress.accept("Reading first lines to get sensor info...");
-        var lines = ssparser.getLinesBetween(start, start + 1000, subsystem, params);
+        var lines = ssparser.getLinesBetween(start, start + 1000, sub, params);
+        if (lines.isEmpty()) {
+            log.error("No sidescan lines found in folder {} for subsystem {}", folder.getAbsolutePath(), sub);
+            return;
+        }
         line = lines.getFirst();
 
         SensorInfo sensorInfo = new SensorInfo();
@@ -295,7 +316,7 @@ public class IndexedRasterCreator {
 
         LinkedList<SidescanLine> lineQueue = new LinkedList<>();
 
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        executor = Executors.newVirtualThreadPerTaskExecutor();
 
         progress.accept("Processing lines...");
         File outputDir = new File(folder, "rasterIndex");
@@ -307,7 +328,7 @@ public class IndexedRasterCreator {
             log.error("Could not create output directory {}", outputDir.getAbsolutePath());
         }
         for (long time = ssparser.firstPingTimestamp(); time <= lastTime; time += 1000) {
-            lines = ssparser.getLinesBetween(time, time + 1000, subsystem, params);
+            lines = ssparser.getLinesBetween(time, time + 1000, sub, params);
             if (lines.isEmpty())
                 continue;
             lineQueue.addAll(lines);
@@ -320,9 +341,9 @@ public class IndexedRasterCreator {
                 executor.submit(() -> {
                     long startTime = System.currentTimeMillis();
                     IndexedRasterCreator creator = new IndexedRasterCreator(
-                            new File(outputDir, "sss_" + subsystem + "_" + timestamp + ".json"), sensorInfo);
+                            new File(outputDir, "sss_" + sub + "_" + timestamp + ".json"), sensorInfo);
                     for (SidescanLine l : firstLines)
-                        normalizer.normalize(l, subsystem);                    
+                        normalizer.normalize(l, sub);                    
                     creator.export(firstLines);
                     log.debug("Processed " + firstLines.size() + " lines in "
                             + (System.currentTimeMillis() - startTime) + "ms");
@@ -338,11 +359,25 @@ public class IndexedRasterCreator {
             log.error("Interrupted while processing sidescan data", e);
         }
         progress.accept("Raster export completed.");
+        
+        } finally {
+            // Cleanup resources
+            if (ssparser != null) {
+                try {
+                    ssparser.cleanup();
+                } catch (Exception e) {
+                    log.warn("Error during parser cleanup: {}", e.getMessage());
+                }
+            }
+            if (executor != null && !executor.isShutdown()) {
+                executor.shutdown();
+            }
+        }
     }
 
     public static void main(String[] args) {
         File folder = new File("/home/zp/Desktop/data-samples/153320_03-fat-sidescan-depth/");
-        exportRasters(folder, 0, (s) -> {
+        exportRasters(folder, -1, (s) -> {
             System.out.println(s);
         });
     }

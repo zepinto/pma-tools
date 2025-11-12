@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -199,6 +200,37 @@ public class IndexedRasterUtils {
         return exportSidescan(folder, -1, 500, progressCallback);
     }
 
+    public static SensorInfo getSensorInfo(SidescanParser parser) {
+        SensorInfo sensorInfo = new SensorInfo();
+        SidescanParameters params = parser.getDefaultParams();
+        ISidescanLine line = null;
+        
+        // Check if parser has any subsystems
+        if (parser.getSubsystemList().isEmpty()) {
+            return null;
+        }
+        
+        int subsystem = parser.getSubsystemList().getLast();
+        var lines = parser.getLinesBetween(parser.firstPingTimestamp(), parser.firstPingTimestamp() + 1000, subsystem, params);
+        
+        // Check if any lines were retrieved
+        if (lines.isEmpty()) {
+            log.warn("No sidescan lines found, returning empty sensor info");
+            return null;
+        }
+        
+        line = lines.getFirst();
+        sensorInfo.setSystemName("rasterlib");
+        sensorInfo.setFrequency(line.getFrequency() / 1000d);
+        if (SENSOR_TYPES.containsKey(line.getFrequency()))
+            sensorInfo.setSensorModel(SENSOR_TYPES.get(line.getFrequency()));
+        else
+            sensorInfo.setSensorModel("Sidescan " + line.getFrequency() / 1000 + "kHz");
+        sensorInfo.setMinRange((double) -line.getRange());
+        sensorInfo.setMaxRange((double) line.getRange());
+        return sensorInfo;
+    }
+
     public static String exportSidescan(File folder, int sub, int maxLines, Consumer<String> progressCallback) {
         if (!new File(folder, "mra").exists()) {
             new File(folder, "mra").mkdirs();
@@ -306,6 +338,7 @@ public class IndexedRasterUtils {
         return "Exported " + folder.getAbsolutePath();
     }
 
+   
     public static List<File> findRasterFiles(File parentFolder) {
         List<File> files = new ArrayList<>();
         for (File file : parentFolder.listFiles()) {

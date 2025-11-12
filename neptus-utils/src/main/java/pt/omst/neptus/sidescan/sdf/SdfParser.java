@@ -1,40 +1,3 @@
-//***************************************************************************
-// Copyright 2025 OceanScan - Marine Systems & Technology, Lda.             *
-//***************************************************************************
-// Author: José Pinto                                                       *
-//***************************************************************************
-/*
- * Copyright (c) 2004-2014 Universidade do Porto - Faculdade de Engenharia
- * Laboratório de Sistemas e Tecnologia Subaquática (LSTS)
- * All rights reserved.
- * Rua Dr. Roberto Frias s/n, sala I203, 4200-465 Porto, Portugal
- *
- * This file is part of Neptus, Command and Control Framework.
- *
- * Commercial Licence Usage
- * Licencees holding valid commercial Neptus licences may use this file
- * in accordance with the commercial licence agreement provided with the
- * Software or, alternatively, in accordance with the terms contained in a
- * written agreement between you and Universidade do Porto. For licensing
- * terms, conditions, and further information contact lsts@fe.up.pt.
- *
- * European Union Public Licence - EUPL v.1.1 Usage
- * Alternatively, this file may be used under the terms of the EUPL,
- * Version 1.1 only (the "Licence"), appearing in the file LICENSE.md
- * included in the packaging of this file. You may not use this work
- * except in compliance with the Licence. Unless required by applicable
- * law or agreed to in writing, software distributed under the Licence is
- * distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF
- * ANY KIND, either express or implied. See the Licence for the specific
- * language governing permissions and limitations at
- * http://ec.europa.eu/idabc/eupl.html.
- *
- * For more information please see <http://lsts.fe.up.pt/neptus>.
- *
- * Author: Manuel R.
- * Oct 21, 2014
- */
-
 package pt.omst.neptus.sidescan.sdf;
 
 import java.io.File;
@@ -44,6 +7,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -61,8 +25,6 @@ import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import pt.omst.neptus.util.I18n;
 
 public class SdfParser {
     private static final Logger LOG = LoggerFactory.getLogger(SdfParser.class);
@@ -84,7 +46,7 @@ public class SdfParser {
         Arrays.sort(files);
 
         for (File file : files) {
-            System.out.println("Parsing file: " + file.getAbsolutePath());
+            //LOG.debug("Parsing file: {}", file.getAbsolutePath());
             try {
                 this.file = file;
                 fis = new FileInputStream(file);
@@ -93,20 +55,20 @@ public class SdfParser {
 
                 if (!new File(indexPath).exists()) {
                     if (progressCallback != null) {
-                        progressCallback.accept(I18n.text("Generating SDF index for ") + file.getAbsolutePath());
+                        progressCallback.accept("Generating SDF index for " + file.getAbsolutePath());
                     }
-                    LOG.info("{}{}", I18n.text("Generating SDF index for "), file.getAbsolutePath());
+                    LOG.debug("Generating SDF index for {}", file.getAbsolutePath());
                     generateIndex();
                 } else {
                     if (progressCallback != null) {
-                        progressCallback.accept(I18n.text("Loading SDF index for ") + file.getAbsolutePath());
+                        progressCallback.accept("Loading SDF index for " + file.getAbsolutePath());
                     }
-                    LOG.info("{}{}", I18n.text("Loading SDF index for "), file.getAbsolutePath());
+                    //LOG.debug("Loading SDF index for {}", file.getAbsolutePath());
                     if (!loadIndex(file)) {
                         if (progressCallback != null) {
-                            progressCallback.accept(I18n.text("Corrupted SDF index file. Trying to create a new index."));
+                            progressCallback.accept("Corrupted SDF index file. Trying to create a new index.");
                         }
-                        LOG.error(I18n.text("Corrupted SDF index file. Trying to create a new index."));
+                        LOG.error("Corrupted SDF index file. Trying to create a new index.");
                         generateIndex();
                     }
                 }
@@ -168,7 +130,7 @@ public class SdfParser {
                 } else {
                     // ignore other pageVersions
                     if (!unknownPages.contains(header.getPageVersion())) {
-                        LOG.warn(I18n.text("SDF file contains data not supported (page version #") + header.getPageVersion() + ")");
+                        LOG.warn("SDF file contains data not supported (page version # {})", header.getPageVersion());
                         unknownPages.add(header.getPageVersion());
                     }
                     curPosition += (header.getNumberBytes() + 4) - header.getHeaderSize();
@@ -252,6 +214,11 @@ public class SdfParser {
 
             index2.numberOfPackets = count;
 
+            File indexFolder = new File(file.getParent() + "/mra");;
+            if (!indexFolder.exists()) {
+                indexFolder.mkdirs();
+            }
+
             ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(indexPath));
             out.writeObject(index2);
             out.close();
@@ -264,7 +231,16 @@ public class SdfParser {
 
     private boolean loadIndex(File file) {
         try {
-            ObjectInputStream in = new ObjectInputStream(new FileInputStream(indexPath));
+            ObjectInputStream in = new ObjectInputStream(new FileInputStream(indexPath)) {
+            @Override
+            protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+                // Redirect old package to new package
+                if ("pt.lsts.neptus.mra.importers.sdf.SdfIndex".equals(desc.getName())) {
+                    return pt.omst.neptus.sidescan.sdf.SdfIndex.class;
+                }
+                return super.resolveClass(desc);
+            }
+        };
             SdfIndex indexN = (SdfIndex) in.readObject();
 
             Long[] tslisthigh = indexN.positionMapHigh.keySet().toArray(new Long[]{});

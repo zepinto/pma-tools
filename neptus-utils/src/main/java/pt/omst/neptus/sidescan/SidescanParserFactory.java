@@ -23,6 +23,34 @@ public class SidescanParserFactory {
         return build(logFolder, null);
     }
 
+    public static SidescanParser fastBuild(File logFolder) {
+        
+        File[] jsfFiles = getFilesWithExtension(logFolder, "jsf");
+        if (jsfFiles.length > 0) {
+            File[] firstFile = { jsfFiles[0] };
+            return new JsfSidescanParser(firstFile, null);
+        }
+
+        File[] sdfFiles = getFilesWithExtension(logFolder, "sdf");
+        if (sdfFiles.length > 0) {
+            File[] firstFile = { sdfFiles[0] };
+            return new SdfSidescanParser(firstFile, null);        
+        }
+
+        File[] sdsFiles = getFilesWithExtension(logFolder, "sds");
+        if (sdsFiles.length > 0) {
+            SdsParser parser = new SdsParser();
+            try {
+                parser.parse(sdsFiles[0]);
+                return parser;
+            }
+            catch (Exception e) {
+                throw new RuntimeException("Error parsing SDS file.", e);
+            }
+        }
+        return null;
+    }
+
     public static SidescanParser build(File logFolder, Consumer<String> progress) {
         if (logFolder == null) {
             return null;

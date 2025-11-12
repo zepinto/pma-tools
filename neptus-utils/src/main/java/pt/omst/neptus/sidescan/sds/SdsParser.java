@@ -577,8 +577,15 @@ public class SdsParser implements SidescanParser {
         if (startTimeMs != null && endTimeMs != null) {
             Long currTimeMs = startTimeMs;
             while (currTimeMs != null && currTimeMs < endTimeMs) {
-                ISidescanLine line = getLineAtTime(currTimeMs, subsystem, config);
-                lines.add((SidescanLine) line);
+                try {
+                    ISidescanLine line = getLineAtTime(currTimeMs, subsystem, config);
+                    if (line != null) {
+                        lines.add((SidescanLine) line);
+                    }
+                } catch (Exception e) {
+                    // Log and skip corrupted lines
+                    logger.warning("Skipping corrupted line at timestamp " + currTimeMs + ": " + e.getMessage());
+                }
                 currTimeMs = snr2Index.higherKey(currTimeMs);
             }
         }
@@ -673,8 +680,12 @@ public class SdsParser implements SidescanParser {
                 sidescanLineCache.put(cacheKey, sidescanLine);
                 return sidescanLine;
             }
+        } catch (UnknownTagException e) {
+            logger.warning("Corrupted data at timestamp " + timestamp + ": " + e.getMessage());
+            return null;
         } catch (Exception e) {
-            throw new RuntimeException("Error getting line at time " + timestamp, e);
+            logger.severe("Error getting line at time " + timestamp + ": " + e.getMessage());
+            return null;
         }
     }
 
