@@ -28,6 +28,11 @@ public class SidescanParserFactory {
             return null;
         }
         
+        if (logFolder.isFile() || logFolder.getName().equals("mra") || logFolder.getName().equals("rasterIndex")
+                || logFolder.getName().equals("contacts")) {
+            logFolder = logFolder.getParentFile();
+        }
+        
         File[] jsfFiles = getFilesWithExtension(logFolder, "jsf");
         if (jsfFiles.length > 0) {
             return new JsfSidescanParser(jsfFiles, progress);

@@ -3,7 +3,7 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.neptus.markers;
+package pt.lsts.neptus.mra;
 
 import java.io.Serial;
 

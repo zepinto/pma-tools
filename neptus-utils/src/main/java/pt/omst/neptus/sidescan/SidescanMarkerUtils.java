@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.mra.SidescanLogMarker;
 import pt.omst.neptus.colormap.ColorMapFactory;
 import pt.omst.neptus.util.ImageUtils;
 

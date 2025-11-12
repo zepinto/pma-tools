@@ -4,7 +4,7 @@
 // Author: José Pinto                                                       *
 //***************************************************************************
 
-package pt.omst.neptus.markers;
+package pt.lsts.neptus.mra;
 
 import java.awt.Component;
 import java.awt.event.FocusAdapter;
@@ -18,6 +18,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -83,6 +84,14 @@ public class LogMarker implements Serializable, Comparable<LogMarker> {
         this.setTimestamp(timestamp);
         this.setLatRads(latRads);
         this.setLonRads(lonRads);
+    }
+
+    public Instant getTimestampAsInstant() {
+        return Instant.ofEpochMilli((long) getTimestamp());
+    }
+
+    public Date getTimestampAsDate() {
+        return new Date((long) getTimestamp());
     }
 
     /**

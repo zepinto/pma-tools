@@ -38,6 +38,7 @@
 package pt.omst.neptus.sidescan;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.Spliterator;
 import java.util.Spliterators;
@@ -96,6 +97,17 @@ public interface SidescanParser {
      */
     ISidescanLine getLineAtTime(long timestamp, int subsytem, SidescanParameters config);
 
+    default Collection<ISidescanLine> getLinesAtTime(long timestamp) {
+        ArrayList<ISidescanLine> lines = new ArrayList<>();
+        for (int subsystem : getSubsystemList()) {
+            ISidescanLine line = getLineAtTime(timestamp, subsystem, getDefaultParams());
+            if (line != null) {                
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+    
     /**
      * Returns the list of subsystems available in the sidescan data
      * @return list of subsystem identifiers
