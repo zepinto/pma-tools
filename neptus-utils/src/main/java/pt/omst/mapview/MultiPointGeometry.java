@@ -9,11 +9,9 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Stroke;
-import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.Point2D;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -157,6 +155,7 @@ public class MultiPointGeometry implements MapPainter {
         for (Point2D.Double offset : offsets) {
             LocationType loc = new LocationType(centerLocation);
             loc.translatePosition(offset.y, offset.x, 0); // y is north, x is east
+            loc.convertToAbsoluteLatLonDepth();
             locations.add(loc);
         }
         
@@ -192,7 +191,6 @@ public class MultiPointGeometry implements MapPainter {
         }
         
         if (opaque) {
-            log.info("Painting opaque MultiPointGeometry");
             paintOpaque(g, map);
             return;
         }
@@ -202,7 +200,6 @@ public class MultiPointGeometry implements MapPainter {
         
         // Draw the path by converting each point to screen coordinates
         GeneralPath screenPath = buildScreenPath(map);
-        log.info("Painting MultiPointGeometry with {} points", offsets.size());
         g.setStroke(stroke);
         g.draw(screenPath);
         
@@ -239,8 +236,8 @@ public class MultiPointGeometry implements MapPainter {
 
         // Get all absolute locations (don't add center as separate point)
         List<LocationType> allPoints = getLocations();
-
-        for (LocationType loc : allPoints) {
+        
+        for (LocationType loc : allPoints) {        
             double[] coords = map.latLonToScreen(loc.getLatitudeDegs(), loc.getLongitudeDegs());
             if (first) {
                 screenPath.moveTo(coords[0], coords[1]);

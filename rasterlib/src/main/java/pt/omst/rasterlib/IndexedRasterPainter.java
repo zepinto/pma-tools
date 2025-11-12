@@ -3,6 +3,7 @@ package pt.omst.rasterlib;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
@@ -158,12 +159,13 @@ public class IndexedRasterPainter implements MapPainter {
             shape.addPoint(loc);
         }
         shape.addPoint(new LocationType(ptShape[0].x, ptShape[0].y));
+        shape.setFilled(true);
         shape.setShape(true);
-        shape.setOpaque(true);
+        shape.setOpaque(true);        
     }
 
+    
     private void paintMosaic(Graphics2D g, SlippyMap renderer) {
-        log.info("Painting mosaic at resolution {}", mosaicResolution.get());
         AffineTransform before = g.getTransform();
         if (mosaicImage != null) {
             double[] cornerPos = renderer.latLonToScreen(mosaicNWcorner.getLatitudeDegs(), mosaicNWcorner.getLongitudeDegs());
@@ -196,7 +198,7 @@ public class IndexedRasterPainter implements MapPainter {
         
 
         if (renderer.getZoom() < 2) {
-            simplePaint(g, renderer);
+            shape.paint(g, renderer);
             return;
         }
 
@@ -204,14 +206,9 @@ public class IndexedRasterPainter implements MapPainter {
         if (mosaicResolution.get() != resolution) {
             cancelMosaicTask();
             mosaicTask = IndexedRasterUtils.background(() -> createMosaic(resolution));
-            simplePaint(g, renderer);
+            shape.paint(g, renderer);
         } else {
             paintMosaic(g, renderer);
-        }
-        
-        // Always draw shape outline at higher zoom levels
-        if (renderer.getZoom() >= 5) {
-            shape.paint(g, renderer);
         }
     }
 
@@ -236,7 +233,7 @@ public class IndexedRasterPainter implements MapPainter {
         LocationType center = null;
         
         // Use an executor for parallel processing of raster files
-        ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
+        ExecutorService executor = Executors.newFixedThreadPool(4);
         
         for (File index : IndexedRasterUtils.findRasterFiles(folder)) {
             System.out.println("Processing: " + index);
