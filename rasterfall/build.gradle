@@ -42,6 +42,7 @@ dependencies {
     implementation project(':neptus-utils')
     implementation project(':rasterlib')
     implementation project(':omst-licences')
+    implementation project(':contacts')
     
     // Logging
     implementation 'org.slf4j:slf4j-api:2.0.0'

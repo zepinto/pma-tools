@@ -223,4 +223,26 @@ public class IndexedRasterPainter implements MapPainter {
         shape.paint(g, renderer);
         g.setTransform(before);
     }
+
+    /**
+     * Get the start timestamp of this raster in milliseconds since epoch.
+     * @return the timestamp of the first sample, or 0 if no samples
+     */
+    public long getStartTimestamp() {
+        if (raster.getSamples() == null || raster.getSamples().isEmpty()) {
+            return 0;
+        }
+        return raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
+    }
+
+    /**
+     * Get the end timestamp of this raster in milliseconds since epoch.
+     * @return the timestamp of the last sample, or 0 if no samples
+     */
+    public long getEndTimestamp() {
+        if (raster.getSamples() == null || raster.getSamples().isEmpty()) {
+            return 0;
+        }
+        return raster.getSamples().getLast().getTimestamp().toInstant().toEpochMilli();
+    }
 }
