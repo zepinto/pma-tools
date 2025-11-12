@@ -186,7 +186,8 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         double savedCy = prefs.getDouble("centerY", Double.NaN);
         int savedZ = prefs.getInt("zoom", -1);
         
-        if (!Double.isNaN(savedCx) && !Double.isNaN(savedCy) && savedZ >= 0 && savedZ <= 20) {
+        int maxZ = baseMapManager.getCurrentTileSource().getMaxZoom();
+        if (!Double.isNaN(savedCx) && !Double.isNaN(savedCy) && savedZ >= 0 && savedZ <= maxZ) {
             // Use saved preferences
             cx = savedCx;
             cy = savedCy;
@@ -208,7 +209,8 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             int height = getHeight();
             int mouseX = e.getX();
             int mouseY = e.getY();
-            if (rotation < 0 && z < 20) { // Zoom in
+            int maxZoomNow = baseMapManager.getCurrentTileSource().getMaxZoom();
+            if (rotation < 0 && z < maxZoomNow) { // Zoom in
                 double newCx = 2 * cx - (width / 2.0) + mouseX;
                 double newCy = 2 * cy - (height / 2.0) + mouseY;
                 z++;
@@ -432,7 +434,8 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         // Adjust zoom to fit all points (assuming 800x600 viewport initially)
         double[] minXY = latLonToPixel(maxLat, minLon, z); // Top-left corner
         double[] maxXY = latLonToPixel(minLat, maxLon, z); // Bottom-right corner
-        while (z < 19) {
+        int maxZ = baseMapManager.getCurrentTileSource().getMaxZoom();
+        while (z < maxZ) {
             double pixelWidth = (maxXY[0] - minXY[0]) / Math.pow(2, z - 2);
             double pixelHeight = (maxXY[1] - minXY[1]) / Math.pow(2, z - 2);
             System.out.println("Zoom " + z + ": " + pixelWidth + " x " + pixelHeight + ", " + getWidth() + " x " + getHeight());

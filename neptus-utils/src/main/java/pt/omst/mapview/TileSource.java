@@ -9,30 +9,32 @@ package pt.omst.mapview;
  * Enumeration of available tile sources with their URLs and attribution.
  */
 public enum TileSource {
-    OPENSTREETMAP("OpenStreetMap", 
+        OPENSTREETMAP("OpenStreetMap", 
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            "© OpenStreetMap contributors"),
-    OPENTOPO("OpenTopoMap",
+            "© OpenStreetMap contributors", 19),
+        OPENTOPO("OpenTopoMap",
             "https://tile.opentopomap.org/{z}/{x}/{y}.png",
-            "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)"),
-    CARTO_LIGHT("CartoDB Positron",
+            "© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)", 17),
+        CARTO_LIGHT("CartoDB Positron",
             "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
-            "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
-    CARTO_DARK("CartoDB Dark Matter",
+            "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors", 19),
+        CARTO_DARK("CartoDB Dark Matter",
             "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
-            "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors"),
-    ESRI_WORLD_IMAGERY("ESRI World Imagery",
+            "Map tiles by Carto (CC BY 3.0) | © OpenStreetMap contributors", 19),
+        ESRI_WORLD_IMAGERY("ESRI World Imagery",
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            "Tiles © Esri");
+            "Tiles © Esri", 19);
                 
     private final String displayName;
     private final String urlPattern;
     private final String attribution;
+    private final int maxZoom;
     
-    TileSource(String displayName, String urlPattern, String attribution) {
+    TileSource(String displayName, String urlPattern, String attribution, int maxZoom) {
         this.displayName = displayName;
         this.urlPattern = urlPattern;
         this.attribution = attribution;
+        this.maxZoom = maxZoom;
     }
     
     public String getDisplayName() {
@@ -55,5 +57,13 @@ public enum TileSource {
     
     public String getCacheName() {
         return name().toLowerCase();
+    }
+
+    /**
+     * Maximum supported zoom level for this tile source. Requests for tiles beyond this
+     * zoom level should be avoided to prevent HTTP errors (e.g. OpenStreetMap supports up to z=19).
+     */
+    public int getMaxZoom() {
+        return maxZoom;
     }
 }

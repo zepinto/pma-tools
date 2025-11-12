@@ -18,6 +18,7 @@ import java.awt.Font;
 import java.awt.Image;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.Dialog.ModalityType;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,6 +30,7 @@ import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.UIManager;

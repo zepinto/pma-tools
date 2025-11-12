@@ -61,9 +61,9 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     private Instant selectedEndTime;
     
     // Visual constants
-    private static final int HANDLE_WIDTH = 12;
-    private static final int HANDLE_HEIGHT = 30;
-    private static final int TIMELINE_HEIGHT = 60;
+    private static final int HANDLE_WIDTH = 8;
+    private static final int HANDLE_HEIGHT = 20;
+    private static final int TIMELINE_HEIGHT = 30;
     private static final Color SELECTION_COLOR = new Color(100, 150, 255, 100);
     private static final Color HANDLE_COLOR = new Color(50, 100, 200);
     private static final Color BACKGROUND_COLOR = new Color(240, 240, 240);
@@ -96,7 +96,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         this.selectedStartTime = minTime.plusMillis(totalMillis / 4);
         this.selectedEndTime = maxTime.minusMillis(totalMillis / 4);
         
-        setPreferredSize(new Dimension(800, TIMELINE_HEIGHT + 40));
+        setPreferredSize(new Dimension(800, TIMELINE_HEIGHT + 25));
         setBackground(BACKGROUND_COLOR);
         
         setupMouseListeners();
@@ -335,7 +335,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
             if (x < 0 || x > getWidth()) continue;
             
             // Draw tick line
-            int tickHeight = tick.isMajor ? 8 : 4;
+            int tickHeight = tick.isMajor ? 6 : 3;
             g2.drawLine(x, 10, x, 10 + tickHeight);
             g2.drawLine(x, 10 + TIMELINE_HEIGHT - tickHeight, x, 10 + TIMELINE_HEIGHT);
             
@@ -343,7 +343,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
             if (tick.isMajor && tick.label != null) {
                 Rectangle2D bounds = fm.getStringBounds(tick.label, g2);
                 int labelX = x - (int) bounds.getWidth() / 2;
-                int labelY = 10 + TIMELINE_HEIGHT + 15;
+                int labelY = 10 + TIMELINE_HEIGHT + 14;
                 
                 g2.setColor(LABEL_COLOR);
                 g2.drawString(tick.label, labelX, labelY);
@@ -571,7 +571,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         panel.add(infoLabel, BorderLayout.SOUTH);
         
         frame.setContentPane(panel);
-        frame.setSize(900, 180);
+        frame.setSize(900, 130);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
     }
