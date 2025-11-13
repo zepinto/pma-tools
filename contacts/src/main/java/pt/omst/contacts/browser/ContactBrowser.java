@@ -63,7 +63,7 @@ public class ContactBrowser extends JPanel {
         table.packAll();
     }
 
-    public void setSelectedContact(String contact) {
+    public void setSelectedContact(File contact) {
         if (contact == null) {
             table.clearSelection();
             return;

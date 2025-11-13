@@ -23,7 +23,6 @@ import javax.swing.SwingUtilities;
 import lombok.extern.java.Log;
 import pt.omst.neptus.util.GuiUtils;
 import pt.omst.rasterfall.overlays.RasterfallOverlays;
-import pt.omst.rasterlib.contacts.CompressedContact;
 
 @Log
 public class RasterfallPanel extends JPanel implements Closeable {
@@ -83,23 +82,6 @@ public class RasterfallPanel extends JPanel implements Closeable {
 
     public void scrollToTime(long time) {
         scrollbar.scrollToTime(time, true);
-    }
-
-    public void reloadContacts() {
-        long start = System.currentTimeMillis();
-        waterfall.getContacts().reload();
-        System.out.println("Reloaded contacts in " + (System.currentTimeMillis() - start) + "ms");
-    }
-
-    public void focusContact(String label) {
-        CompressedContact contact = waterfall.getContacts().getContact(label);
-        if (contact != null) {
-            scrollbar.scrollToTime(contact.getTimestamp(), true);
-            System.out.println("Contact " + label + " found at " + contact.getTimestamp());
-        }
-        else {
-            System.out.println("Contact " + label + " not found");
-        }
     }
 
     public static void main(String[] args) {

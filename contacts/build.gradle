@@ -36,6 +36,10 @@ dependencies {
     // Local project dependencies
     implementation project(':neptus-utils')
     implementation project(':rasterlib')
+    implementation project(':omst-licences')
+    
+    // License3j (needed for license management)
+    implementation 'com.javax0.license3j:license3j:3.2.0'
     
     // UI dependencies
     implementation name: 'flatlaf-3.5.2'

@@ -29,7 +29,7 @@ import pt.omst.rasterlib.Observation;
  */
 @Getter
 @Slf4j
-public class CompressedContact implements MapMarker {
+public class CompressedContact implements MapMarker, QuadTree.Locatable {
 
     /**
      * The contact object.
@@ -199,7 +199,7 @@ public class CompressedContact implements MapMarker {
             log.warn("No contact.json found in {}", zctFile.getAbsolutePath());
             return null;
         }
-
+        
         String jsonString = new String(Objects.requireNonNull(ZipUtils.getFileInZip(zctFile.getAbsolutePath(), "contact.json")).readAllBytes());
         return Converter.ContactFromJsonString(jsonString);
     }

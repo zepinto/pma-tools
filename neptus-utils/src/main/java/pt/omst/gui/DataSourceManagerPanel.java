@@ -68,7 +68,7 @@ public class DataSourceManagerPanel extends JPanel {
         this.dataSources = new ArrayList<>();
         
         setLayout(new BorderLayout(5, 5));
-        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        //setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
         // Create chips display area (CENTER)
         chipsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 3));

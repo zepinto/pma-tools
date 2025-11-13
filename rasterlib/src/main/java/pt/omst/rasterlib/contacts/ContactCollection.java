@@ -8,6 +8,7 @@ package pt.omst.rasterlib.contacts;
 import java.awt.Graphics2D;
 import java.io.File;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -16,18 +17,35 @@ import lombok.extern.slf4j.Slf4j;
 import pt.omst.mapview.MapPainter;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.core.LocationType;
+import pt.omst.neptus.util.GuiUtils;
 
 /**
  * A collection of contacts.
  */
 @Slf4j
 public class ContactCollection implements MapPainter {
+    QuadTree<File, CompressedContact> quadTree = new QuadTree<>();
 
-    private final ArrayList<CompressedContact> contacts = new ArrayList<>();
+    //private final ArrayList<CompressedContact> contacts = new ArrayList<>();
     private final File folder;
 
-    public static ContactCollection fromFolder(File folder) {
-        
+    public static ContactCollection empty() {
+        return new ContactCollection();
+    }
+
+    public void addRootFolder(File folder) {
+        List<File> contactFiles = findContacts(folder);
+        for (File contactFile : contactFiles) {
+            try {
+                addContact(contactFile);                
+            }
+            catch (IOException e) {
+                log.error("Error on contact {}", contactFile.getAbsolutePath(), e);                
+            }
+        }
+    }
+
+    public static ContactCollection fromFolder(File folder) {        
         try {
             return new ContactCollection(folder);
         } catch (IOException e) {
@@ -54,7 +72,7 @@ public class ContactCollection implements MapPainter {
                 addContact(contactFile);
             }
             catch (IOException e) {
-                log.warn("Error reading contact from {}", contactFile.getAbsolutePath());
+                log.error("Error reading contact from {}", contactFile.getAbsolutePath(), e);
             }
         }
     }
@@ -78,17 +96,15 @@ public class ContactCollection implements MapPainter {
      * @throws IOException if an error occurs while reading the contact
      */
     public void addContact(File zctContact) throws IOException {
-        contacts.add(new CompressedContact(zctContact));
+        quadTree.add(zctContact, new CompressedContact(zctContact));
     }
 
     /**
      * Removes a contact from the collection.
-     * @param index the index of the contact to remove
+     * @param label the label of the contact to remove
      */
-    public void removeContact(int index) {
-        if (index >= 0 && index < contacts.size()) {
-            contacts.remove(index);
-        }
+    public CompressedContact removeContact(File zctContact) {
+        return quadTree.remove(zctContact);
     }
 
     /**
@@ -97,10 +113,10 @@ public class ContactCollection implements MapPainter {
      * @param end the end timestamp
      * @return the contacts between the two timestamps
      */
-    public List<CompressedContact> contactsBetween(long start, long end) {
+    public List<CompressedContact> contactsBetween(Instant start, Instant end) {
         ArrayList<CompressedContact> contactsBetween = new ArrayList<>();
-        for (CompressedContact contact : contacts) {
-            if (contact.getTimestamp() >= start && contact.getTimestamp() <= end) {
+        for (CompressedContact contact : quadTree.getAll()) {
+            if (contact.getTimestamp() >= start.toEpochMilli() && contact.getTimestamp() <= end.toEpochMilli()) {
                 contactsBetween.add(contact);
             }
         }
@@ -112,25 +128,8 @@ public class ContactCollection implements MapPainter {
      * @param label the label of the contact
      * @return the contact with the given label or null if not found
      */
-    public CompressedContact getContact(String label) {
-        for (CompressedContact contact : contacts) {
-            if (contact.getLabel().equals(label)) {
-                return contact;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Returns the contact at a given index.
-     * @param index the index of the contact
-     * @return the contact at the given index or null if the index is out of bounds
-     */
-    public CompressedContact getContact(int index) {
-        if (index >= 0 && index < contacts.size()) {
-            return contacts.get(index);
-        }
-        return null;
+    public CompressedContact getContact(File zctContact) {
+        return quadTree.get(zctContact);
     }
 
     /**
@@ -140,53 +139,14 @@ public class ContactCollection implements MapPainter {
      * @return the contacts contained in the area
      */
     public List<CompressedContact> contactsContainedIn(LocationType sw, LocationType ne) {
-        ArrayList<CompressedContact> contactsContained = new ArrayList<>();
-        for (CompressedContact contact : contacts) {
-            if (contact.getLocation().getLatitudeDegs() >= sw.getLatitudeDegs() &&
-                    contact.getLocation().getLatitudeDegs() <= ne.getLatitudeDegs() &&
-                    contact.getLocation().getLongitudeDegs() >= sw.getLongitudeDegs() &&
-                    contact.getLocation().getLongitudeDegs() <= ne.getLongitudeDegs()) {
-                contactsContained.add(contact);
-            }
-        }
-        return contactsContained;
+        return quadTree.query(
+                new QuadTree.Region(sw.getLatitudeDegs(), sw.getLongitudeDegs(), ne.getLatitudeDegs(),
+                        ne.getLongitudeDegs()));        
     }
 
-    /**
-     * Returns the contacts contained in a given time range.
-     * @param startTimestamp  the start of the time range or null for no limit
-     * @param endTimestamp the end of the time range or null for no limit
-     * @return the contacts contained in the time range
-     */
-    public List<CompressedContact> getContactsBetween(Long startTimestamp, Long endTimestamp) {
-        ArrayList<CompressedContact> contactsIn = new ArrayList<>();
-        for (CompressedContact contact : contacts) {
-            if ((startTimestamp == null || contact.getTimestamp() >= startTimestamp) && (endTimestamp == null || contact.getTimestamp() <= endTimestamp)) {
-                contactsIn.add(contact);
-            }
-        }
-        return contactsIn;
-    }
-
+ 
     public List<CompressedContact> getAllContacts() {
-        return contacts;
-    }
-
-    public void reload() {
-        List<File> allContacts = findContacts(folder);
-        
-        for (File contactFile : allContacts) {
-            String label = contactFile.getName().replace(".zct", "");
-            CompressedContact contact = getContact(label);
-            if (contact != null) {
-                contacts.remove(contact);
-            }
-            try {
-                addContact(contactFile);
-            } catch (IOException e) {
-                log.warn("Error reading contact from {}", contactFile.getAbsolutePath());
-            }
-        }
+        return quadTree.getAll();
     }
 
     @Override
@@ -196,14 +156,21 @@ public class ContactCollection implements MapPainter {
             new LocationType(bounds[2], bounds[0]),
             new LocationType(bounds[3], bounds[1])
         );
-        // TODO: implement contact painting
+
+        System.out.println("Painting " + visibleContacts.size() + " contacts in view");
+        
         MapPainter.super.paint(g, map);
     }
 
     public static void main(String[] args) throws IOException {
-        File folder = new File("/LOGS/");
+        
         long startMillis = System.currentTimeMillis();
+        File folder = new File("/LOGS/");
         ContactCollection collection = new ContactCollection(folder);
-        System.out.println("Found " + collection.contacts.size() + " contacts in " + (System.currentTimeMillis() - startMillis) + "ms");
+        System.out.println("Found " + collection.getAllContacts().size() + " contacts in " + (System.currentTimeMillis() - startMillis) + "ms");
+        SlippyMap renderer = new SlippyMap();
+        renderer.addPainter(collection);
+        GuiUtils.testFrame(renderer, "Contacts Viewer");
+       
     }
 }

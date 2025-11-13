@@ -91,9 +91,8 @@ public class MultiContactEditor extends JPanel{
     }
 
     public void addContact(CompressedContact contact) {
-        
-        String label = contact.getLabel();
-        CompressedContact existing = contacts.getContact(label);
+        File f = contact.getZctFile();
+        CompressedContact existing = contacts.getContact(f);
         if (existing != null) {
             return;
         }
@@ -108,35 +107,10 @@ public class MultiContactEditor extends JPanel{
         nextButton.setEnabled(contactIndex < contacts.getAllContacts().size() - 1);
     }
 
-    public void removeContact(String contactId) {
-        int index = -1;
-        for (int i = 0; i < contacts.getAllContacts().size(); i++) {
-            CompressedContact contact = contacts.getAllContacts().get(i);
-            if (contact.getLabel().equals(contactId)) {
-                index = i;
-                break;
-            }
-        }
-        contacts.removeContact(index);
-        List<CompressedContact> allContacts = contacts.getAllContacts();
-        
-        if (index == contactIndex) {
-            if (contactIndex > 0) {
-                contactIndex--;
-            }
-            if (contactIndex < allContacts.size()) {
-                try {
-                    contactEditor.loadZct(allContacts.get(contactIndex).getZctFile());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        } else if (index < contactIndex) {
-            contactIndex--;
-        }
-        previousButton.setEnabled(contactIndex > 0);
-        nextButton.setEnabled(contactIndex < contacts.getAllContacts().size() - 1);
-           
+    public void removeContact(File f) {
+        contacts.removeContact(f);
+        contactIndex = Math.min(contactIndex, contacts.getAllContacts().size() - 1);  previousButton.setEnabled(contactIndex > 0);
+        nextButton.setEnabled(contactIndex < contacts.getAllContacts().size() - 1);           
     }
 
     public void editContact(String contactId) {

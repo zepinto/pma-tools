@@ -61,7 +61,12 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
     private final CopyOnWriteArrayList<MapPainter> rasterPainters = new CopyOnWriteArrayList<>();
     private javax.swing.Timer repaintTimer;
+    private MapOverlayManager overlayManager;
     
+    public SlippyMap() {
+        this(new ArrayList<>());
+    }
+
     public SlippyMap(List<? extends MapMarker> points) {
         this.points.addAll(points);
         setDarkMode(GuiUtils.isDarkTheme());
@@ -235,6 +240,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // Route to overlays first
+                if (overlayManager != null && overlayManager.processMouseEvent(e)) {
+                    return; // Event was consumed by an overlay
+                }
+                
                 // Don't handle left clicks if it's a popup trigger
                 if (e.isPopupTrigger()) {
                     return;
@@ -266,7 +276,20 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             }
             
             @Override
+            public void mouseClicked(MouseEvent e) {
+                // Route to overlays
+                if (overlayManager != null) {
+                    overlayManager.processMouseEvent(e);
+                }
+            }
+            
+            @Override
             public void mouseReleased(MouseEvent e) {
+                // Route to overlays first
+                if (overlayManager != null && overlayManager.processMouseEvent(e)) {
+                    return; // Event was consumed by an overlay
+                }
+                
                 isDragging = false;
                 // Save preferences after drag is complete
                 if (!e.isPopupTrigger()) {
@@ -279,6 +302,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override
             public void mouseDragged(MouseEvent e) {
+                // Route to overlays first
+                if (overlayManager != null && overlayManager.processMouseMotionEvent(e)) {
+                    return; // Event was consumed by an overlay
+                }
+                
                 isDragging = true;
                 int x = e.getX();
                 int y = e.getY();
@@ -291,6 +319,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
             @Override
             public void mouseMoved(MouseEvent e) {
+                // Route to overlays first
+                if (overlayManager != null && overlayManager.processMouseMotionEvent(e)) {
+                    return; // Event was consumed by an overlay
+                }
+                
                 double[] latLon = pixelToLatLon(cx - getWidth() / 2.0 + e.getX(), cy - getHeight() / 2.0 + e.getY(), z);
                 mouseLat = latLon[0];
                 mouseLon = latLon[1];
@@ -382,6 +415,38 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
     public void addPainter(MapPainter painter) {
         painter.paint((Graphics2D) getGraphics(), this);
+    }
+
+    /**
+     * Get or create the overlay manager for this map.
+     * The overlay manager handles registration and activation of map overlays.
+     * @return the overlay manager
+     */
+    public MapOverlayManager getOverlayManager() {
+        if (overlayManager == null) {
+            overlayManager = new MapOverlayManager(this);
+        }
+        return overlayManager;
+    }
+
+    /**
+     * Register an overlay with the map.
+     * @param overlay the overlay to register
+     * @param exclusive if true, only one exclusive overlay can be active at a time
+     * @return the created toggle button for this overlay
+     */
+    public javax.swing.JToggleButton registerOverlay(AbstractMapOverlay overlay, boolean exclusive) {
+        return getOverlayManager().registerOverlay(overlay, exclusive);
+    }
+
+    /**
+     * Register an overlay with a custom button.
+     * @param overlay the overlay to register
+     * @param button the button to control this overlay
+     * @param exclusive if true, only one exclusive overlay can be active at a time
+     */
+    public void registerOverlay(AbstractMapOverlay overlay, javax.swing.AbstractButton button, boolean exclusive) {
+        getOverlayManager().registerOverlay(overlay, button, exclusive);
     }
 
     public void focus(MapMarker obj, int zoom) {
@@ -506,6 +571,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 painter.paint(g2d, this);
             }
         //}
+
+        // Paint overlays if overlay manager exists
+        if (overlayManager != null) {
+            overlayManager.paint(g2d, this);
+        }
 
         // Draw points with labels
         Font font = new Font("SansSerif", Font.PLAIN, 12);
@@ -783,6 +853,15 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         if (repaintTimer != null) {
             repaintTimer.stop();
             repaintTimer = null;
+        }
+        // Close overlay manager
+        if (overlayManager != null) {
+            try {
+                overlayManager.close();
+            } catch (IOException e) {
+                log.error("Error closing overlay manager: {}", e.getMessage());
+            }
+            overlayManager = null;
         }
         // Clear memory cache
         for (BufferedImage img : memoryCache.values()) {

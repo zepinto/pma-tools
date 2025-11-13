@@ -62,7 +62,7 @@ public class SidescanDataCollection {
 
 
     public static void main(String[] args) {
-        List<File> allFolders = findSidescanFolders(new File("/LOGS/"));
+        List<File> allFolders = findSidescanFolders(new File("/home/zp/workspace/neptus/"));
         log.info("Found {} sidescan folders to process", allFolders.size());
         
         int processed = 0;

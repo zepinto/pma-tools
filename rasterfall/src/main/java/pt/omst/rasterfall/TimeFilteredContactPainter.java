@@ -43,8 +43,8 @@ public class TimeFilteredContactPainter implements MapPainter {
     
     private void updateVisibleContacts() {
         visibleContacts = delegate.contactsBetween(
-            filterStartTime.toEpochMilli(), 
-            filterEndTime.toEpochMilli()
+            filterStartTime, 
+            filterEndTime
         );
     }
     
