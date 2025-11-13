@@ -48,7 +48,7 @@ subprojects {
     
     // Configure Maven publishing
     // Skip standard publication for projects that use shadow jar
-    if (!(project.name in ['rasterfall', 'contactbrowser'])) {
+    if (!(project.name in ['rasterfall', 'contacts'])) {
         publishing {
             publications {
                 maven(MavenPublication) {
@@ -148,16 +148,16 @@ clean {
     }
 }
 
-// Task to build shadow jars for rasterfall and contactbrowser
+// Task to build shadow jars for applications
 task buildShadowJars {
-    dependsOn ':rasterfall:shadowJar', ':contactbrowser:shadowJar'
-    description = 'Build shadow (fat) jars for rasterfall and contactbrowser applications'
+    dependsOn ':rasterfall:shadowJar', ':contacts:shadowJar'
+    description = 'Build shadow (fat) jars for rasterfall and contacts (target-manager) applications'
     group = 'build'
     
     doLast {
         println "Shadow jars built successfully:"
         println "  - rasterfall: ${project(':rasterfall').tasks.shadowJar.archiveFile.get()}"
-        println "  - contactbrowser: ${project(':contactbrowser').tasks.shadowJar.archiveFile.get()}"
+        println "  - target-manager: ${project(':contacts').tasks.shadowJar.archiveFile.get()}"
     }
 }
 

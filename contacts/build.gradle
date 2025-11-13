@@ -1,7 +1,9 @@
 plugins {
     id 'java-library'
+    id 'application'
     id 'maven-publish'
     id "io.freefair.lombok" version "8.10.2"
+    id 'com.gradleup.shadow' version '8.3.5'
 }
 
 group 'pt.omst'
@@ -13,6 +15,15 @@ java {
     }
     withJavadocJar()
     withSourcesJar()
+}
+
+application {
+    mainClass = 'pt.omst.contacts.browser.TargetManager'
+}
+
+// Set working directory for run task
+run {
+    workingDir = rootProject.projectDir
 } 
 
 repositories {
@@ -66,6 +77,15 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 compileJava.options.encoding = 'UTF-8'
+
+// Configure shadow jar
+shadowJar {
+    archiveBaseName.set('target-manager')
+    archiveClassifier.set('all')
+    manifest {
+        attributes 'Main-Class': 'pt.omst.contacts.browser.TargetManager'
+    }
+}
 
 // Configure publishing for this library
 publishing {
