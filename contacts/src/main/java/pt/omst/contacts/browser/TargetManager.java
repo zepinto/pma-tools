@@ -27,7 +27,7 @@ import javax.swing.SwingUtilities;
 import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.contacts.ObservationsPanel;
+import pt.omst.contacts.VerticalContactEditor;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
 import pt.omst.gui.datasource.DataSourceEvent;
@@ -39,7 +39,7 @@ import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.util.GuiUtils;
-import pt.omst.rasterlib.Contact;
+import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.contacts.QuadTree;
 
@@ -59,10 +59,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final SlippyMap slippyMap;
     private final DataSourceManagerPanel dataSourceManager;
     private final ZoomableTimeIntervalSelector timeSelector;
-    private final ObservationsPanel observationsPanel;
-    private final ContactDetailsFormPanel contactDetailsPanel;
+    // private final ObservationsPanel observationsPanel;
+    // private final ContactDetailsFormPanel contactDetailsPanel;
+    private final VerticalContactEditor contactEditor;
     private final ContactCollection contactCollection;
-
+    private final ContactsMapOverlay contactsMapOverlay;
     private final JSplitPane mainSplitPane;
     private final JPanel eastPanel;
     private final JButton toggleEastPanelButton;
@@ -95,8 +96,16 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         timeSelector = new ZoomableTimeIntervalSelector(minTime, maxTime);
 
-        observationsPanel = new ObservationsPanel();
-        contactDetailsPanel = new ContactDetailsFormPanel();
+        contactsMapOverlay = new ContactsMapOverlay(contactCollection);
+        slippyMap.addMapOverlay(contactsMapOverlay);
+        contactsMapOverlay.setContactSelectionListener(contact -> {
+            log.info("Contact selected: {}", contact.getContact().getLabel());
+            setContact(contact);
+        });
+        
+        contactEditor = new VerticalContactEditor();
+        // observationsPanel = new ObservationsPanel();
+        // contactDetailsPanel = new ContactDetailsFormPanel();
 
         // Create top panel with data source manager
         JPanel topPanel = new JPanel(new BorderLayout());
@@ -278,40 +287,15 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private JPanel createEastPanel() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
 
-        // Create vertical split pane for observations (top) and details (bottom)
-        JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        verticalSplit.setTopComponent(createObservationsSection());
-        verticalSplit.setBottomComponent(createContactDetailsSection());
-        verticalSplit.setResizeWeight(0.4); // Give 40% to observations, 60% to details
-        verticalSplit.setContinuousLayout(true);
-
-        panel.add(verticalSplit, BorderLayout.CENTER);
+        panel.add(createContactEditorSection(), BorderLayout.CENTER);
         return panel;
     }
 
-    /**
-     * Creates the observations section with a titled border.
-     */
-    private JPanel createObservationsSection() {
+    private JPanel createContactEditorSection() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
 
-        JScrollPane scrollPane = new JScrollPane(observationsPanel);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-
-        panel.add(scrollPane, BorderLayout.CENTER);
-        return panel;
-    }
-
-    /**
-     * Creates the contact details section with a titled border.
-     */
-    private JPanel createContactDetailsSection() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
-        JScrollPane scrollPane = new JScrollPane(contactDetailsPanel);
+        JScrollPane scrollPane = new JScrollPane(contactEditor);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
@@ -324,15 +308,19 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * 
      * @param contact The contact to display
      */
-    public void setContact(Contact contact) {
-        contactDetailsPanel.setContact(contact);
+    public void setContact(CompressedContact contact) {
+        try {
+            contactEditor.loadZct(contact.getZctFile());
+        } catch (Exception e) {
+            log.error("Error loading contact in editor", e);
+        }
     }
 
     /**
      * Clears all observations from the observations panel.
      */
     public void clearObservations() {
-        observationsPanel.clear();
+        contactEditor.clearObservations();
     }
 
     /**
@@ -462,7 +450,6 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 log.info("Pulvis connection removed: {}", pcs.getDisplayName());
                 break;
             }
-
             default -> {
                 break;
             }
@@ -483,11 +470,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         GuiUtils.setTheme("light");
         GuiUtils.setLookAndFeel();
-
-        // Create test time range (last 7 days)
-        Instant minTime = Instant.now().minusSeconds(7 * 86400);
-        Instant maxTime = Instant.now();
-
+        
+        // Create test time range (last 10 years to tomorrow)
+        Instant minTime = Instant.now().minusSeconds(10L * 365 * 86400); // Approximately 10 years
+        Instant maxTime = Instant.now().plusSeconds(86400); // 1 day ahead
+        
         TargetManager layout = new TargetManager(minTime, maxTime);
 
         // Create frame manually to set menu bar before making visible

@@ -405,6 +405,10 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         painter.paint((Graphics2D) getGraphics(), this);
     }
 
+    public void addMapOverlay(AbstractMapOverlay overlay) {
+        getOverlayManager().activateOverlay(overlay);
+    }
+
     /**
      * Get or create the overlay manager for this map.
      * The overlay manager handles registration and activation of map overlays.

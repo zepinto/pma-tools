@@ -88,18 +88,38 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     public ZoomableTimeIntervalSelector(Instant minTime, Instant maxTime) {
         this.absoluteMinTime = minTime;
         this.absoluteMaxTime = maxTime;
-        this.viewStartTime = minTime;
-        this.viewEndTime = maxTime;
         
         // Initialize selection to middle 50%
         long totalMillis = Duration.between(minTime, maxTime).toMillis();
         this.selectedStartTime = minTime.plusMillis(totalMillis / 4);
         this.selectedEndTime = maxTime.minusMillis(totalMillis / 4);
         
+        // Zoom view to show the selected interval with some padding
+        zoomToSelection();
+        
         setPreferredSize(new Dimension(800, TIMELINE_HEIGHT + 25));
         setBackground(BACKGROUND_COLOR);
         
         setupMouseListeners();
+    }
+    
+    /**
+     * Zooms the view to show the selected interval with 20% padding on each side.
+     */
+    private void zoomToSelection() {
+        long selectionDuration = Duration.between(selectedStartTime, selectedEndTime).toMillis();
+        long padding = (long) (selectionDuration * 0.2); // 20% padding on each side
+        
+        this.viewStartTime = selectedStartTime.minusMillis(padding);
+        this.viewEndTime = selectedEndTime.plusMillis(padding);
+        
+        // Constrain to absolute bounds
+        if (viewStartTime.isBefore(absoluteMinTime)) {
+            viewStartTime = absoluteMinTime;
+        }
+        if (viewEndTime.isAfter(absoluteMaxTime)) {
+            viewEndTime = absoluteMaxTime;
+        }
     }
     
     private void setupMouseListeners() {
@@ -510,6 +530,35 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         this.selectedEndTime = end;
         repaint();
         fireSelectionChanged();
+    }
+    
+    /**
+     * Updates the absolute time range and expands the view if necessary to accommodate it.
+     * 
+     * @param minTime New absolute minimum time
+     * @param maxTime New absolute maximum time
+     */
+    public void updateTimeRange(Instant minTime, Instant maxTime) {
+        this.absoluteMinTime = minTime;
+        this.absoluteMaxTime = maxTime;
+        
+        // Expand view if current view is outside new absolute bounds
+        if (viewStartTime.isBefore(minTime)) {
+            viewStartTime = minTime;
+        }
+        if (viewEndTime.isAfter(maxTime)) {
+            viewEndTime = maxTime;
+        }
+        
+        // Constrain selection to new absolute bounds
+        if (selectedStartTime.isBefore(minTime)) {
+            selectedStartTime = minTime;
+        }
+        if (selectedEndTime.isAfter(maxTime)) {
+            selectedEndTime = maxTime;
+        }
+        
+        repaint();
     }
     
     private void fireSelectionChanged() {

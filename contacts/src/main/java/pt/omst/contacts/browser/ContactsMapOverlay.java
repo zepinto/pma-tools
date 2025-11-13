@@ -2,6 +2,8 @@ package pt.omst.contacts.browser;
 
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.event.MouseEvent;
+import java.util.List;
 
 import javax.swing.JComponent;
 
@@ -12,11 +14,22 @@ import pt.omst.rasterlib.contacts.ContactCollection;
 
 public class ContactsMapOverlay extends AbstractMapOverlay {
 
+    private CompressedContact selectedContact = null;
+    public static interface ContactSelectionListener {
+        public void contactSelected(CompressedContact contact);
+    }
+
     private ContactCollection collection;
+    private ContactSelectionListener selectionListener = null;
 
     public ContactsMapOverlay(ContactCollection collection) {
         this.collection = collection;
     }
+
+    public void setContactSelectionListener(ContactSelectionListener listener) {
+        this.selectionListener = listener;
+    }
+
 
     @Override
     public void cleanup(SlippyMap map) {
@@ -28,11 +41,56 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         // nothing to initialize
     }    
 
-    private void paintContact(Graphics2D g, SlippyMap map, CompressedContact contact) {
-        double[] screenPos = map.latLonToPixel(
+    @Override
+    public boolean processMouseMotionEvent(MouseEvent e, SlippyMap map) {
+        for (CompressedContact contact : collection.getFilteredContacts()) {
+            double[] screenPos = map.latLonToScreen(
+                contact.getContact().getLatitude(), 
+                contact.getContact().getLongitude());
+            double dx = e.getX() - screenPos[0];
+            double dy = e.getY() - screenPos[1];
+            double distanceSq = dx * dx + dy * dy;
+            if (distanceSq <= 100) { // within 10 pixels
+                map.setToolTipText(contact.getContact().getLabel());
+                return true;
+            }
+        }
+        map.setToolTipText(null);
+        return false;
+    }
+
+    @Override
+    public boolean processMouseEvent(MouseEvent e, SlippyMap map) {
+        if (e.getID() == MouseEvent.MOUSE_CLICKED) {
+            for (CompressedContact contact : collection.getFilteredContacts()) {
+                double[] screenPos = map.latLonToScreen(
+                    contact.getContact().getLatitude(), 
+                    contact.getContact().getLongitude());
+                double dx = e.getX() - screenPos[0];
+                double dy = e.getY() - screenPos[1];
+                double distanceSq = dx * dx + dy * dy;
+                if (distanceSq <= 100) { // within 10 pixels
+                   System.out.println("Clicked on contact: " + contact.getContact().getLabel());
+                   selectedContact = contact;
+                   if (selectionListener != null) {
+                       selectionListener.contactSelected(contact);
+                       return true;
+                   }                   
+                }
+            }
+        }
+        return false;
+    }
+    
+    private void paintContact(Graphics2D g, SlippyMap map, CompressedContact contact, boolean isSelected) {
+        double[] screenPos = map.latLonToScreen(
             contact.getContact().getLatitude(), 
             contact.getContact().getLongitude());
-        
+        if (isSelected) {
+            g.setColor(java.awt.Color.RED);
+        } else {
+            g.setColor(java.awt.Color.BLUE);
+        }
         g.fillOval(
             (int)screenPos[0] - 5, 
             (int)screenPos[1] - 5, 
@@ -49,8 +107,12 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         super.paint(g, c);
         SlippyMap map = (SlippyMap) c;
         Graphics2D g2d = (Graphics2D) g.create();
-        for (CompressedContact contact : collection.getFilteredContacts()) {
-            paintContact(g2d, map, contact);
+        List<CompressedContact> contactsToPaint = collection.getFilteredContacts();
+        for (CompressedContact contact : contactsToPaint) {
+            paintContact(g2d, map, contact, false);
+        }
+        if (selectedContact != null) {
+            paintContact(g2d, map, selectedContact, true);
         }
         g2d.dispose();
     }

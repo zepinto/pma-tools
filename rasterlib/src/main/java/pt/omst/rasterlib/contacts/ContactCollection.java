@@ -34,9 +34,9 @@ public class ContactCollection implements MapPainter {
         return new ContactCollection();
     }
 
-    public void addRootFolder(File folder) {
-        
+    public void addRootFolder(File folder) {        
         List<File> contactFiles = findContacts(folder);
+        log.info("Found {} contacts in folder {}", contactFiles.size(), folder.getAbsolutePath());
         for (File contactFile : contactFiles) {
             try {
                 addContact(contactFile);              
@@ -58,15 +58,29 @@ public class ContactCollection implements MapPainter {
         this.currentRegion = region;
         this.currentStart = start;
         this.currentEnd = end;
-        filteredContacts.clear();
-        for (CompressedContact contact : quadTree.query(region)) {
-            if (contact.getTimestamp() >= start.toEpochMilli() && contact.getTimestamp() <= end.toEpochMilli()) {
-                filteredContacts.add(contact.getZctFile());
-            }
+        ArrayList<File> newFilteredContacts = new ArrayList<>();
+        List<CompressedContact> contactsInRegion = quadTree.getAll();
+
+        long startMillis = start.toEpochMilli();
+        long endMillis = end.toEpochMilli();
+
+        log.info("Applying filters: region {}, between {} and {}", region, start, end);
+        for (CompressedContact contact : contactsInRegion) {
+            //FIXME: improve filtering performance
+            
+            if (contact.getTimestamp() > endMillis)
+                continue;
+            if (contact.getTimestamp() < startMillis)
+                continue;
+            newFilteredContacts.add(contact.getZctFile());
         }
+        
+        log.info("Filtered contacts: {} in region {} between {} and {}", 
+            newFilteredContacts.size(), region, start, end);
+        this.filteredContacts = newFilteredContacts;
     }
 
-    public List<CompressedContact> getFilteredContacts() {
+    public List<CompressedContact> getFilteredContacts() {        
         List<CompressedContact> contacts = new ArrayList<>();
         for (File file : filteredContacts) {
             CompressedContact contact = quadTree.get(file);
