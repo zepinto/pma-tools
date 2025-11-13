@@ -17,7 +17,6 @@ import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.geom.RoundRectangle2D;
 
-import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -156,7 +155,7 @@ public class DataChip extends JPanel {
         if (dataSource instanceof FolderDataSource) {
             bgColor = isDark ? DARK_FOLDER_BG : LIGHT_FOLDER_BG;
             borderColor = isDark ? DARK_FOLDER_BORDER : LIGHT_FOLDER_BORDER;
-        } else if (dataSource instanceof DatabaseDataSource) {
+        } else if (dataSource instanceof PulvisConnection) {
             bgColor = isDark ? DARK_DB_BG : LIGHT_DB_BG;
             borderColor = isDark ? DARK_DB_BORDER : LIGHT_DB_BORDER;
         } else {

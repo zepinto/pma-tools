@@ -24,23 +24,37 @@ import pt.omst.neptus.util.GuiUtils;
  */
 @Slf4j
 public class ContactCollection implements MapPainter {
-    QuadTree<File, CompressedContact> quadTree = new QuadTree<>();
-
-    //private final ArrayList<CompressedContact> contacts = new ArrayList<>();
-    private final File folder;
+    private QuadTree<File, CompressedContact> quadTree = new QuadTree<>();
+    private ArrayList<File> filteredContacts = new ArrayList<>();
+    private QuadTree.Region currentRegion = null;
+    private Instant currentStart = null;
+    private Instant currentEnd = null;
 
     public static ContactCollection empty() {
         return new ContactCollection();
     }
 
     public void addRootFolder(File folder) {
+        
         List<File> contactFiles = findContacts(folder);
         for (File contactFile : contactFiles) {
             try {
-                addContact(contactFile);                
+                addContact(contactFile);              
             }
             catch (IOException e) {
                 log.error("Error on contact {}", contactFile.getAbsolutePath(), e);                
+            }
+        }        
+    }
+
+    public void applyFilters(QuadTree.Region region, Instant start, Instant end) {
+        this.currentRegion = region;
+        this.currentStart = start;
+        this.currentEnd = end;
+        filteredContacts.clear();
+        for (CompressedContact contact : quadTree.query(region)) {
+            if (contact.getTimestamp() >= start.toEpochMilli() && contact.getTimestamp() <= end.toEpochMilli()) {
+                filteredContacts.add(contact.getZctFile());
             }
         }
     }
@@ -55,8 +69,7 @@ public class ContactCollection implements MapPainter {
     }
 
     private ContactCollection() {
-        this.folder = null; // No folder associated with an empty collection
-        // Empty constructor for creating an empty collection
+        
     }
 
     /**
@@ -65,7 +78,6 @@ public class ContactCollection implements MapPainter {
      * @throws IOException if an error occurs while reading the contacts
      */
     public ContactCollection(File folder) throws IOException{
-        this.folder = folder;
         List<File> contactFiles = findContacts(folder);
         for (File contactFile : contactFiles) {
             try {
@@ -96,7 +108,7 @@ public class ContactCollection implements MapPainter {
      * @throws IOException if an error occurs while reading the contact
      */
     public void addContact(File zctContact) throws IOException {
-        quadTree.add(zctContact, new CompressedContact(zctContact));
+        quadTree.add(zctContact, new CompressedContact(zctContact));        
     }
 
     /**
@@ -105,22 +117,6 @@ public class ContactCollection implements MapPainter {
      */
     public CompressedContact removeContact(File zctContact) {
         return quadTree.remove(zctContact);
-    }
-
-    /**
-     * Returns the contacts between two timestamps.
-     * @param start the start timestamp
-     * @param end the end timestamp
-     * @return the contacts between the two timestamps
-     */
-    public List<CompressedContact> contactsBetween(Instant start, Instant end) {
-        ArrayList<CompressedContact> contactsBetween = new ArrayList<>();
-        for (CompressedContact contact : quadTree.getAll()) {
-            if (contact.getTimestamp() >= start.toEpochMilli() && contact.getTimestamp() <= end.toEpochMilli()) {
-                contactsBetween.add(contact);
-            }
-        }
-        return contactsBetween;
     }
 
     /**

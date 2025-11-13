@@ -21,7 +21,7 @@ class QuadTreeTest {
     /**
      * Simple test object that implements Locatable.
      */
-    static class TestPoint implements QuadTree.Locatable {
+    static class TestPoint implements QuadTree.Locatable<TestPoint> {
         private final double lat;
         private final double lon;
         private final String name;
@@ -49,6 +49,14 @@ class QuadTreeTest {
         @Override
         public String toString() {
             return name + " (" + lat + ", " + lon + ")";
+        }
+
+        @Override
+        public int compareTo(TestPoint other) {
+            // Compare by latitude first, then longitude
+            int latComp = Double.compare(this.lat, other.lat);
+            if (latComp != 0) return latComp;
+            return Double.compare(this.lon, other.lon);
         }
     }
 

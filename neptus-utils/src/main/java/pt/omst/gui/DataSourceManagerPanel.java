@@ -14,8 +14,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.prefs.Preferences;
 
-import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -30,8 +30,8 @@ import pt.omst.gui.datasource.DataSource;
 import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.DatabaseConnectionDialog;
-import pt.omst.gui.datasource.DatabaseDataSource;
 import pt.omst.gui.datasource.FolderDataSource;
+import pt.omst.gui.datasource.PulvisConnection;
 import pt.omst.neptus.util.GuiUtils;
 import pt.omst.neptus.util.I18n;
 
@@ -109,7 +109,7 @@ public class DataSourceManagerPanel extends JPanel {
         return actionBar;
     }
     
-    private void addFolder() {
+    public void addFolder() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fileChooser.setDialogTitle(I18n.textOrDefault("datasource.select.folder", "Select Folder"));
@@ -177,7 +177,7 @@ public class DataSourceManagerPanel extends JPanel {
     
     private void addDatabaseConnection() {
         Window window = SwingUtilities.getWindowAncestor(this);
-        DatabaseDataSource dataSource = DatabaseConnectionDialog.showDialog(window);
+        PulvisConnection dataSource = DatabaseConnectionDialog.showDialog(window);
         
         if (dataSource != null) {
             addDataSource(dataSource);
@@ -258,6 +258,26 @@ public class DataSourceManagerPanel extends JPanel {
     public List<DataSource> getDataSources() {
         return new ArrayList<>(dataSources);
     }
+
+    public List<PulvisConnection> getDatabaseConnections() {
+        List<PulvisConnection> dbConnections = new ArrayList<>();
+        for (DataSource source : dataSources) {
+            if (source instanceof PulvisConnection) {
+                dbConnections.add((PulvisConnection) source);
+            }
+        }
+        return dbConnections;
+    }
+
+    public List<File> getFolderDataSources() {
+        List<File> folders = new ArrayList<>();
+        for (DataSource source : dataSources) {
+            if (source instanceof FolderDataSource) {
+                folders.add(((FolderDataSource) source).getFolder());
+            }
+        }
+        return folders;
+    }
     
     /**
      * Removes all data sources from the panel.
@@ -309,6 +329,87 @@ public class DataSourceManagerPanel extends JPanel {
                 log.error("Error notifying listener of source removal", e);
             }
         }
+    }
+    
+    /**
+     * Saves the current data sources to user preferences.
+     * Stores folder paths and database connection details.
+     */
+    public void saveToPreferences() {
+        Preferences prefs = Preferences.userNodeForPackage(DataSourceManagerPanel.class);
+        
+        // Clear previous entries
+        try {
+            prefs.clear();
+        } catch (Exception e) {
+            log.error("Error clearing preferences", e);
+        }
+        
+        // Count each type
+        int folderCount = 0;
+        int dbCount = 0;
+        
+        for (DataSource source : dataSources) {
+            if (source instanceof FolderDataSource) {
+                FolderDataSource folder = (FolderDataSource) source;
+                prefs.put("folder." + folderCount, folder.getFolder().getAbsolutePath());
+                folderCount++;
+            } else if (source instanceof PulvisConnection) {
+                PulvisConnection db = (PulvisConnection) source;
+                prefs.put("db." + dbCount + ".host", db.getHost());
+                prefs.putInt("db." + dbCount + ".port", db.getPort());
+                dbCount++;
+            }
+        }
+        
+        prefs.putInt("folder.count", folderCount);
+        prefs.putInt("db.count", dbCount);
+        
+        // Force flush to ensure preferences are written to disk
+        try {
+            prefs.flush();
+        } catch (Exception e) {
+            log.error("Error flushing preferences", e);
+        }
+        
+        log.info("Saved {} folders and {} database connections to preferences", folderCount, dbCount);
+    }
+    
+    /**
+     * Loads data sources from user preferences.
+     * Restores previously saved folder paths and database connections.
+     */
+    public void loadFromPreferences() {
+        Preferences prefs = Preferences.userNodeForPackage(DataSourceManagerPanel.class);
+        
+        // Load folders
+        int folderCount = prefs.getInt("folder.count", 0);
+        for (int i = 0; i < folderCount; i++) {
+            String path = prefs.get("folder." + i, null);
+            if (path != null) {
+                File folder = new File(path);
+                if (folder.exists() && folder.isDirectory()) {
+                    addDataSource(new FolderDataSource(folder));
+                    log.debug("Loaded folder from preferences: {}", path);
+                } else {
+                    log.warn("Folder from preferences no longer exists: {}", path);
+                }
+            }
+        }
+        
+        // Load database connections
+        int dbCount = prefs.getInt("db.count", 0);
+        for (int i = 0; i < dbCount; i++) {
+            String host = prefs.get("db." + i + ".host", null);
+            int port = prefs.getInt("db." + i + ".port", 8080);
+            
+            if (host != null) {
+                addDataSource(new PulvisConnection(host, port));
+                log.debug("Loaded database connection from preferences: {}:{}", host, port);
+            }
+        }
+        
+        log.info("Loaded {} folders and {} database connections from preferences", folderCount, dbCount);
     }
     
     /**

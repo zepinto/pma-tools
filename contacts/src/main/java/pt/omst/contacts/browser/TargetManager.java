@@ -10,7 +10,9 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -81,6 +83,45 @@ public class TargetManager extends JPanel implements AutoCloseable {
         mainSplitPane.revalidate();
         mainSplitPane.repaint();
     }
+
+    public void savePreferences() {
+        // store divider location and data sources
+        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
+        
+        // Save divider location
+        int dividerLocation = mainSplitPane.getDividerLocation();
+        prefs.putInt("mainSplitPane.dividerLocation", dividerLocation);
+        log.debug("Saved divider location: {}", dividerLocation);
+        
+        try {
+            dataSourceManager.saveToPreferences();
+            // Force flush to ensure preferences are written to disk
+            prefs.flush();
+        } catch (Exception e) {
+            log.error("Error saving preferences", e);
+        }
+    }
+
+    public void loadPreferences() {
+        // load divider location and data sources
+        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
+        
+        // Load divider location (default to -1 which means use default)
+        int dividerLocation = prefs.getInt("mainSplitPane.dividerLocation", -1);
+        if (dividerLocation > 0) {
+            // Defer setting divider location until after component is visible
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                mainSplitPane.setDividerLocation(dividerLocation);
+                log.debug("Loaded divider location: {}", dividerLocation);
+            });
+        }
+
+        try {
+            dataSourceManager.loadFromPreferences();                
+        } catch (Exception e) {
+            log.error("Error loading data sources from preferences", e);
+        }
+    }
     
     /**
      * Creates a new MapViewerLayout with specified time range.
@@ -94,6 +135,7 @@ public class TargetManager extends JPanel implements AutoCloseable {
         
         // Initialize components
         dataSourceManager = new DataSourceManagerPanel();
+
         slippyMap = new SlippyMap();
         timeSelector = new ZoomableTimeIntervalSelector(minTime, maxTime);
         observationsPanel = new ObservationsPanel();
@@ -152,6 +194,13 @@ public class TargetManager extends JPanel implements AutoCloseable {
         add(topPanel, BorderLayout.NORTH);
         add(mainSplitPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
+
+        loadPreferences();
+
+        // add shutdown hook to save preferences on exit
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            savePreferences();
+        }));
     }
     
     /**
@@ -224,8 +273,8 @@ public class TargetManager extends JPanel implements AutoCloseable {
      * @param maxTime New maximum time
      */
     public void setTimeRange(Instant minTime, Instant maxTime) {
-        timeSelector.setAbsoluteMinTime(minTime);
-        timeSelector.setAbsoluteMaxTime(maxTime);
+        timeSelector.setAbsoluteMinTime(minTime.minus(Duration.ofDays(1)));
+        timeSelector.setAbsoluteMaxTime(maxTime.plus(Duration.ofDays(1)));
     }
     
     /**
@@ -344,12 +393,14 @@ public class TargetManager extends JPanel implements AutoCloseable {
         frame.setSize(1400, 900);
         frame.setJMenuBar(createMenuBar(frame));
         frame.add(layout);
+        layout.loadPreferences();
         GuiUtils.centerOnScreen(frame);
         frame.setVisible(true);
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
                 try {
+                    layout.savePreferences();
                     layout.close();
                 } catch (Exception ex) {
                     log.error("Error closing layout", ex);

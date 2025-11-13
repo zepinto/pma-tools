@@ -29,7 +29,7 @@ import pt.omst.rasterlib.Observation;
  */
 @Getter
 @Slf4j
-public class CompressedContact implements MapMarker, QuadTree.Locatable {
+public class CompressedContact implements MapMarker, QuadTree.Locatable<CompressedContact> {
 
     /**
      * The contact object.
@@ -212,6 +212,11 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable {
     @Override
     public double getLongitude() {
         return location.getLongitudeDegs();
+    }
+
+    @Override
+    public int compareTo(CompressedContact other) {
+        return this.getZctFile().getAbsolutePath().compareTo(other.getZctFile().getAbsolutePath());
     }
 
 }

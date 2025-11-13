@@ -5,11 +5,14 @@
 //***************************************************************************
 package pt.omst.rasterlib.contacts;
 
-import lombok.Getter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
+
+import lombok.Getter;
 
 /**
  * A generic QuadTree implementation for spatial indexing of objects.
@@ -18,13 +21,13 @@ import java.util.Map;
  * @param <K> the type of key used to identify objects
  * @param <V> the type of value stored in the tree (must be Locatable)
  */
-public class QuadTree<K, V extends QuadTree.Locatable> {
+public class QuadTree<K, V extends QuadTree.Locatable<V>> {
 
     /**
      * Interface for objects that can be stored in the QuadTree.
      * Objects must provide latitude and longitude coordinates.
      */
-    public interface Locatable {
+    public interface Locatable<V> extends Comparable<V> {
         /**
          * @return the latitude in degrees
          */
@@ -340,15 +343,25 @@ public class QuadTree<K, V extends QuadTree.Locatable> {
      * @param region the region to query
      * @return a list of all values within the region
      */
-    public List<V> query(Region region) {
+    public List<V> query(Region region, Predicate<V>... filters) {
         List<Entry<K, V>> entries = new ArrayList<>();
         root.query(region, entries);
         List<V> results = new ArrayList<>();
         for (Entry<K, V> entry : entries) {
-            results.add(entry.value);
+            boolean matches = true;
+            for (Predicate<V> filter : filters) {
+                if (!filter.test(entry.value)) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                results.add(entry.value);
+            }
         }
+        Collections.sort(results);
         return results;
-    }
+    }    
 
     /**
      * Returns all objects in the QuadTree.
