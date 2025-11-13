@@ -8,12 +8,10 @@ package pt.omst.contacts;
 import java.awt.BorderLayout;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 
 import javax.swing.JPanel;
 
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.mapview.MapMarker;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.core.LocationType;
 import pt.omst.rasterlib.IndexedRaster;
@@ -23,7 +21,7 @@ import pt.omst.rasterlib.mapview.IndexedRasterPainter;
 @Slf4j
 public class MapViewer extends JPanel {
 
-    private final SlippyMap renderer2D = new SlippyMap(new ArrayList<MapMarker>());
+    private final SlippyMap renderer2D = new SlippyMap();
 
     public MapViewer(File folder, IndexedRaster raster) {
         setLayout(new BorderLayout());

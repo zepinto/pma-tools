@@ -37,7 +37,7 @@ public class ContactBrowser extends JPanel {
         collection = new ContactCollection(folder);
 
         editor = new ContactEditor();
-        map = new SlippyMap(collection.getAllContacts());
+        map = new SlippyMap();
         table = new JXTable();
         ZContactTableModel model = new ZContactTableModel(collection);
         table.setModel(model);

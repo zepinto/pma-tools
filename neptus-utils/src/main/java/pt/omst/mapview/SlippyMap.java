@@ -17,6 +17,8 @@ import java.awt.event.MouseMotionAdapter;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -24,7 +26,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
@@ -52,7 +53,6 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private double mouseLat = 0.0;  // Current mouse latitude
     private double mouseLon = 0.0;  // Current mouse longitude
     private final File baseCacheDir;    // Base directory for disk cache
-    private int clickedPointIndex = -1; // Index of the clicked point (-1 if none)
     private boolean darkMode = false; // Dark mode flag
     private int mouseHoverIndex = -1; // Index of the hovered point (-1 if none)
     private final ArrayList<MapMarker> points = new ArrayList<>(); // List of points to display
@@ -62,13 +62,17 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private final CopyOnWriteArrayList<MapPainter> rasterPainters = new CopyOnWriteArrayList<>();
     private javax.swing.Timer repaintTimer;
     private MapOverlayManager overlayManager;
+    private PropertyChangeSupport propertyChangeSupport; // Initialize after super() to avoid FlatLaf NPE
+    private double[] lastVisibleBounds = null;
     
-    public SlippyMap() {
-        this(new ArrayList<>());
-    }
 
-    public SlippyMap(List<? extends MapMarker> points) {
-        this.points.addAll(points);
+
+    public SlippyMap() {
+        super();
+        
+        // Initialize propertyChangeSupport after super() to avoid NPE during FlatLaf UI installation
+        propertyChangeSupport = new PropertyChangeSupport(this);
+        
         setDarkMode(GuiUtils.isDarkTheme());
         
         // Get preferences for zoom and center
@@ -222,6 +226,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 cx = newCx;
                 cy = newCy;
                 saveViewPreferences();
+                fireVisibleBoundsChanged();
                 repaint();
             } else if (rotation > 0 && z > 0) { // Zoom out
                 double newCx = cx / 2.0 + width / 4.0 - mouseX / 2.0;
@@ -230,6 +235,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 cx = newCx;
                 cy = newCy;
                 saveViewPreferences();
+                fireVisibleBoundsChanged();
                 repaint();
             }
         });
@@ -252,27 +258,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 lastPos[0] = e.getX();
                 lastPos[1] = e.getY();
 
-                // Check for point click
-                clickedPointIndex = -1;
-                double px = cx - getWidth() / 2.0;
-                double py = cy - getHeight() / 2.0;
-                for (int i = 0; i < points.size(); i++) {
-                    MapMarker point = points.get(i);
-                    double[] xy = latLonToPixel(point.getLatitude(), point.getLongitude(), z);
-                    int screenX = (int) (xy[0] - px);
-                    int screenY = (int) (xy[1] - py);
-                    double dist = Math.sqrt(Math.pow(e.getX() - screenX, 2) + Math.pow(e.getY() - screenY, 2));
-                    if (dist <= 10) { // Click radius of 10 pixels
-                        clickedPointIndex = i;
-                        String message = String.format("Point %d: %s\nLat %.5f, Lon %.5f",
-                                i, point.getLabel(), point.getLatitude(), point.getLongitude());
-                        System.out.println(message);
-                        //JOptionPane.showMessageDialog(SlippyMap.this, message,
-                        //        "Point Clicked", JOptionPane.INFORMATION_MESSAGE);
-                        repaint();
-                        break;
-                    }
-                }
+                
             }
             
             @Override
@@ -294,6 +280,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 // Save preferences after drag is complete
                 if (!e.isPopupTrigger()) {
                     saveViewPreferences();
+                    fireVisibleBoundsChanged();
                 }
                 repaint(); // Repaint to show rasters
             }
@@ -385,6 +372,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         cx = xy[0];
         cy = xy[1];
         z = zoom;
+        fireVisibleBoundsChanged();
         repaint();
         mouseHoverIndex = -1; // Reset hover index
     }
@@ -820,6 +808,83 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     }
     
     /**
+     * Add a PropertyChangeListener to be notified when the visible bounds change.
+     * The property name is "visibleBounds" and the new value is a double[] array: [minLat, minLon, maxLat, maxLon]
+     */
+    @Override
+    public void addPropertyChangeListener(PropertyChangeListener listener) {
+        if (propertyChangeSupport != null) {
+            propertyChangeSupport.addPropertyChangeListener(listener);
+            log.info("Added PropertyChangeListener: {}", listener.getClass().getSimpleName());
+        } else {
+            // During construction (FlatLaf UI installation), delegate to parent
+            super.addPropertyChangeListener(listener);
+            log.info("Added PropertyChangeListener to parent (during construction): {}", listener.getClass().getSimpleName());
+        }
+    }
+    
+    /**
+     * Add a PropertyChangeListener for a specific property.
+     * @param propertyName the name of the property to listen to
+     * @param listener the PropertyChangeListener to add
+     */
+    @Override
+    public void addPropertyChangeListener(String propertyName, PropertyChangeListener listener) {
+        if (propertyChangeSupport != null) {
+            propertyChangeSupport.addPropertyChangeListener(propertyName, listener);
+            log.info("Added PropertyChangeListener for property '{}': {}", propertyName, listener.getClass().getSimpleName());
+        } else {
+            // During construction, delegate to parent
+            super.addPropertyChangeListener(propertyName, listener);
+            log.info("Added PropertyChangeListener for property '{}' to parent (during construction): {}", propertyName, listener.getClass().getSimpleName());
+        }
+    }
+    
+    /**
+     * Remove a PropertyChangeListener.
+     */
+    @Override
+    public void removePropertyChangeListener(PropertyChangeListener listener) {
+        if (propertyChangeSupport != null) {
+            propertyChangeSupport.removePropertyChangeListener(listener);
+        } else {
+            // During construction, delegate to parent
+            super.removePropertyChangeListener(listener);
+        }
+    }
+    
+    /**
+     * Remove a PropertyChangeListener for a specific property.
+     * @param propertyName the name of the property
+     * @param listener the PropertyChangeListener to remove
+     */
+    @Override
+    public void removePropertyChangeListener(String propertyName, PropertyChangeListener listener) {
+        if (propertyChangeSupport != null) {
+            propertyChangeSupport.removePropertyChangeListener(propertyName, listener);
+        } else {
+            // During construction, delegate to parent
+            super.removePropertyChangeListener(propertyName, listener);
+        }
+    }
+    
+    /**
+     * Fire a property change event when visible bounds change.
+     */
+    private void fireVisibleBoundsChanged() {
+        if (propertyChangeSupport == null) {
+            log.warn("propertyChangeSupport is null, cannot fire bounds change event");
+            return;
+        }
+        double[] newBounds = getVisibleBounds();
+        log.info("Firing visibleBounds change: {} -> {}", 
+                  lastVisibleBounds != null ? java.util.Arrays.toString(lastVisibleBounds) : "null",
+                  java.util.Arrays.toString(newBounds));
+        propertyChangeSupport.firePropertyChange("visibleBounds", lastVisibleBounds, newBounds);
+        lastVisibleBounds = newBounds;
+    }
+    
+    /**
      * Get the visible bounds of the current map view.
      * Returns array: [minLat, minLon, maxLat, maxLon]
      */
@@ -892,7 +957,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             javax.swing.JFrame frame = new javax.swing.JFrame("Slippy Map with Coordinates");
             frame.setDefaultCloseOperation(javax.swing.JFrame.EXIT_ON_CLOSE);
             GuiUtils.setLookAndFeel();
-            SlippyMap map = new SlippyMap(new ArrayList<>());
+            SlippyMap map = new SlippyMap();
             frame.add(map);
             frame.setSize(800, 600);
             frame.setVisible(true);

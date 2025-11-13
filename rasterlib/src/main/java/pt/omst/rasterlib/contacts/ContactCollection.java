@@ -47,6 +47,13 @@ public class ContactCollection implements MapPainter {
         }        
     }
 
+    public void removeRootFolder(File folder) {
+        List<File> contactFiles = findContacts(folder);
+        for (File contactFile : contactFiles) {
+            removeContact(contactFile);            
+        }        
+    }
+
     public void applyFilters(QuadTree.Region region, Instant start, Instant end) {
         this.currentRegion = region;
         this.currentStart = start;
@@ -59,6 +66,17 @@ public class ContactCollection implements MapPainter {
         }
     }
 
+    public List<CompressedContact> getFilteredContacts() {
+        List<CompressedContact> contacts = new ArrayList<>();
+        for (File file : filteredContacts) {
+            CompressedContact contact = quadTree.get(file);
+            if (contact != null) {
+                contacts.add(contact);
+            }
+        }
+        return contacts;
+    }
+
     public static ContactCollection fromFolder(File folder) {        
         try {
             return new ContactCollection(folder);
@@ -68,7 +86,7 @@ public class ContactCollection implements MapPainter {
         }
     }
 
-    private ContactCollection() {
+    public ContactCollection() {
         
     }
 

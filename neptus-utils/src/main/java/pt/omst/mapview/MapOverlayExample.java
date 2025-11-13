@@ -24,12 +24,7 @@ public class MapOverlayExample {
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setLayout(new BorderLayout());
             
-            // Create map with some example points
-            ArrayList<MapMarker> points = new ArrayList<>();
-            points.add(new SimpleMapMarker(40.64, -8.65, "Porto"));
-            points.add(new SimpleMapMarker(38.72, -9.14, "Lisbon"));
-            
-            SlippyMap map = new SlippyMap(points);
+            SlippyMap map = new SlippyMap();
             
             // Create overlays
             GridOverlay gridOverlay = new GridOverlay();

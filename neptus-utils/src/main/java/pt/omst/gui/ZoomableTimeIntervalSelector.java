@@ -165,7 +165,6 @@ public class ZoomableTimeIntervalSelector extends JPanel {
                 if (newStart.isAfter(selectedEndTime)) newStart = selectedEndTime;
                 selectedStartTime = newStart;
                 repaint();
-                fireSelectionChanged();
                 break;
                 
             case END_HANDLE:
@@ -174,7 +173,6 @@ public class ZoomableTimeIntervalSelector extends JPanel {
                 if (newEnd.isBefore(selectedStartTime)) newEnd = selectedStartTime;
                 selectedEndTime = newEnd;
                 repaint();
-                fireSelectionChanged();
                 break;
                 
             case PANNING:
@@ -205,6 +203,11 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     }
     
     private void handleMouseReleased(MouseEvent e) {
+        // Fire property change only when handle dragging stops
+        if (dragMode == DragMode.START_HANDLE || dragMode == DragMode.END_HANDLE) {
+            fireSelectionChanged();
+        }
+        
         dragMode = DragMode.NONE;
         setCursor(Cursor.getDefaultCursor());
     }

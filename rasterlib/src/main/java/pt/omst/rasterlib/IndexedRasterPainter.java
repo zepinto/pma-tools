@@ -11,7 +11,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -225,7 +224,7 @@ public class IndexedRasterPainter implements MapPainter {
 
 
     public static void main(String[] args) {
-        SlippyMap renderer = new SlippyMap(new ArrayList<>());
+        SlippyMap renderer = new SlippyMap();
         GuiUtils.testFrame(renderer, "Indexed Raster Painter");
 
         File folder = new File("/LOGS/");

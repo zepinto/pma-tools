@@ -49,6 +49,16 @@ public class QuadTree<K, V extends QuadTree.Locatable<V>> {
         private final double minLon;
         private final double maxLon;
 
+        public Region(double[] coords) {
+            if (coords.length != 4) {
+                throw new IllegalArgumentException("Coordinates array must have exactly 4 elements: [minLat, maxLat, minLon, maxLon]");
+            }
+            this.minLat = coords[0];
+            this.maxLat = coords[1];
+            this.minLon = coords[2];
+            this.maxLon = coords[3];
+        }
+
         public Region(double minLat, double maxLat, double minLon, double maxLon) {
             this.minLat = minLat;
             this.maxLat = maxLat;
