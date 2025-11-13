@@ -10,7 +10,6 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.prefs.Preferences;
 
@@ -27,12 +26,14 @@ import javax.swing.JSplitPane;
 import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.licences.LicenseChecker;
-import pt.omst.licences.LicensePanel;
-import pt.omst.licences.NeptusLicense;
 import pt.omst.contacts.ObservationsPanel;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
+import pt.omst.gui.datasource.DataSourceEvent;
+import pt.omst.gui.datasource.DataSourceListener;
+import pt.omst.licences.LicenseChecker;
+import pt.omst.licences.LicensePanel;
+import pt.omst.licences.NeptusLicense;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.neptus.util.GuiUtils;
 import pt.omst.rasterlib.Contact;
@@ -47,7 +48,7 @@ import pt.omst.rasterlib.Contact;
  */
 @Slf4j
 @Getter
-public class TargetManager extends JPanel implements AutoCloseable {
+public class TargetManager extends JPanel implements AutoCloseable, DataSourceListener{
     
     private final SlippyMap slippyMap;
     private final DataSourceManagerPanel dataSourceManager;
@@ -67,62 +68,6 @@ public class TargetManager extends JPanel implements AutoCloseable {
         this(Instant.now().minusSeconds(86400), Instant.now()); // Default: last 24 hours
     }
 
-    public void showContactDetails() {
-        eastPanelVisible = true;
-        mainSplitPane.setRightComponent(eastPanel);
-        mainSplitPane.setDividerLocation(0.7);
-        toggleEastPanelButton.setText("▸");
-        mainSplitPane.revalidate();
-        mainSplitPane.repaint();
-    }
-
-    public void hideContactDetails() {
-        eastPanelVisible = false;
-        mainSplitPane.setRightComponent(null);
-        toggleEastPanelButton.setText("◂");
-        mainSplitPane.revalidate();
-        mainSplitPane.repaint();
-    }
-
-    public void savePreferences() {
-        // store divider location and data sources
-        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
-        
-        // Save divider location
-        int dividerLocation = mainSplitPane.getDividerLocation();
-        prefs.putInt("mainSplitPane.dividerLocation", dividerLocation);
-        log.debug("Saved divider location: {}", dividerLocation);
-        
-        try {
-            dataSourceManager.saveToPreferences();
-            // Force flush to ensure preferences are written to disk
-            prefs.flush();
-        } catch (Exception e) {
-            log.error("Error saving preferences", e);
-        }
-    }
-
-    public void loadPreferences() {
-        // load divider location and data sources
-        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
-        
-        // Load divider location (default to -1 which means use default)
-        int dividerLocation = prefs.getInt("mainSplitPane.dividerLocation", -1);
-        if (dividerLocation > 0) {
-            // Defer setting divider location until after component is visible
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                mainSplitPane.setDividerLocation(dividerLocation);
-                log.debug("Loaded divider location: {}", dividerLocation);
-            });
-        }
-
-        try {
-            dataSourceManager.loadFromPreferences();                
-        } catch (Exception e) {
-            log.error("Error loading data sources from preferences", e);
-        }
-    }
-    
     /**
      * Creates a new MapViewerLayout with specified time range.
      * 
@@ -135,9 +80,18 @@ public class TargetManager extends JPanel implements AutoCloseable {
         
         // Initialize components
         dataSourceManager = new DataSourceManagerPanel();
+        dataSourceManager.addDataSourceListener(this);
 
         slippyMap = new SlippyMap();
         timeSelector = new ZoomableTimeIntervalSelector(minTime, maxTime);
+
+        timeSelector.addPropertyChangeListener("selection", evt -> {
+            Instant[] selection = (Instant[]) evt.getNewValue();
+            Instant startTime = selection[0];
+            Instant endTime = selection[1];
+            log.info("Selection changed: {} to {}", startTime, endTime);
+        });
+        
         observationsPanel = new ObservationsPanel();
         contactDetailsPanel = new ContactDetailsFormPanel();
         
@@ -196,12 +150,101 @@ public class TargetManager extends JPanel implements AutoCloseable {
         add(bottomPanel, BorderLayout.SOUTH);
 
         loadPreferences();
-
-        // add shutdown hook to save preferences on exit
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            savePreferences();
-        }));
     }
+
+    public void showContactDetails() {
+        eastPanelVisible = true;
+        mainSplitPane.setRightComponent(eastPanel);
+        mainSplitPane.setDividerLocation(0.7);
+        toggleEastPanelButton.setText("▸");
+        mainSplitPane.revalidate();
+        mainSplitPane.repaint();
+    }
+
+    public void hideContactDetails() {
+        eastPanelVisible = false;
+        mainSplitPane.setRightComponent(null);
+        toggleEastPanelButton.setText("◂");
+        mainSplitPane.revalidate();
+        mainSplitPane.repaint();
+    }
+
+    public void savePreferences() {
+        // store divider location and data sources
+        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
+        
+        // Save divider location
+        int dividerLocation = mainSplitPane.getDividerLocation();
+        prefs.putInt("mainSplitPane.dividerLocation", dividerLocation);
+        log.debug("Saved divider location: {}", dividerLocation);
+        
+        // Save side panel visibility
+        prefs.putBoolean("eastPanel.visible", eastPanelVisible);
+        log.debug("Saved side panel visibility: {}", eastPanelVisible);
+        
+        // Save time selection
+        Instant startTime = timeSelector.getSelectedStartTime();
+        Instant endTime = timeSelector.getSelectedEndTime();
+        if (startTime != null && endTime != null) {
+            prefs.putLong("timeSelector.startTime", startTime.toEpochMilli());
+            prefs.putLong("timeSelector.endTime", endTime.toEpochMilli());
+            log.debug("Saved time selection: {} to {}", startTime, endTime);
+        }
+        
+        try {
+            dataSourceManager.saveToPreferences();
+            // Force flush to ensure preferences are written to disk
+            prefs.flush();
+        } catch (Exception e) {
+            log.error("Error saving preferences", e);
+        }
+    }
+
+    public void loadPreferences() {
+        // load divider location and data sources
+        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
+        
+        // Load divider location (default to -1 which means use default)
+        int dividerLocation = prefs.getInt("mainSplitPane.dividerLocation", -1);
+        if (dividerLocation > 0) {
+            // Defer setting divider location until after component is visible
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                mainSplitPane.setDividerLocation(dividerLocation);
+                log.debug("Loaded divider location: {}", dividerLocation);
+            });
+        }
+        
+        // Load side panel visibility (default to true)
+        boolean visible = prefs.getBoolean("eastPanel.visible", true);
+        log.debug("Loaded side panel visibility: {}", visible);
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            if (visible && !eastPanelVisible) {
+                showContactDetails();
+            } else if (!visible && eastPanelVisible) {
+                hideContactDetails();
+            }
+        });
+        
+        // Load time selection
+        long startTimeMillis = prefs.getLong("timeSelector.startTime", -1);
+        long endTimeMillis = prefs.getLong("timeSelector.endTime", -1);
+        if (startTimeMillis > 0 && endTimeMillis > 0) {
+            Instant startTime = Instant.ofEpochMilli(startTimeMillis);
+            Instant endTime = Instant.ofEpochMilli(endTimeMillis);
+            log.debug("Loaded time selection: {} to {}", startTime, endTime);
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                timeSelector.setSelectedInterval(startTime, endTime);
+            });
+        }
+
+        try {
+            dataSourceManager.loadFromPreferences();                
+        } catch (Exception e) {
+            log.error("Error loading data sources from preferences", e);
+        }
+    }
+    
+    
     
     /**
      * Creates the east panel containing observations and contact details.
@@ -273,8 +316,8 @@ public class TargetManager extends JPanel implements AutoCloseable {
      * @param maxTime New maximum time
      */
     public void setTimeRange(Instant minTime, Instant maxTime) {
-        timeSelector.setAbsoluteMinTime(minTime.minus(Duration.ofDays(1)));
-        timeSelector.setAbsoluteMaxTime(maxTime.plus(Duration.ofDays(1)));
+        timeSelector.setAbsoluteMinTime(minTime);
+        timeSelector.setAbsoluteMaxTime(maxTime);
     }
     
     /**
@@ -363,9 +406,18 @@ public class TargetManager extends JPanel implements AutoCloseable {
         if (slippyMap != null) {
             slippyMap.close();
         }
-        log.info("MapViewerLayout closed");
+        log.info("Target Manager closed");
     }
     
+    @Override
+    public void sourceAdded(DataSourceEvent event) {
+        
+    }
+
+    @Override
+    public void sourceRemoved(DataSourceEvent event) {
+        
+    }
     /**
      * Main method for testing the layout.
      */
