@@ -49,6 +49,11 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
      */
     private final long timestamp;
 
+    /**
+     * The category of the contact.
+     */
+    private String category = null;
+
     public CompressedContact(File zctFile) throws IOException {
         this.zctFile = zctFile;
         this.contact = CompressedContact.extractCompressedContact(zctFile);
@@ -58,7 +63,7 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         }
         this.location = new LocationType(contact.getLatitude(), contact.getLongitude());
         this.timestamp = contact.getObservations().stream().min(Comparator.comparing(Observation::getTimestamp))
-                .orElseThrow().getTimestamp().toInstant().toEpochMilli();
+                .orElseThrow().getTimestamp().toInstant().toEpochMilli();        
     }
 
     /**
@@ -127,17 +132,21 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
 
 
     public String getClassification() {
+        if (category != null)
+            return category;
+        
         for (Observation obs : contact.getObservations()) {
             if (obs.getAnnotations() == null) {
                 continue;
             }
             for (Annotation annotation : obs.getAnnotations()) {
                 if (annotation.getAnnotationType() == AnnotationType.CLASSIFICATION) {
-                    return annotation.getCategory();
+                    category = annotation.getCategory();
+                    break;
                 }
             }
         }
-        return "Unknown";
+        return category;
     }
 
     /**
@@ -179,6 +188,8 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         try {
             String json = Converter.ContactToJsonString(contact);
             ZipUtils.updateFileInZip(zctFile.getAbsolutePath(), "contact.json", json);
+            log.info("Contact saved to {}", zctFile.getAbsolutePath());
+            category = null; // reset cached category
             return true;
         }
         catch (IOException e) {

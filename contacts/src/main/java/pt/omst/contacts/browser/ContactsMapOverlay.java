@@ -2,6 +2,7 @@ package pt.omst.contacts.browser;
 
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
@@ -83,19 +84,33 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
     }
     
     private void paintContact(Graphics2D g, SlippyMap map, CompressedContact contact, boolean isSelected) {
+        
         double[] screenPos = map.latLonToScreen(
             contact.getContact().getLatitude(), 
             contact.getContact().getLongitude());
+
+        if (screenPos[0] < 0 || screenPos[1] < 0 ||
+            screenPos[0] > map.getWidth() || screenPos[1] > map.getHeight()) {
+            return; // outside visible area
+        }
+        String category = "UNKNOWN";
+        try {
+             category = contact.getClassification().toUpperCase();
+        } catch (Exception e) {
+             // ignore
+        }
+        Image icon = IconCache.getInstance().getIcon(category);
+                
         if (isSelected) {
             g.setColor(java.awt.Color.RED);
         } else {
             g.setColor(java.awt.Color.BLUE);
-        }
-        g.fillOval(
-            (int)screenPos[0] - 5, 
-            (int)screenPos[1] - 5, 
-            10, 
-            10);
+        }        
+        g.drawImage(
+            icon, 
+            (int)screenPos[0] - 8, 
+            (int)screenPos[1] - 8, 
+            null);
         g.drawString(
             contact.getContact().getLabel(),
             (int)screenPos[0] + 6, 

@@ -27,7 +27,6 @@ import javax.swing.SwingUtilities;
 import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.contacts.VerticalContactEditor;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
 import pt.omst.gui.datasource.DataSourceEvent;
