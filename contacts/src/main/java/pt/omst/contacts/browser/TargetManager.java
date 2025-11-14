@@ -22,12 +22,14 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
 
 import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.gui.DataSourceManagerPanel;
+import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
 import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
@@ -459,6 +461,13 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * Main method for testing the layout.
      */
     public static void main(String[] args) {
+
+        GuiUtils.setLookAndFeel();
+        
+        JWindow splash = LoadingPanel.showSplashScreen("Loading application...");
+        LoadingPanel panel = LoadingPanel.getLoadingPanel(splash);
+        panel.setStatus("Checking license...");        
+
         // Check license
         try {
             LicenseChecker.checkLicense(NeptusLicense.RASTERFALL);
@@ -467,14 +476,15 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             System.exit(1);
         }
 
-        GuiUtils.setTheme("light");
-        GuiUtils.setLookAndFeel();
+        panel.setStatus("Starting application...");
         
         // Create test time range (last 10 years to tomorrow)
         Instant minTime = Instant.now().minusSeconds(10L * 365 * 86400); // Approximately 10 years
         Instant maxTime = Instant.now().plusSeconds(86400); // 1 day ahead
         
         TargetManager layout = new TargetManager(minTime, maxTime);
+
+        panel.setStatus("Launching main window...");
 
         // Create frame manually to set menu bar before making visible
         JFrame frame = new JFrame("Target Manager");
@@ -485,6 +495,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         layout.loadPreferences();
         GuiUtils.centerOnScreen(frame);
         frame.setVisible(true);
+        splash.dispose();
+        
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {

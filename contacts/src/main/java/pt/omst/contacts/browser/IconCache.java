@@ -59,7 +59,7 @@ public class IconCache {
                     log.warn("Image not found: /icons/{}.png", icon);
                     return null;
                 }
-                ImageIcon scaledIcon = GuiUtils.getScaledIcon(image, 16, 16);
+                ImageIcon scaledIcon = GuiUtils.getScaledIcon(image, 12, 12);
                 if (scaledIcon == null) {
                     log.warn("Failed to scale icon: {}", icon);
                     return null;

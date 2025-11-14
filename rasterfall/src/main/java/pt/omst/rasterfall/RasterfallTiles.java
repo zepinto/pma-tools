@@ -89,14 +89,16 @@ public class RasterfallTiles extends JPanel implements Closeable {
         });
 
         tiles.sort(Comparator.naturalOrder());
-
-        int i = 0;
+        if (progressCallback != null) {
+            progressCallback.accept("Loading tiles...");
+        }
+            
         for (RasterfallTile tile : tiles) {
-            if (progressCallback != null) {
-                progressCallback.accept("Loading tile %03d / %03d".formatted(++i, tiles.size()));
-            }
             add(tile);
             verticalSize += tile.getPreferredSize().getHeight();
+        }
+        if (progressCallback != null) {
+            progressCallback.accept(String.format("%d Tiles loaded.", tiles.size()));
         }
         double width = tiles.getFirst().getPreferredSize().getWidth();
         setPreferredSize(new Dimension((int) width, (int) verticalSize));
