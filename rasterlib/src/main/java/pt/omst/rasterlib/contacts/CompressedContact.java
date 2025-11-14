@@ -5,23 +5,33 @@
 //***************************************************************************
 package pt.omst.rasterlib.contacts;
 
+import java.awt.Image;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
 
+import javax.imageio.ImageIO;
+
+import org.imgscalr.Scalr;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.mapview.MapMarker;
 import pt.omst.neptus.core.LocationType;
+import pt.omst.neptus.util.GuiUtils;
 import pt.omst.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
+import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.Observation;
 
 /**
@@ -49,10 +59,14 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
      */
     private final long timestamp;
 
+    private Image thumbnail = null;
+
     /**
      * The category of the contact.
      */
     private String category = null;
+
+    private File tempDir = null;
 
     public CompressedContact(File zctFile) throws IOException {
         this.zctFile = zctFile;
@@ -147,6 +161,53 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
             }
         }
         return category;
+    }
+
+    private File getTempDir() {
+        if (tempDir != null)
+            return tempDir;
+        try {
+            tempDir = Files.createTempDirectory("zct").toFile();
+            log.info("Unzipping file {} to {}", zctFile.getAbsolutePath(), tempDir);
+            ZipUtils.unzip(zctFile.getAbsolutePath(), tempDir.toPath());
+        }
+        catch (IOException e) {
+            log.warn("Error creating temp dir for {}: {}", zctFile.getAbsolutePath(), e.getMessage());
+        }
+        return tempDir;
+    }
+
+    public Image getThumbnail() {
+        if (thumbnail != null)
+            return thumbnail;        
+        try {
+            for (Observation obs : contact.getObservations()) {
+                if (obs.getRasterFilename() != null) {
+                    log.info("Loading thumbnail for contact {} from raster {}", 
+                            contact.getLabel(), obs.getRasterFilename());
+                    File rasterFile = new File(getTempDir(), obs.getRasterFilename());
+                    if (rasterFile.exists()) {
+                        log.info("Raster file {} exists, reading...", rasterFile.getAbsolutePath());
+                        IndexedRaster indexedRaster =  Converter.IndexedRasterFromJsonString(Files.readString(rasterFile.toPath()));
+                        BufferedImage img = ImageIO.read(new File(getTempDir(), indexedRaster.getFilename()));
+                        thumbnail = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.AUTOMATIC, 256, 256);
+                        log.info("Thumbnail loaded for contact {} from raster {}, resolution: {}x{}", 
+                                contact.getLabel(), obs.getRasterFilename(), img.getWidth(null), img.getHeight(null));
+                        return thumbnail;
+                    }
+                    else {
+                        log.warn("Raster file {} does not exist", rasterFile.getAbsolutePath());
+                    }
+                }                
+            }
+        } catch (IOException e) {
+            log.warn("Error reading thumbnail from {}: {}", zctFile.getAbsolutePath(), e.getMessage());
+        }
+        if (thumbnail == null) {
+            log.warn("No thumbnail available for {}", zctFile.getAbsolutePath());
+            thumbnail = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        }
+        return thumbnail;
     }
 
     /**

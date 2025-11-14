@@ -13,14 +13,17 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 
+import lombok.extern.slf4j.Slf4j;
 import pt.omst.mapview.AbstractMapOverlay;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 
+@Slf4j
 public class ContactsMapOverlay extends AbstractMapOverlay {
 
     private CompressedContact selectedContact = null;
+    private CompressedContact hoveringContact = null;
     public static interface ContactSelectionListener {
         public void contactSelected(CompressedContact contact);
     }
@@ -82,10 +85,12 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             double distanceSq = dx * dx + dy * dy;
             if (distanceSq <= 100) { // within 10 pixels
                 map.setToolTipText(contact.getContact().getLabel());
+                hoveringContact = contact;
                 return true;
             }
         }
         map.setToolTipText(null);
+        hoveringContact = null;
         return false;
     }
 
@@ -264,6 +269,44 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             g2d.fillRect(x, y, width, height);
             g2d.setColor(new java.awt.Color(0, 120, 215)); // Solid blue border
             g2d.drawRect(x, y, width, height);
+        }
+
+        if (hoveringContact != null && hoveringContact != selectedContact) {
+            // Highlight hovering contact
+            Image thumbnail = hoveringContact.getThumbnail();
+            if (thumbnail != null && thumbnail.getWidth(null) > 1) {    
+                double[] screenPos = map.latLonToScreen(
+                    hoveringContact.getContact().getLatitude(), 
+                    hoveringContact.getContact().getLongitude());
+                
+                int xLoc = (int)screenPos[0] + 10;
+
+                if (xLoc + thumbnail.getWidth(null) > map.getWidth()) {
+                    xLoc = (int)screenPos[0] - thumbnail.getWidth(null) - 10;
+                }
+
+                int yLoc = (int)screenPos[1];
+
+                if (yLoc + thumbnail.getHeight(null) > map.getHeight()) {
+                    yLoc = map.getHeight() - thumbnail.getHeight(null) - 10;
+                }
+                g2d.drawImage(
+                    thumbnail,
+                    (int)xLoc,
+                    (int)yLoc,
+                    null);
+                // int x = (int)screenPos[0] - thumbnail.getWidth(null) / 2 - 4;
+                // int y = (int)screenPos[1] - thumbnail.getHeight(null) / 2 - 4;
+                // int width = thumbnail.getWidth(null) + 8;
+                // int height = thumbnail.getHeight(null) + 8;
+                
+                // g2d.setColor(new java.awt.Color(0, 255, 0, 100)); // Semi-transparent green
+                // g2d.setStroke(new java.awt.BasicStroke(2.0f));
+                
+                // g2d.fillRect(x, y, width, height);
+                // g2d.setColor(new java.awt.Color(0, 255, 0)); // Solid green border
+                // g2d.drawRect(x, y, width, height);
+            }
         }
         
         g2d.dispose();
