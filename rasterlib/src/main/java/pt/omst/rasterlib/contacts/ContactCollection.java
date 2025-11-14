@@ -25,7 +25,7 @@ import pt.omst.neptus.util.GuiUtils;
 @Slf4j
 public class ContactCollection implements MapPainter {
     private QuadTree<File, CompressedContact> quadTree = new QuadTree<>();
-    private ArrayList<File> filteredContacts = new ArrayList<>();
+    private List<File> filteredContacts = new ArrayList<>();
     private QuadTree.Region currentRegion = null;
     private Instant currentStart = null;
     private Instant currentEnd = null;
@@ -44,7 +44,7 @@ public class ContactCollection implements MapPainter {
             catch (IOException e) {
                 log.error("Error on contact {}", contactFile.getAbsolutePath(), e);                
             }
-        }        
+        }
     }
 
     public void removeRootFolder(File folder) {
@@ -58,22 +58,16 @@ public class ContactCollection implements MapPainter {
         this.currentRegion = region;
         this.currentStart = start;
         this.currentEnd = end;
-        ArrayList<File> newFilteredContacts = new ArrayList<>();
-        List<CompressedContact> contactsInRegion = quadTree.getAll();
+        List<CompressedContact> contactsInRegion = quadTree.query(region);
 
         long startMillis = start.toEpochMilli();
         long endMillis = end.toEpochMilli();
 
         log.info("Applying filters: region {}, between {} and {}", region, start, end);
-        for (CompressedContact contact : contactsInRegion) {
-            //FIXME: improve filtering performance
-            
-            if (contact.getTimestamp() > endMillis)
-                continue;
-            if (contact.getTimestamp() < startMillis)
-                continue;
-            newFilteredContacts.add(contact.getZctFile());
-        }
+        List<File> newFilteredContacts = contactsInRegion.stream().filter(c -> 
+            c.getTimestamp() >= startMillis && c.getTimestamp() <= endMillis
+        ).map(CompressedContact::getZctFile).toList();
+
         
         log.info("Filtered contacts: {} in region {} between {} and {}", 
             newFilteredContacts.size(), region, start, end);

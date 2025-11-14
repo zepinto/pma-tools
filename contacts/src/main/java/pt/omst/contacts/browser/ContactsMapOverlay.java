@@ -32,6 +32,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
     private Point selectionStart = null;
     private Point selectionEnd = null;
     private boolean isSelecting = false;
+    private boolean hasDragged = false; // Track if actual dragging occurred
 
     public ContactsMapOverlay(ContactCollection collection) {
         this.collection = collection;
@@ -57,6 +58,16 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         // Handle rectangular selection dragging
         if (isSelecting && e.getID() == MouseEvent.MOUSE_DRAGGED) {
             selectionEnd = e.getPoint();
+            
+            // Check if we've moved enough to consider this a drag (threshold of 3 pixels)
+            if (selectionStart != null) {
+                int dx = Math.abs(selectionEnd.x - selectionStart.x);
+                int dy = Math.abs(selectionEnd.y - selectionStart.y);
+                if (dx > 3 || dy > 3) {
+                    hasDragged = true;
+                }
+            }
+            
             map.repaint();
             return true; // Consume the event
         }
@@ -80,12 +91,13 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     @Override
     public boolean processMouseEvent(MouseEvent e, SlippyMap map) {
-        if (e.getID() == MouseEvent.MOUSE_PRESSED && e.isShiftDown()) {
-            // Start rectangular selection
+        if (e.getID() == MouseEvent.MOUSE_PRESSED && SwingUtilities.isRightMouseButton(e)) {
+            // Start potential rectangular selection with right-click
             selectionStart = e.getPoint();
             selectionEnd = e.getPoint();
             isSelecting = true;
-            return true; // Consume the event
+            hasDragged = false; // Reset drag flag
+            return false; // Don't consume - let other handlers see it
         }
         
         if (e.getID() == MouseEvent.MOUSE_RELEASED && isSelecting) {
@@ -93,24 +105,32 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             isSelecting = false;
             selectionEnd = e.getPoint();
             
-            // Find all contacts within the selection rectangle
-            List<CompressedContact> selectedContacts = getContactsInRectangle(
-                selectionStart, selectionEnd, map);
-            
-            // Show popup menu with selected contacts
-            if (!selectedContacts.isEmpty()) {
-                showSelectionPopup(selectedContacts, e.getPoint(), map);
+            // Only show selection popup if user actually dragged
+            if (hasDragged) {
+                // Find all contacts within the selection rectangle
+                List<CompressedContact> selectedContacts = getContactsInRectangle(
+                    selectionStart, selectionEnd, map);
+                
+                // Show popup menu with selected contacts (only if contacts found)
+                if (!selectedContacts.isEmpty()) {
+                    showSelectionPopup(selectedContacts, e.getPoint(), map);
+                    // Clear selection rectangle
+                    selectionStart = null;
+                    selectionEnd = null;
+                    map.repaint();
+                    return true; // Consume the event to prevent base map popup
+                }
             }
             
-            // Clear selection rectangle
+            // No drag occurred or no contacts selected - clear selection and allow base map popup
             selectionStart = null;
             selectionEnd = null;
             map.repaint();
-            return true; // Consume the event
+            return false; // Don't consume - let base map popup show
         }
         
-        if (e.getID() == MouseEvent.MOUSE_CLICKED && !e.isShiftDown()) {
-            // Handle single contact click (existing behavior)
+        if (e.getID() == MouseEvent.MOUSE_CLICKED && SwingUtilities.isLeftMouseButton(e)) {
+            // Handle single contact click with left button
             for (CompressedContact contact : collection.getFilteredContacts()) {
                 double[] screenPos = map.latLonToScreen(
                     contact.getContact().getLatitude(), 
@@ -119,7 +139,6 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
                 double dy = e.getY() - screenPos[1];
                 double distanceSq = dx * dx + dy * dy;
                 if (distanceSq <= 100) { // within 10 pixels
-                   System.out.println("Clicked on contact: " + contact.getContact().getLabel());
                    selectedContact = contact;
                    if (selectionListener != null) {
                        selectionListener.contactSelected(contact);

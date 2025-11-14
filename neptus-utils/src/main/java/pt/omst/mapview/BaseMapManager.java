@@ -5,6 +5,7 @@
 //***************************************************************************
 package pt.omst.mapview;
 
+import java.awt.Point;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.prefs.Preferences;
@@ -104,18 +105,31 @@ public class BaseMapManager {
         
         // Add popup menu trigger
         component.addMouseListener(new MouseAdapter() {
+            private Point pressPoint = null;
+            private boolean isRightButton = false;
+            
             @Override
             public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showPopup(e);
+                if (javax.swing.SwingUtilities.isRightMouseButton(e)) {
+                    pressPoint = e.getPoint();
+                    isRightButton = true;
                 }
             }
             
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    showPopup(e);
+                if (isRightButton && javax.swing.SwingUtilities.isRightMouseButton(e)) {
+                    // Only show popup if mouse hasn't moved significantly (not a drag)
+                    if (pressPoint != null) {
+                        int dx = Math.abs(e.getX() - pressPoint.x);
+                        int dy = Math.abs(e.getY() - pressPoint.y);
+                        if (dx <= 3 && dy <= 3) {
+                            showPopup(e);
+                        }
+                    }
                 }
+                pressPoint = null;
+                isRightButton = false;
             }
             
             private void showPopup(MouseEvent e) {

@@ -18,10 +18,9 @@ import pt.omst.rasterlib.contacts.ContactCollection;
 public class ZContactTableModel extends AbstractTableModel {
     private final List<CompressedContact> contacts;
     private final String[] columnNames = {"Timestamp", "Label", "Classification", "Description", "Position", "Dimensions"};
-    private final ContactCollection collection;
 
     public ZContactTableModel(ContactCollection collection) {
-        this.collection = collection;
+        
         this.contacts = collection.getAllContacts();
     }
 

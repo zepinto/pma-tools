@@ -49,21 +49,19 @@ public class QuadTree<K, V extends QuadTree.Locatable<V>> {
         private final double minLon;
         private final double maxLon;
 
-        public Region(double[] coords) {
-            if (coords.length != 4) {
-                throw new IllegalArgumentException("Coordinates array must have exactly 4 elements: [minLat, maxLat, minLon, maxLon]");
-            }
-            this.minLat = coords[0];
-            this.maxLat = coords[1];
-            this.minLon = coords[2];
-            this.maxLon = coords[3];
-        }
 
         public Region(double minLat, double maxLat, double minLon, double maxLon) {
             this.minLat = minLat;
             this.maxLat = maxLat;
             this.minLon = minLon;
             this.maxLon = maxLon;
+        }
+
+        public Region(double[] bbox) {
+            this.minLat = bbox[0];
+            this.maxLat = bbox[2];
+            this.minLon = bbox[1];
+            this.maxLon = bbox[3];
         }
 
         /**
@@ -347,6 +345,16 @@ public class QuadTree<K, V extends QuadTree.Locatable<V>> {
         return keyIndex.containsKey(key);
     }
 
+    public List<V> query(Region region) {
+        List<Entry<K, V>> entries = new ArrayList<>();
+        root.query(region, entries);
+        List<V> results = new ArrayList<>();
+        for (Entry<K, V> entry : entries) {
+            results.add(entry.value);
+        }
+        Collections.sort(results);
+        return results;
+    }
     /**
      * Queries the QuadTree for all objects within a given region.
      *
