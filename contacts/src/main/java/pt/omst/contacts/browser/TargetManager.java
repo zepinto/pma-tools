@@ -35,6 +35,7 @@ import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.FolderDataSource;
 import pt.omst.gui.datasource.PulvisConnection;
+import pt.omst.pulvis.PulvisWSConnection;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
@@ -432,6 +433,17 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
             case PulvisConnection pcs -> {
                 log.info("Pulvis connection added: {}", pcs.getDisplayName());
+                PulvisWSConnection connection = new PulvisWSConnection(pcs.getBaseUrl() + "/ws/contacts");
+                connection.connect().thenRun(() -> {
+                    log.info("Connected to Pulvis WS for contacts at {}", pcs.getBaseUrl());
+                }).exceptionally(ex -> {
+                    log.error("Error connecting to Pulvis WS at {}", pcs.getBaseUrl(), ex);
+                    return null;
+                });
+                connection.addEventListener(ce -> {
+                    log.info("Received contact event from Pulvis: {}", ce.getEventType());
+                    // Handle contact events (added/updated/removed)                   
+                });;
             }
             default -> {
                 log.warn("Unsupported data source type added: {}", event.getDataSource().getClass().getName());
