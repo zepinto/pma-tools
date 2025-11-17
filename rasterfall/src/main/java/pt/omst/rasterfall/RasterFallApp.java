@@ -237,13 +237,17 @@ public class RasterFallApp extends JFrame {
                 }
                 catch (Exception ex) {
                     ex.printStackTrace();
-                    SwingUtilities.invokeLater(() -> {
-                        LoadingPanel.hideSplashScreen(splash);
-                        JOptionPane.showMessageDialog(null, 
-                            "License check failed: " + ex.getMessage(), 
-                            "License Error", 
-                            JOptionPane.ERROR_MESSAGE);
-                    });
+                    LoadingPanel.hideSplashScreen(splash);
+                    try {
+                        SwingUtilities.invokeAndWait(() -> {
+                            GuiUtils.errorMessage(null, "License Check Failed", 
+                                "The application license is invalid or missing.\n\n" +
+                                "Error: " + ex.getMessage() + "\n\n" +
+                                "Please contact support or check your license activation.");
+                        });
+                    } catch (Exception dialogEx) {
+                        dialogEx.printStackTrace();
+                    }
                     System.exit(1);
                     return;
                 }

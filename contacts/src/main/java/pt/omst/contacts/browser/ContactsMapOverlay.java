@@ -5,6 +5,7 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.Point;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,6 +46,19 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     public void setContactSelectionListener(ContactSelectionListener listener) {
         this.selectionListener = listener;
+    }
+
+    public void refreshContact(File contactFile) {
+        log.info("Refreshing "+contactFile);
+        if (selectedContact.getZctFile().equals(contactFile)) {
+            try {
+                selectedContact = new CompressedContact(contactFile);
+            }
+            catch (Exception e) {
+                log.warn("Unable to load contact from disk:", e);
+            }
+            
+        }
     }
 
 

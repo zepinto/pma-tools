@@ -311,6 +311,20 @@ public class QuadTree<K, V extends QuadTree.Locatable<V>> {
         return false;
     }
 
+    public boolean update(K key, V value) {
+        // Remove the old entry
+        root.remove(key);
+        keyIndex.remove(key);
+
+        // Add the new entry
+        Entry<K, V> entry = new Entry<>(key, value);
+        if (root.insert(entry)) {
+            keyIndex.put(key, value);
+            return true;
+        }
+        return false;
+    }
+
     /**
      * Removes an object from the QuadTree by its key.
      *

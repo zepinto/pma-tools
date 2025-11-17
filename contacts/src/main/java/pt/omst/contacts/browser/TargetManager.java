@@ -124,6 +124,15 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         });
         
         contactEditor = new VerticalContactEditor();
+        
+        // Listen for contact saves to refresh the map overlay
+        contactEditor.addSaveListener((contactId, zctFile) -> {
+            log.info("Contact saved: {}, refreshing map overlay", contactId);        
+            contactCollection.refreshContact(zctFile);
+            contactsMapOverlay.refreshContact(zctFile);
+            slippyMap.repaint();            
+        });
+        
         // observationsPanel = new ObservationsPanel();
         // contactDetailsPanel = new ContactDetailsFormPanel();
 
@@ -564,6 +573,17 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             LicenseChecker.checkLicense(NeptusLicense.RASTERFALL);
         } catch (Exception e) {
             log.error("License check failed", e);
+            splash.dispose();
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    GuiUtils.errorMessage(null, "License Check Failed", 
+                        "The application license is invalid or missing.\n\n" +
+                        "Error: " + e.getMessage() + "\n\n" +
+                        "Please contact support or check your license activation.");
+                });
+            } catch (Exception dialogEx) {
+                dialogEx.printStackTrace();
+            }
             System.exit(1);
         }
 
