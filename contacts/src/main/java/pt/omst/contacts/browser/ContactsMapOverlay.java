@@ -24,6 +24,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     private CompressedContact selectedContact = null;
     private CompressedContact hoveringContact = null;
+    private SlippyMap map = null;
     public static interface ContactSelectionListener {
         public void contactSelected(CompressedContact contact);
     }
@@ -39,6 +40,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     public ContactsMapOverlay(ContactCollection collection) {
         this.collection = collection;
+        // do in background thread
     }
 
     public void setContactSelectionListener(ContactSelectionListener listener) {
@@ -242,7 +244,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
     @Override
     public void paint(Graphics g, JComponent c) {
         super.paint(g, c);
-        SlippyMap map = (SlippyMap) c;
+        this.map = (SlippyMap) c;
         Graphics2D g2d = (Graphics2D) g.create();
         
         // Paint all contacts
@@ -311,6 +313,5 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         
         g2d.dispose();
     }
-
 
 }

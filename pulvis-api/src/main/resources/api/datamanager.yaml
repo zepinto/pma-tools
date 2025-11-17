@@ -1366,6 +1366,7 @@ components:
           type: string
           enum:
           - Classification
+          - Label
           - Measurement
           - Text
         measurement-type:

@@ -70,6 +70,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final JPanel eastPanel;
     private final JButton toggleEastPanelButton;
     private boolean eastPanelVisible = true;
+    private boolean firstPaintDone = false;
 
     /**
      * Creates a new MapViewerLayout with default time range.
@@ -103,6 +104,20 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         contactsMapOverlay.setContactSelectionListener(contact -> {
             log.info("Contact selected: {}", contact.getContact().getLabel());
             setContact(contact);
+        });
+        
+        // Add component listener to detect first paint and update contacts
+        slippyMap.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                if (!firstPaintDone && slippyMap.getWidth() > 0 && slippyMap.getHeight() > 0) {
+                    firstPaintDone = true;
+                    SwingUtilities.invokeLater(() -> {
+                        updateVisibleContacts();
+                        log.info("First paint completed, updated visible contacts");
+                    });
+                }
+            }
         });
         
         contactEditor = new VerticalContactEditor();
@@ -171,21 +186,13 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 Instant[] selection = (Instant[]) evt.getNewValue();
                 Instant startTime = selection[0];
                 Instant endTime = selection[1];
-                contactCollection.applyFilters(
-                        new QuadTree.Region(slippyMap.getVisibleBounds()),
-                        startTime,
-                        endTime);
+                updateVisibleContacts();
                 log.info("Selection changed: {} to {}", startTime, endTime);
             });
 
             slippyMap.addPropertyChangeListener("visibleBounds", evt -> {
                 // When map bounds change, re-apply filters to update contacts
-                Instant startTime = timeSelector.getSelectedStartTime();
-                Instant endTime = timeSelector.getSelectedEndTime();
-                contactCollection.applyFilters(
-                        new QuadTree.Region(slippyMap.getVisibleBounds()),
-                        startTime,
-                        endTime);
+                updateVisibleContacts();
                 log.info("Map bounds changed, re-applied contact filters");
             });
         });
@@ -267,14 +274,21 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // Load time selection
         long startTimeMillis = prefs.getLong("timeSelector.startTime", -1);
         long endTimeMillis = prefs.getLong("timeSelector.endTime", -1);
+        
         if (startTimeMillis > 0 && endTimeMillis > 0) {
             Instant startTime = Instant.ofEpochMilli(startTimeMillis);
             Instant endTime = Instant.ofEpochMilli(endTimeMillis);
             log.debug("Loaded time selection: {} to {}", startTime, endTime);
             javax.swing.SwingUtilities.invokeLater(() -> {
                 timeSelector.setSelectedInterval(startTime, endTime);
+                updateVisibleContacts();
             });
         }
+
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            updateVisibleContacts();
+            log.info("Applied contact filters on load");
+        });
 
         try {
             dataSourceManager.loadFromPreferences();
@@ -323,6 +337,18 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      */
     public void clearObservations() {
         contactEditor.clearObservations();
+    }
+    
+    /**
+     * Updates the visible contacts based on current map bounds and time selection.
+     */
+    private void updateVisibleContacts() {
+        Instant startTime = timeSelector.getSelectedStartTime();
+        Instant endTime = timeSelector.getSelectedEndTime();
+        contactCollection.applyFilters(
+                new QuadTree.Region(slippyMap.getVisibleBounds()),
+                startTime,
+                endTime);
     }
 
     /**

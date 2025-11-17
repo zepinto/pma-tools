@@ -11,7 +11,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.Objects;
@@ -25,7 +24,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.mapview.MapMarker;
 import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.util.GuiUtils;
 import pt.omst.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
@@ -290,5 +288,4 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
     public int compareTo(CompressedContact other) {
         return this.getZctFile().getAbsolutePath().compareTo(other.getZctFile().getAbsolutePath());
     }
-
 }
