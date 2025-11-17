@@ -36,6 +36,7 @@ public class DataChip extends JPanel {
     
     private final JButton removeButton;
     private final JLabel iconLabel;
+    private final JLabel ledLabel; // LED indicator for connection status
     private final JLabel nameLabel;
     
     private static final int ARC_SIZE = 20;
@@ -80,6 +81,16 @@ public class DataChip extends JPanel {
             iconLabel = null;
         }
         
+        // LED indicator for PulvisConnection
+        if (dataSource instanceof PulvisConnection) {
+            PulvisConnection pulvis = (PulvisConnection) dataSource;
+            ledLabel = new JLabel(pulvis.getStatusIcon());
+            ledLabel.setToolTipText(pulvis.isConnected() ? "Connected" : "Not connected");
+            add(ledLabel);
+        } else {
+            ledLabel = null;
+        }
+        
         // Name label
         nameLabel = new JLabel(dataSource.getDisplayName());
         nameLabel.setFont(nameLabel.getFont().deriveFont(12f));
@@ -118,6 +129,18 @@ public class DataChip extends JPanel {
      */
     public void setOnRemove(Runnable onRemove) {
         this.onRemove = onRemove;
+    }
+    
+    /**
+     * Updates the LED indicator for PulvisConnection data sources.
+     * Should be called periodically to refresh the connection status.
+     */
+    public void updateLedStatus() {
+        if (ledLabel != null && dataSource instanceof PulvisConnection) {
+            PulvisConnection pulvis = (PulvisConnection) dataSource;
+            ledLabel.setIcon(pulvis.getStatusIcon());
+            ledLabel.setToolTipText(pulvis.isConnected() ? "Connected" : "Not connected");
+        }
     }
     
     private void updateColors() {

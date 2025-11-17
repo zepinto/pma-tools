@@ -22,6 +22,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,9 @@ public class DataSourceManagerPanel extends JPanel {
     private final JPanel chipsPanel;
     private final List<DataSourceListener> listeners;
     private final List<DataSource> dataSources;
+    private final Timer ledUpdateTimer;
+    
+    private static final int LED_UPDATE_INTERVAL_MS = 5000; // Update LED every 5 seconds
     
     /**
      * Creates a new DataSourceManagerPanel.
@@ -87,6 +91,10 @@ public class DataSourceManagerPanel extends JPanel {
         topPanel.add(scrollPane, BorderLayout.CENTER);
         
         add(topPanel, BorderLayout.CENTER);
+        
+        // Setup LED update timer for PulvisConnection status
+        ledUpdateTimer = new Timer(LED_UPDATE_INTERVAL_MS, e -> updateAllLedIndicators());
+        ledUpdateTimer.start();
     }
     
     private JPanel createActionBar() {
@@ -286,6 +294,28 @@ public class DataSourceManagerPanel extends JPanel {
         List<DataSource> toRemove = new ArrayList<>(dataSources);
         for (DataSource source : toRemove) {
             removeDataSource(source);
+        }
+    }
+    
+    /**
+     * Updates all LED indicators for PulvisConnection data sources.
+     */
+    private void updateAllLedIndicators() {
+        for (int i = 0; i < chipsPanel.getComponentCount(); i++) {
+            if (chipsPanel.getComponent(i) instanceof DataChip) {
+                DataChip chip = (DataChip) chipsPanel.getComponent(i);
+                chip.updateLedStatus();
+            }
+        }
+    }
+    
+    /**
+     * Cleanup method to stop the LED update timer.
+     * Should be called when the panel is no longer needed.
+     */
+    public void dispose() {
+        if (ledUpdateTimer != null) {
+            ledUpdateTimer.stop();
         }
     }
     
