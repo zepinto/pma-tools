@@ -11,6 +11,8 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
@@ -71,6 +73,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final JButton toggleEastPanelButton;
     private boolean eastPanelVisible = true;
     private boolean firstPaintDone = false;
+    private final Map<PulvisConnection, PulvisWSConnection> pulvisConnections = new HashMap<>();
 
     /**
      * Creates a new MapViewerLayout with default time range.
@@ -291,7 +294,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         });
 
         try {
+            log.info("Loading data sources from preferences...");
             dataSourceManager.loadFromPreferences();
+            log.info("Data sources loaded. Current count: {}", dataSourceManager.getDataSources().size());
         } catch (Exception e) {
             log.error("Error loading data sources from preferences", e);
         }
@@ -337,6 +342,52 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      */
     public void clearObservations() {
         contactEditor.clearObservations();
+    }
+    
+    /**
+     * Connects to a Pulvis server via WebSocket.
+     * 
+     * @param pcs the Pulvis connection configuration
+     */
+    private void connectToPulvis(PulvisConnection pcs) {
+        // Don't connect if already connected
+        if (pulvisConnections.containsKey(pcs)) {
+            log.warn("Already connected to Pulvis at {}", pcs.getBaseUrl());
+            return;
+        }
+        
+        PulvisWSConnection connection = new PulvisWSConnection(pcs.getBaseUrl() + "/ws/contacts");
+        pulvisConnections.put(pcs, connection);
+        
+        connection.connect().thenRun(() -> {
+            log.info("Connected to Pulvis WS for contacts at {}", pcs.getBaseUrl());
+        }).exceptionally(ex -> {
+            log.error("Error connecting to Pulvis WS at {}", pcs.getBaseUrl(), ex);
+            pulvisConnections.remove(pcs);
+            return null;
+        });
+        
+        connection.addEventListener(ce -> {
+            log.info("Received contact event from Pulvis: {}", ce.getEventType());
+            // Handle contact events (added/updated/removed)
+        });
+    }
+    
+    /**
+     * Disconnects from a Pulvis server.
+     * 
+     * @param pcs the Pulvis connection to disconnect
+     */
+    private void disconnectFromPulvis(PulvisConnection pcs) {
+        PulvisWSConnection connection = pulvisConnections.remove(pcs);
+        if (connection != null) {
+            try {
+                connection.disconnect();
+                log.info("Disconnected from Pulvis at {}", pcs.getBaseUrl());
+            } catch (Exception e) {
+                log.error("Error disconnecting from Pulvis at {}", pcs.getBaseUrl(), e);
+            }
+        }
     }
     
     /**
@@ -444,6 +495,17 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
     @Override
     public void close() throws Exception {
+        // Close all Pulvis connections
+        for (Map.Entry<PulvisConnection, PulvisWSConnection> entry : pulvisConnections.entrySet()) {
+            try {
+                entry.getValue().disconnect();
+                log.info("Closed Pulvis connection to {}", entry.getKey().getBaseUrl());
+            } catch (Exception e) {
+                log.error("Error closing Pulvis connection to {}", entry.getKey().getBaseUrl(), e);
+            }
+        }
+        pulvisConnections.clear();
+        
         if (slippyMap != null) {
             slippyMap.close();
         }
@@ -459,17 +521,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
             case PulvisConnection pcs -> {
                 log.info("Pulvis connection added: {}", pcs.getDisplayName());
-                PulvisWSConnection connection = new PulvisWSConnection(pcs.getBaseUrl() + "/ws/contacts");
-                connection.connect().thenRun(() -> {
-                    log.info("Connected to Pulvis WS for contacts at {}", pcs.getBaseUrl());
-                }).exceptionally(ex -> {
-                    log.error("Error connecting to Pulvis WS at {}", pcs.getBaseUrl(), ex);
-                    return null;
-                });
-                connection.addEventListener(ce -> {
-                    log.info("Received contact event from Pulvis: {}", ce.getEventType());
-                    // Handle contact events (added/updated/removed)                   
-                });;
+                connectToPulvis(pcs);
             }
             default -> {
                 log.warn("Unsupported data source type added: {}", event.getDataSource().getClass().getName());
@@ -487,6 +539,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
             case PulvisConnection pcs -> {
                 log.info("Pulvis connection removed: {}", pcs.getDisplayName());
+                disconnectFromPulvis(pcs);
                 break;
             }
             default -> {
@@ -530,7 +583,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         frame.setSize(1400, 900);
         frame.setJMenuBar(createMenuBar(frame));
         frame.add(layout);
-        layout.loadPreferences();
+        
+        // Load preferences after adding to frame but before making visible
+        SwingUtilities.invokeLater(() -> {
+            layout.loadPreferences();
+        });
+        
         GuiUtils.centerOnScreen(frame);
         frame.setVisible(true);
         splash.dispose();
