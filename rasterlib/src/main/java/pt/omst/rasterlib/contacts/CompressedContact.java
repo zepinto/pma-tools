@@ -202,23 +202,22 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
                                 lastSample.getPose().getLatitude(),
                                 lastSample.getPose().getLongitude());
 
-                        long startTime = firstSample.getTimestamp().toInstant().toEpochMilli();
-                        long endTime = lastSample.getTimestamp().toInstant().toEpochMilli();
-
-                        double ellapsedSeconds = (endTime - startTime) / 1000.0;
-                        double averageSpeed = indexedRaster.getSamples().stream().map(s -> s.getPose().getU())
-                        .collect(Collectors.averagingDouble(Double::doubleValue));
-                                
-
                         double distanceMeters = topLocation.getHorizontalDistanceInMeters(bottomLocation);
                         double widthMeters = indexedRaster.getSensorInfo().getMaxRange() - indexedRaster.getSensorInfo().getMinRange();
 
-                        log.info("Raster {} loaded, size: {}x{}, distance covered: {} x {} meters, time: {}s, avg speed: {} m/s",
-                                indexedRaster.getFilename(), img.getWidth(null), img.getHeight(null), distanceMeters, widthMeters, ellapsedSeconds, averageSpeed);
-                        thumbnail = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.AUTOMATIC, 256, 256);
-                        log.info("Thumbnail loaded for contact {} from raster {}, resolution: {}x{}", 
-                                contact.getLabel(), obs.getRasterFilename(), img.getWidth(null), img.getHeight(null));
-                        return thumbnail;
+                        double heightWidthRatio = distanceMeters / widthMeters;
+                        int newImageHeight = (int)(200 * heightWidthRatio);
+                             
+                        BufferedImage resized = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.FIT_EXACT, 200, newImageHeight);
+                        // If taller than 300px, crop equally from top and bottom
+                        if (resized.getHeight() > 200) {
+                            int excess = resized.getHeight() - 200;
+                            int cropTop = excess / 2;
+                            BufferedImage cropped = resized.getSubimage(0, cropTop, resized.getWidth(), 200);
+                            thumbnail = cropped;
+                        } else {
+                            thumbnail = resized;
+                        }
                     }
                     else {
                         log.warn("Raster file {} does not exist", rasterFile.getAbsolutePath());
