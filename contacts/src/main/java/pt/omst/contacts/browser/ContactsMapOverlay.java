@@ -79,6 +79,17 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     @Override
     public boolean processMouseMotionEvent(MouseEvent e, SlippyMap map) {
+        // Ignore mouse motion when SHIFT is pressed (used for distance measurement)
+        if (e.isShiftDown()) {
+            // Clear any hovering state
+            if (hoveringContact != null) {
+                hoveringContact = null;
+                map.setToolTipText(null);
+                map.repaint();
+            }
+            return false;
+        }
+        
         // Handle rectangular selection dragging
         if (isSelecting && e.getID() == MouseEvent.MOUSE_DRAGGED) {
             selectionEnd = e.getPoint();
@@ -117,6 +128,11 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     @Override
     public boolean processMouseEvent(MouseEvent e, SlippyMap map) {
+        // Ignore mouse events when SHIFT is pressed (used for distance measurement)
+        if (e.isShiftDown()) {
+            return false;
+        }
+        
         if (e.getID() == MouseEvent.MOUSE_PRESSED && SwingUtilities.isRightMouseButton(e)) {
             // Start potential rectangular selection with right-click
             selectionStart = e.getPoint();

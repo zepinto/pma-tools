@@ -12,12 +12,17 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Objects;
+
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -180,23 +185,143 @@ public class LicenseChecker {
 
     private static License mainLicense = null, activationLicense = null;
 
+    /**
+     * Prompts the user to select a license file and copies it to the licenses folder
+     * @return the copied license file, or null if user cancelled
+     */
+    private static File promptForLicenseFile() {
+        LOG.info("Prompting user to select license file");
+        
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Select License File");
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fileChooser.setMultiSelectionEnabled(false);
+        
+        // Add file filter for .lic files
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("License Files (*.lic)", "lic");
+        fileChooser.setFileFilter(filter);
+        
+        int result = fileChooser.showOpenDialog(null);
+        
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            LOG.info("User selected license file: {}", selectedFile.getAbsolutePath());
+            
+            if (!selectedFile.getName().endsWith(".lic")) {
+                LOG.warn("Selected file is not a .lic file: {}", selectedFile.getName());
+                JOptionPane.showMessageDialog(null, 
+                    "Please select a valid license file with .lic extension.",
+                    "Invalid License File",
+                    JOptionPane.ERROR_MESSAGE);
+                return null;
+            }
+            
+            try {
+                // Determine target folder - prefer local conf/licenses, fall back to ~/.omst/conf/licenses
+                File localLicenseFolder = new File("conf/licenses");
+                File homeLicenseFolder = new File(System.getProperty("user.home"), ".omst/conf/licenses");
+                
+                File targetFolder;
+                if (localLicenseFolder.exists() || new File("conf").exists()) {
+                    // If conf/ exists, use local folder
+                    targetFolder = localLicenseFolder;
+                } else {
+                    // Otherwise use home directory
+                    targetFolder = homeLicenseFolder;
+                }
+                
+                // Create target folder if it doesn't exist
+                if (!targetFolder.exists()) {
+                    LOG.info("Creating license folder: {}", targetFolder.getAbsolutePath());
+                    if (!targetFolder.mkdirs()) {
+                        LOG.error("Failed to create license folder: {}", targetFolder.getAbsolutePath());
+                        JOptionPane.showMessageDialog(null,
+                            "Failed to create license folder: " + targetFolder.getAbsolutePath(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                        return null;
+                    }
+                }
+                
+                // Copy license file to target folder
+                File targetFile = new File(targetFolder, selectedFile.getName());
+                Files.copy(selectedFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                
+                LOG.info("License file copied to: {}", targetFile.getAbsolutePath());
+                JOptionPane.showMessageDialog(null,
+                    "License file copied successfully to:\n" + targetFile.getAbsolutePath(),
+                    "License Installed",
+                    JOptionPane.INFORMATION_MESSAGE);
+                
+                return targetFile;
+                
+            } catch (IOException e) {
+                LOG.error("Failed to copy license file", e);
+                JOptionPane.showMessageDialog(null,
+                    "Failed to copy license file: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+                return null;
+            }
+        } else {
+            LOG.info("User cancelled license file selection");
+            return null;
+        }
+    }
+
     public synchronized static License getMainLicense() throws LicenseException {
         if (mainLicense != null) {
             return mainLicense;
         }
 
         File licenseFolder = new File(licensesFolder);
-        if (!licenseFolder.exists()) {
-            LOG.info("No license folder found");
-            return null;
+        boolean folderExists = licenseFolder.exists();
+        boolean hasLicenseFiles = false;
+        
+        if (folderExists) {
+            File[] files = licenseFolder.listFiles();
+            if (files != null && files.length > 0) {
+                hasLicenseFiles = true;
+            }
+        }
+        
+        // If no license folder or no files, prompt user
+        if (!folderExists || !hasLicenseFiles) {
+            LOG.info("No license found in {}", licensesFolder);
+            
+            int response = JOptionPane.showConfirmDialog(null,
+                "No license file found.\n\nWould you like to select a license file?",
+                "License Not Found",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+            
+            if (response == JOptionPane.YES_OPTION) {
+                File copiedLicense = promptForLicenseFile();
+                if (copiedLicense == null) {
+                    // User cancelled or error occurred
+                    throw new LicenseException.LicenseNotFoundException("No license file provided");
+                }
+                
+                // Try to read the newly copied license
+                try {
+                    License license = checkMainLicense(copiedLicense);
+                    if (license != null) {
+                        mainLicense = license;
+                        return mainLicense;
+                    } else {
+                        throw new LicenseException.LicenseNotValidException("The provided license file is not valid");
+                    }
+                } catch (LicenseException e) {
+                    LOG.error("Provided license file is invalid", e);
+                    throw e;
+                }
+            } else {
+                throw new LicenseException.LicenseNotFoundException("No license file found");
+            }
         }
 
+        // Scan existing license files
         File[] files = Objects.requireNonNull(licenseFolder.listFiles());
-        if (files.length == 0) {
-            LOG.info("No license found");
-            return null;
-        }
-
         Arrays.sort(files);
 
         ArrayList<LicenseException> exceptions = new ArrayList<>();

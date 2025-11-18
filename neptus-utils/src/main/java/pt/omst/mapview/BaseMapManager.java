@@ -79,6 +79,29 @@ public class BaseMapManager {
     }
     
     /**
+     * Creates a menu for base map selection that can be added to a menu bar.
+     * @return JMenu containing radio button items for each tile source
+     */
+    public JMenu createBaseMapMenu() {
+        JMenu baseMapMenu = new JMenu("Base Map");
+        ButtonGroup group = new ButtonGroup();
+        
+        for (TileSource source : TileSource.values()) {
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(source.getDisplayName());
+            item.setSelected(source == currentTileSource);
+            item.addActionListener(e -> {
+                if (currentTileSource != source) {
+                    setTileSource(source);
+                }
+            });
+            group.add(item);
+            baseMapMenu.add(item);
+        }
+        
+        return baseMapMenu;
+    }
+    
+    /**
      * Setup the popup menu for base map selection.
      * @param component The component to attach the popup menu to
      */

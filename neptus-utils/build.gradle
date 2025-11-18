@@ -42,6 +42,10 @@ dependencies {
     // GDAL for GeoTIFF support
     implementation 'org.gdal:gdal:3.8.0'
     
+    // PDF generation dependencies
+    implementation 'org.jsoup:jsoup:1.18.1'
+    implementation 'org.xhtmlrenderer:flying-saucer-pdf:9.9.3'
+    
    // Testing
     testImplementation(platform('org.junit:junit-bom:5.11.1'))
     testImplementation('org.junit.jupiter:junit-jupiter')

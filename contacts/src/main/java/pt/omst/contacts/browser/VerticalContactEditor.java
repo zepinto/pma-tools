@@ -70,6 +70,9 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
 
     // Save listeners
     private final java.util.List<ContactSaveListener> saveListeners = new java.util.ArrayList<>();
+    
+    // Contact changed listeners
+    private final java.util.List<ContactChangedListener> contactChangedListeners = new java.util.ArrayList<>();
 
     public VerticalContactEditor() {
         setLayout(new BorderLayout());
@@ -247,18 +250,21 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         public void insertUpdate(DocumentEvent e) {
             saveButton.setEnabled(true);
             cancelButton.setEnabled(true);
+            fireContactChanged();
         }
 
         @Override
         public void removeUpdate(DocumentEvent e) {
             saveButton.setEnabled(true);
             cancelButton.setEnabled(true);
+            fireContactChanged();
         }
 
         @Override
         public void changedUpdate(DocumentEvent e) {
             saveButton.setEnabled(true);
             cancelButton.setEnabled(true);
+            fireContactChanged();
         }
     };
 
@@ -267,6 +273,7 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         public void actionPerformed(ActionEvent e) {
             saveButton.setEnabled(true);
             cancelButton.setEnabled(true);
+            fireContactChanged();
         }
     };
 
@@ -422,11 +429,25 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         saveListeners.add(listener);
     }
 
-    /**
+/**
      * Remove a save listener
      */
     public void removeSaveListener(ContactSaveListener listener) {
         saveListeners.remove(listener);
+    }
+    
+    /**
+     * Add a contact changed listener
+     */
+    public void addContactChangedListener(ContactChangedListener listener) {
+        contactChangedListeners.add(listener);
+    }
+    
+    /**
+     * Remove a contact changed listener
+     */
+    public void removeContactChangedListener(ContactChangedListener listener) {
+        contactChangedListeners.remove(listener);
     }
 
     /**
@@ -439,6 +460,21 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
                     listener.onContactSaved(contact.getUuid(), zctFile);
                 } catch (Exception e) {
                     log.error("Error notifying save listener", e);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Fire contact changed event to all listeners
+     */
+    private void fireContactChanged() {
+        if (contact != null) {
+            for (ContactChangedListener listener : contactChangedListeners) {
+                try {
+                    listener.onContactChanged(contact);
+                } catch (Exception e) {
+                    log.error("Error notifying contact changed listener", e);
                 }
             }
         }

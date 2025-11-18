@@ -64,12 +64,22 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     private static final int HANDLE_WIDTH = 8;
     private static final int HANDLE_HEIGHT = 20;
     private static final int TIMELINE_HEIGHT = 30;
-    private static final Color SELECTION_COLOR = new Color(100, 150, 255, 100);
-    private static final Color HANDLE_COLOR = new Color(50, 100, 200);
-    private static final Color BACKGROUND_COLOR = new Color(240, 240, 240);
-    private static final Color TIMELINE_COLOR = new Color(200, 200, 200);
-    private static final Color TICK_COLOR = new Color(80, 80, 80);
-    private static final Color LABEL_COLOR = new Color(40, 40, 40);
+    
+    // Light theme colors
+    private static final Color LIGHT_SELECTION_COLOR = new Color(100, 150, 255, 100);
+    private static final Color LIGHT_HANDLE_COLOR = new Color(50, 100, 200);
+    private static final Color LIGHT_BACKGROUND_COLOR = new Color(240, 240, 240);
+    private static final Color LIGHT_TIMELINE_COLOR = new Color(200, 200, 200);
+    private static final Color LIGHT_TICK_COLOR = new Color(80, 80, 80);
+    private static final Color LIGHT_LABEL_COLOR = new Color(40, 40, 40);
+    
+    // Dark theme colors
+    private static final Color DARK_SELECTION_COLOR = new Color(70, 120, 200, 120);
+    private static final Color DARK_HANDLE_COLOR = new Color(80, 140, 220);
+    private static final Color DARK_BACKGROUND_COLOR = new Color(45, 45, 45);
+    private static final Color DARK_TIMELINE_COLOR = new Color(60, 60, 60);
+    private static final Color DARK_TICK_COLOR = new Color(180, 180, 180);
+    private static final Color DARK_LABEL_COLOR = new Color(200, 200, 200);
     
     // Interaction state
     private enum DragMode { NONE, START_HANDLE, END_HANDLE, PANNING }
@@ -98,7 +108,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         zoomToSelection();
         
         setPreferredSize(new Dimension(800, TIMELINE_HEIGHT + 25));
-        setBackground(BACKGROUND_COLOR);
+        setBackground(getColor(LIGHT_BACKGROUND_COLOR, DARK_BACKGROUND_COLOR));
         
         setupMouseListeners();
     }
@@ -120,6 +130,10 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         if (viewEndTime.isAfter(absoluteMaxTime)) {
             viewEndTime = absoluteMaxTime;
         }
+    }
+    
+    private Color getColor(Color light, Color dark) {
+        return GuiUtils.isDarkTheme() ? dark : light;
     }
     
     private void setupMouseListeners() {
@@ -179,6 +193,10 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         int x = e.getX();
         
         switch (dragMode) {
+            case NONE:
+                // No dragging in progress
+                break;
+                
             case START_HANDLE:
                 Instant newStart = xToTime(x);
                 if (newStart.isBefore(absoluteMinTime)) newStart = absoluteMinTime;
@@ -300,10 +318,12 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         
         int width = getWidth();
-        int height = getHeight();
+        
+        // Update background based on theme
+        setBackground(getColor(LIGHT_BACKGROUND_COLOR, DARK_BACKGROUND_COLOR));
         
         // Draw timeline background
-        g2.setColor(TIMELINE_COLOR);
+        g2.setColor(getColor(LIGHT_TIMELINE_COLOR, DARK_TIMELINE_COLOR));
         g2.fillRect(0, 10, width, TIMELINE_HEIGHT);
         
         // Draw time ticks and labels
@@ -312,7 +332,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         // Draw selected interval
         int startX = timeToX(selectedStartTime);
         int endX = timeToX(selectedEndTime);
-        g2.setColor(SELECTION_COLOR);
+        g2.setColor(getColor(LIGHT_SELECTION_COLOR, DARK_SELECTION_COLOR));
         g2.fillRect(startX, 10, endX - startX, TIMELINE_HEIGHT);
         
         // Draw handles
@@ -320,7 +340,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         drawHandle(g2, endX, 10 + TIMELINE_HEIGHT / 2);
         
         // Draw border
-        g2.setColor(TICK_COLOR);
+        g2.setColor(getColor(LIGHT_TICK_COLOR, DARK_TICK_COLOR));
         g2.drawRect(0, 10, width - 1, TIMELINE_HEIGHT);
     }
     
@@ -335,9 +355,9 @@ public class ZoomableTimeIntervalSelector extends JPanel {
             centerY - HANDLE_HEIGHT / 2 + 5
         };
         
-        g2.setColor(HANDLE_COLOR);
+        g2.setColor(getColor(LIGHT_HANDLE_COLOR, DARK_HANDLE_COLOR));
         g2.fillPolygon(xPoints, yPoints, 6);
-        g2.setColor(Color.WHITE);
+        g2.setColor(GuiUtils.isDarkTheme() ? new Color(100, 100, 100) : Color.WHITE);
         g2.drawPolygon(xPoints, yPoints, 6);
     }
     
@@ -347,7 +367,7 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         // Determine appropriate tick interval based on zoom level
         TickInterval tickInterval = determineTickInterval(viewDurationSeconds);
         
-        g2.setColor(TICK_COLOR);
+        g2.setColor(getColor(LIGHT_TICK_COLOR, DARK_TICK_COLOR));
         g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
         FontMetrics fm = g2.getFontMetrics();
         
@@ -368,9 +388,9 @@ public class ZoomableTimeIntervalSelector extends JPanel {
                 int labelX = x - (int) bounds.getWidth() / 2;
                 int labelY = 10 + TIMELINE_HEIGHT + 14;
                 
-                g2.setColor(LABEL_COLOR);
+                g2.setColor(getColor(LIGHT_LABEL_COLOR, DARK_LABEL_COLOR));
                 g2.drawString(tick.label, labelX, labelY);
-                g2.setColor(TICK_COLOR);
+                g2.setColor(getColor(LIGHT_TICK_COLOR, DARK_TICK_COLOR));
             }
         }
     }

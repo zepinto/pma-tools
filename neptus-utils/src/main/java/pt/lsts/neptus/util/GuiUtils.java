@@ -56,10 +56,32 @@ public class GuiUtils {
     
     private static boolean lookAndFeelSet = false;
 
+    /**
+     * Sets the theme and applies it immediately to all open windows.
+     * @param theme "dark" or "light"
+     */
     public static void setTheme(String theme) {
         Preferences prefs = Preferences.userNodeForPackage(GuiUtils.class);
         prefs.put("gui.theme", theme);
-        log.warn("GUI theme changed to {}. Restart application to apply changes.", theme);
+        
+        try {
+            if ("dark".equalsIgnoreCase(theme)) {
+                log.info("Applying dark theme");
+                FlatDarkLaf.setup();
+            } else {
+                log.info("Applying light theme");
+                FlatLightLaf.setup();
+            }
+            
+            // Update all open windows
+            for (java.awt.Window window : java.awt.Window.getWindows()) {
+                javax.swing.SwingUtilities.updateComponentTreeUI(window);
+            }
+            
+            log.info("Theme changed to: {}", theme);
+        } catch (Exception e) {
+            log.error("Failed to apply theme: {}", theme, e);
+        }
     }
 
     /**

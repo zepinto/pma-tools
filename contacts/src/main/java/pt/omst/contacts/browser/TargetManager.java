@@ -140,9 +140,6 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             slippyMap.repaint();
             saveContact(contactId, zctFile);
         });
-        
-        // observationsPanel = new ObservationsPanel();
-        // contactDetailsPanel = new ContactDetailsFormPanel();
 
         // Create top panel with data source manager
         JPanel topPanel = new JPanel(new BorderLayout());
@@ -473,7 +470,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * @param frame The parent frame
      * @return The configured menu bar
      */
-    public static JMenuBar createMenuBar(JFrame frame) {
+    public static JMenuBar createMenuBar(JFrame frame, TargetManager targetManager) {
         JMenuBar menuBar = new JMenuBar();
 
         // File menu
@@ -481,6 +478,13 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // Preferences submenu
         JMenu preferencesMenu = new JMenu("Preferences");
+        
+        // Base Map submenu (only if targetManager has a slippyMap)
+        if (targetManager != null && targetManager.slippyMap != null) {
+            JMenu baseMapMenu = targetManager.slippyMap.getBaseMapManager().createBaseMapMenu();
+            preferencesMenu.add(baseMapMenu);
+            preferencesMenu.addSeparator();
+        }
         
         // Dark Mode toggle
         JCheckBoxMenuItem darkModeItem = new JCheckBoxMenuItem("Dark Mode");
@@ -490,8 +494,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             public void actionPerformed(ActionEvent e) {
                 boolean isDark = darkModeItem.isSelected();
                 GuiUtils.setTheme(isDark ? "dark" : "light");
-                GuiUtils.infoMessage(frame, "Theme Changed", 
-                    "The theme will be applied when you restart the application.");
+                // Update the map's dark mode setting
+                if (targetManager != null && targetManager.slippyMap != null) {
+                    targetManager.slippyMap.setDarkMode(isDark);
+                }
             }
         });
         preferencesMenu.add(darkModeItem);
@@ -698,7 +704,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         JFrame frame = new JFrame("Target Manager");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1400, 900);
-        frame.setJMenuBar(createMenuBar(frame));
+        frame.setJMenuBar(createMenuBar(frame, layout));
         frame.add(layout);
         
         // Load preferences after adding to frame but before making visible

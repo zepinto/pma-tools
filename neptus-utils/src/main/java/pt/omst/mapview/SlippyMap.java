@@ -58,6 +58,13 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     private final ArrayList<MapMarker> points = new ArrayList<>(); // List of points to display
     private final BaseMapManager baseMapManager; // Manages tile source selection
     private boolean isDragging = false; // Track if map is being dragged
+    
+    // Distance measurement fields
+    private boolean isMeasuring = false; // Track if distance measurement is active
+    private Point2D measureStartPoint = null; // Start point in screen coordinates
+    private Point2D measureEndPoint = null; // End point in screen coordinates
+    private LocationType measureStartLocation = null; // Start location in lat/lon
+    private LocationType measureEndLocation = null; // End location in lat/lon
 
     private final CopyOnWriteArrayList<MapPainter> rasterPainters = new CopyOnWriteArrayList<>();
     private javax.swing.Timer repaintTimer;
@@ -207,9 +214,6 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             initializeMapCenterAndZoom();
             log.info("Initialized map view from points: zoom={}, cx={}, cy={}", z, cx, cy);
         }
-        
-        // Setup popup menu for map options
-        setupPopupMenu();
 
         // Zoom with mouse wheel
         addMouseWheelListener(e -> {
@@ -255,6 +259,18 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 if (e.isPopupTrigger()) {
                     return;
                 }
+                
+                // Check if SHIFT is pressed for distance measurement
+                if (e.isShiftDown()) {
+                    isMeasuring = true;
+                    measureStartPoint = new Point2D.Double(e.getX(), e.getY());
+                    measureEndPoint = measureStartPoint;
+                    measureStartLocation = getRealWorldPosition(e.getX(), e.getY());
+                    measureEndLocation = measureStartLocation;
+                    repaint();
+                    return;
+                }
+                
                 lastPos[0] = e.getX();
                 lastPos[1] = e.getY();
 
@@ -276,6 +292,23 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                     return; // Event was consumed by an overlay
                 }
                 
+                // End distance measurement
+                if (isMeasuring) {
+                    isMeasuring = false;
+                    // Keep the measurement visible for a moment, then clear it
+                    javax.swing.Timer clearTimer = new javax.swing.Timer(3000, evt -> {
+                        measureStartPoint = null;
+                        measureEndPoint = null;
+                        measureStartLocation = null;
+                        measureEndLocation = null;
+                        repaint();
+                    });
+                    clearTimer.setRepeats(false);
+                    clearTimer.start();
+                    repaint();
+                    return;
+                }
+                
                 isDragging = false;
                 // Save preferences after drag is complete
                 if (!e.isPopupTrigger()) {
@@ -292,6 +325,14 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 // Route to overlays first
                 if (overlayManager != null && overlayManager.processMouseMotionEvent(e)) {
                     return; // Event was consumed by an overlay
+                }
+                
+                // Handle distance measurement
+                if (isMeasuring) {
+                    measureEndPoint = new Point2D.Double(e.getX(), e.getY());
+                    measureEndLocation = getRealWorldPosition(e.getX(), e.getY());
+                    repaint();
+                    return;
                 }
                 
                 isDragging = true;
@@ -337,13 +378,6 @@ public class SlippyMap extends JPanel implements AutoCloseable {
     }
     
     /**
-     * Setup the popup menu for map options.
-     */
-    private void setupPopupMenu() {
-        baseMapManager.setupPopupMenu(this);
-    }
-    
-    /**
      * Set the tile source and reload tiles.
      */
     public void setTileSource(TileSource source) {
@@ -355,6 +389,13 @@ public class SlippyMap extends JPanel implements AutoCloseable {
      */
     public TileSource getTileSource() {
         return baseMapManager.getCurrentTileSource();
+    }
+    
+    /**
+     * Get the base map manager to access menu creation and other features.
+     */
+    public BaseMapManager getBaseMapManager() {
+        return baseMapManager;
     }
     
     /**
@@ -628,6 +669,58 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         g2d.fillRect(zoomBoxX, zoomBoxY, zoomTextWidth, textHeight);
         g2d.setColor(Color.WHITE);
         g2d.drawString(zoomText, zoomBoxX + 5, zoomBoxY + fm.getAscent() + 2);
+        
+        // Draw distance measurement if active
+        if ((isMeasuring || measureStartPoint != null) && measureStartLocation != null && measureEndLocation != null) {
+            // Draw line
+            g2d.setColor(new Color(255, 0, 0, 200)); // Red with slight transparency
+            g2d.setStroke(new java.awt.BasicStroke(2.0f));
+            int x1 = (int) measureStartPoint.getX();
+            int y1 = (int) measureStartPoint.getY();
+            int x2 = (int) measureEndPoint.getX();
+            int y2 = (int) measureEndPoint.getY();
+            g2d.drawLine(x1, y1, x2, y2);
+            
+            // Draw start and end circles
+            g2d.setColor(new Color(255, 0, 0, 180));
+            g2d.fillOval(x1 - 4, y1 - 4, 8, 8);
+            g2d.fillOval(x2 - 4, y2 - 4, 8, 8);
+            
+            // Calculate distance
+            double distanceMeters = measureStartLocation.getDistanceInMeters(measureEndLocation);
+            String distanceText;
+            if (distanceMeters < 1000) {
+                distanceText = String.format("%.1f m", distanceMeters);
+            } else {
+                distanceText = String.format("%.2f km", distanceMeters / 1000.0);
+            }
+            
+            // Draw distance label at midpoint
+            int midX = (x1 + x2) / 2;
+            int midY = (y1 + y2) / 2;
+            g2d.setFont(new Font("SansSerif", Font.BOLD, 14));
+            FontMetrics fmDist = g2d.getFontMetrics();
+            int distTextWidth = fmDist.stringWidth(distanceText) + 10;
+            int distTextHeight = fmDist.getHeight() + 4;
+            
+            // Draw background box
+            g2d.setColor(new Color(0, 0, 0, 180));
+            g2d.fillRect(midX - distTextWidth / 2, midY - distTextHeight / 2, distTextWidth, distTextHeight);
+            
+            // Draw border
+            g2d.setColor(new Color(255, 0, 0, 200));
+            g2d.setStroke(new java.awt.BasicStroke(1.5f));
+            g2d.drawRect(midX - distTextWidth / 2, midY - distTextHeight / 2, distTextWidth, distTextHeight);
+            
+            // Draw text
+            g2d.setColor(Color.WHITE);
+            int textX = midX - fmDist.stringWidth(distanceText) / 2;
+            int textY = midY + fmDist.getAscent() / 2 - 2;
+            g2d.drawString(distanceText, textX, textY);
+            
+            // Reset stroke
+            g2d.setStroke(new java.awt.BasicStroke(1.0f));
+        }
     }
 
     private BufferedImage applyDarkModeFilter(BufferedImage original) {
@@ -642,15 +735,10 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 int g = (rgb >> 8) & 0xff;
                 int b = rgb & 0xff;
 
-                // Invert colors for dark mode
-                r = 255 - r;
-                g = 255 - g;
-                b = 255 - b;
-
                 // Adjust brightness/contrast for all channels
-                r = (int) (r * 0.9);
-                g = (int) (g * 0.6);
-                b = (int) (b * 0.0);
+                r = (int) (r * 0.5);
+                g = (int) (g * 0.4);
+                b = (int) (b * 0.3);
 
 
                 // Ensure values stay within 0-255 range
