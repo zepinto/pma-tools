@@ -195,7 +195,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         double savedCy = prefs.getDouble("centerY", Double.NaN);
         int savedZ = prefs.getInt("zoom", -1);
         
-        int maxZ = baseMapManager.getCurrentTileSource().getMaxZoom();
+        int maxZ = 23; // Allow zooming up to LOD 23
         if (!Double.isNaN(savedCx) && !Double.isNaN(savedCy) && savedZ >= 0 && savedZ <= maxZ) {
             // Use saved preferences
             cx = savedCx;
@@ -218,7 +218,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
             int height = getHeight();
             int mouseX = e.getX();
             int mouseY = e.getY();
-            int maxZoomNow = baseMapManager.getCurrentTileSource().getMaxZoom();
+            int maxZoomNow = 23; // Allow zooming up to LOD 23
             if (rotation < 0 && z < maxZoomNow) { // Zoom in
                 double newCx = 2 * cx - (width / 2.0) + mouseX;
                 double newCy = 2 * cy - (height / 2.0) + mouseY;
@@ -491,7 +491,7 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         // Adjust zoom to fit all points (assuming 800x600 viewport initially)
         double[] minXY = latLonToPixel(maxLat, minLon, z); // Top-left corner
         double[] maxXY = latLonToPixel(minLat, maxLon, z); // Bottom-right corner
-        int maxZ = baseMapManager.getCurrentTileSource().getMaxZoom();
+        int maxZ = 23; // Allow zooming up to LOD 23
         while (z < maxZ) {
             double pixelWidth = (maxXY[0] - minXY[0]) / Math.pow(2, z - 2);
             double pixelHeight = (maxXY[1] - minXY[1]) / Math.pow(2, z - 2);
@@ -516,38 +516,47 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         int height = getHeight();
         double px = cx - width / 2.0; // Top-left x in map pixels
         double py = cy - height / 2.0; // Top-left y in map pixels
-        int numTiles = 1 << z;
+        
+        // For zoom levels > 19, use tiles from LOD 19 and scale them up
+        int effectiveTileZoom = Math.min(z, 19);
+        int zoomDiff = z - effectiveTileZoom;
+        int scaleFactor = 1 << zoomDiff; // 2^zoomDiff
 
-        // Calculate visible tile range
-        int txMin = (int) Math.floor(px / 256);
-        int txMax = (int) Math.floor((px + width - 1) / 256);
-        int tyMin = (int) Math.floor(py / 256);
-        int tyMax = (int) Math.floor((py + height - 1) / 256);
+        // Calculate visible tile range at the effective zoom level
+        int txMin = (int) Math.floor(px / 256 / scaleFactor);
+        int txMax = (int) Math.floor((px + width - 1) / 256 / scaleFactor);
+        int tyMin = (int) Math.floor(py / 256 / scaleFactor);
+        int tyMax = (int) Math.floor((py + height - 1) / 256 / scaleFactor);
+        int effectiveNumTiles = 1 << effectiveTileZoom;
 
         // Draw tiles
         for (int ty = tyMin; ty <= tyMax; ty++) {
-            if (ty < 0 || ty >= numTiles) {
+            if (ty < 0 || ty >= effectiveNumTiles) {
                 continue; // Skip invalid tile y coordinates
             }
             for (int tx = txMin; tx <= txMax; tx++) {
-                int wrappedTx = ((tx % numTiles) + numTiles) % numTiles;
-                String tileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + z + "/" + wrappedTx + "/" + ty;
+                int wrappedTx = ((tx % effectiveNumTiles) + effectiveNumTiles) % effectiveNumTiles;
+                String tileKey = baseMapManager.getCurrentTileSource().getCacheName() + "/" + effectiveTileZoom + "/" + wrappedTx + "/" + ty;
                 BufferedImage tile = memoryCache.get(tileKey);
-                double screenX = wrappedTx * 256 - px;
-                double screenY = ty * 256 - py;
+                
+                // Calculate screen position and size (scaled for zoom levels > 19)
+                double screenX = wrappedTx * 256 * scaleFactor - px;
+                double screenY = ty * 256 * scaleFactor - py;
+                int tileDisplaySize = 256 * scaleFactor;
+                
                 if (tile != null) {
-                    g2d.drawImage(tile, (int) screenX, (int) screenY, null);
+                    g2d.drawImage(tile, (int) screenX, (int) screenY, tileDisplaySize, tileDisplaySize, null);
                 } else {
-                    // Try to find a fallback tile from lower or higher zoom levels
-                    BufferedImage fallbackTile = findFallbackTile(wrappedTx, ty, z);
+                    // Try to find a fallback tile from lower zoom levels
+                    BufferedImage fallbackTile = findFallbackTile(wrappedTx, ty, effectiveTileZoom);
                     if (fallbackTile != null) {
-                        g2d.drawImage(fallbackTile, (int) screenX, (int) screenY, 256, 256, null);
+                        g2d.drawImage(fallbackTile, (int) screenX, (int) screenY, tileDisplaySize, tileDisplaySize, null);
                     } else {
                         g2d.setColor(Color.GRAY);
-                        g2d.fillRect((int) screenX, (int) screenY, 256, 256);
+                        g2d.fillRect((int) screenX, (int) screenY, tileDisplaySize, tileDisplaySize);
                     }
                     
-                    // Queue the correct tile for download
+                    // Queue the tile for download at the effective zoom level (capped at 19)
                     if (!pendingTiles.contains(tileKey)) {
                         downloadQueue.add(tileKey);
                         pendingTiles.add(tileKey);
