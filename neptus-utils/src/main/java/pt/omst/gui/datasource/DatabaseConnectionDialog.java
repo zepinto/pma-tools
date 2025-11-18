@@ -36,7 +36,7 @@ public class DatabaseConnectionDialog extends JDialog {
     private boolean confirmed = false;
     
     @Getter
-    private PulvisConnection result = null;
+    private PulvisDataSource result = null;
     
     /**
      * Creates a new Pulvis connection dialog.
@@ -112,7 +112,7 @@ public class DatabaseConnectionDialog extends JDialog {
             return;
         }
         
-        result = new PulvisConnection(host, port);
+        result = new PulvisDataSource(host, port);
         confirmed = true;
         dispose();
     }
@@ -129,7 +129,7 @@ public class DatabaseConnectionDialog extends JDialog {
      * @param parent the parent window
      * @return the configured Pulvis connection, or null if cancelled
      */
-    public static PulvisConnection showDialog(Window parent) {
+    public static PulvisDataSource showDialog(Window parent) {
         DatabaseConnectionDialog dialog = new DatabaseConnectionDialog(parent);
         dialog.setVisible(true);
         return dialog.confirmed ? dialog.result : null;

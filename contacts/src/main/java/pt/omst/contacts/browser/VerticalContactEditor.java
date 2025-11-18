@@ -201,6 +201,9 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
                     Double.valueOf((String) Objects.requireNonNull(confidenceComboBox.getSelectedItem())));
         }
 
+        if (contact.getUuid() == null) {
+            contact.setUuid(java.util.UUID.randomUUID());
+        }
         try {
             String json = Converter.ContactToJsonString(contact);
             ZipUtils.updateFileInZip(zctFile.getAbsolutePath(), "contact.json", json);

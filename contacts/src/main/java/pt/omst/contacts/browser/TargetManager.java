@@ -10,9 +10,11 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
@@ -38,12 +40,17 @@ import pt.omst.gui.ZoomableTimeIntervalSelector;
 import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.FolderDataSource;
-import pt.omst.gui.datasource.PulvisConnection;
-import pt.omst.pulvis.PulvisWSConnection;
+import pt.omst.gui.datasource.PulvisDataSource;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.mapview.SlippyMap;
+import pt.omst.pulvis.PulvisConnection;
+import pt.omst.pulvis.invoker.ApiException;
+import pt.omst.pulvis.model.ContactResponse;
+import pt.omst.pulvis.model.ContactUpdateRequest;
+import pt.omst.rasterlib.Contact;
+import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.contacts.QuadTree;
@@ -74,7 +81,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final JButton toggleEastPanelButton;
     private boolean eastPanelVisible = true;
     private boolean firstPaintDone = false;
-    private final Map<PulvisConnection, PulvisWSConnection> pulvisConnections = new HashMap<>();
+    private final Map<PulvisDataSource, PulvisConnection> pulvisConnections = new HashMap<>();
 
     /**
      * Creates a new MapViewerLayout with default time range.
@@ -131,7 +138,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.info("Contact saved: {}, refreshing map overlay", contactId);        
             contactCollection.refreshContact(zctFile);
             contactsMapOverlay.refreshContact(zctFile);
-            slippyMap.repaint();            
+            slippyMap.repaint();
+            saveContact(contactId, zctFile);
         });
         
         // observationsPanel = new ObservationsPanel();
@@ -359,14 +367,14 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * 
      * @param pcs the Pulvis connection configuration
      */
-    private void connectToPulvis(PulvisConnection pcs) {
+    private void connectToPulvis(PulvisDataSource pcs) {
         // Don't connect if already connected
         if (pulvisConnections.containsKey(pcs)) {
             log.warn("Already connected to Pulvis at {}", pcs.getBaseUrl());
             return;
         }
         
-        PulvisWSConnection connection = new PulvisWSConnection(pcs.getBaseUrl() + "/ws/contacts");
+        PulvisConnection connection = new PulvisConnection(pcs.getHost(), pcs.getPort());
         pulvisConnections.put(pcs, connection);
         
         connection.connect().thenRun(() -> {
@@ -388,8 +396,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * 
      * @param pcs the Pulvis connection to disconnect
      */
-    private void disconnectFromPulvis(PulvisConnection pcs) {
-        PulvisWSConnection connection = pulvisConnections.remove(pcs);
+    private void disconnectFromPulvis(PulvisDataSource pcs) {
+        PulvisConnection connection = pulvisConnections.remove(pcs);
         if (connection != null) {
             try {
                 connection.disconnect();
@@ -549,7 +557,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     @Override
     public void close() throws Exception {
         // Close all Pulvis connections
-        for (Map.Entry<PulvisConnection, PulvisWSConnection> entry : pulvisConnections.entrySet()) {
+        for (Map.Entry<PulvisDataSource, PulvisConnection> entry : pulvisConnections.entrySet()) {
             try {
                 entry.getValue().disconnect();
                 log.info("Closed Pulvis connection to {}", entry.getKey().getBaseUrl());
@@ -572,7 +580,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 log.info("Folder data source added: {}", cds.getFolder().getName());
                 contactCollection.addRootFolder(cds.getFolder());
             }
-            case PulvisConnection pcs -> {
+            case PulvisDataSource pcs -> {
                 log.info("Pulvis connection added: {}", pcs.getDisplayName());
                 connectToPulvis(pcs);
             }
@@ -590,7 +598,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 contactCollection.removeRootFolder(cds.getFolder());
                 break;
             }
-            case PulvisConnection pcs -> {
+            case PulvisDataSource pcs -> {
                 log.info("Pulvis connection removed: {}", pcs.getDisplayName());
                 disconnectFromPulvis(pcs);
                 break;
@@ -599,6 +607,52 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 break;
             }
         }
+    }
+
+    private void createContact(PulvisConnection connection, CompressedContact contact) {
+        try {
+            ContactResponse response = connection.contacts().createContact(contact.getZctFile());
+            log.info("Created contact {} in Pulvis with ID {}", contact.getContact().getLabel(), response.getUuid());
+        } catch (ApiException e) {
+            log.error("Error creating contact {} in Pulvis: {}", contact.getContact().getLabel(), e.getMessage());
+        }
+    }
+    
+
+    public void saveContact(PulvisConnection connection, CompressedContact contact) {
+        if (contact.getContact().getUuid() == null) {
+            log.warn("Contact has no UUID, cannot save to Pulvis");
+            return;
+        }
+
+        try {
+            ContactResponse response = connection.contacts().getContact(contact.getContact().getUuid());
+            log.info("Updating contact {} in Pulvis...", contact.getContact().getLabel());
+            ContactUpdateRequest updateRequest = new ContactUpdateRequest();
+            
+        }
+        catch (ApiException e) {
+            if (e.getCode() == 404) {
+                log.info("Contact {} not found in Pulvis, creating new contact...", contact.getContact().getLabel());
+                createContact(connection, contact);
+                return;
+            }
+            else {  
+                log.warn("Error retrieving contact from Pulvis: {}.", e.getMessage());
+            }
+            return;
+        }
+    }
+
+    public void saveContact(final UUID contactId, final File zctFile) {
+        log.info("Saving contact {} to Pulvis...", contactId);
+        // do in background
+        IndexedRasterUtils.background(() -> {
+            CompressedContact contact = contactCollection.getContact(zctFile);
+            for (PulvisConnection connection : pulvisConnections.values()) {
+                saveContact(connection, contact);
+            }
+        });
     }
 
     /**

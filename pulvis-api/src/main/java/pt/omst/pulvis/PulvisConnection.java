@@ -6,19 +6,6 @@
 
 package pt.omst.pulvis;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.messaging.converter.MappingJackson2MessageConverter;
-import org.springframework.messaging.simp.stomp.*;
-import org.springframework.web.socket.client.standard.StandardWebSocketClient;
-import org.springframework.web.socket.messaging.WebSocketStompClient;
-import org.springframework.web.socket.sockjs.client.SockJsClient;
-import org.springframework.web.socket.sockjs.client.Transport;
-import org.springframework.web.socket.sockjs.client.WebSocketTransport;
-import pt.omst.pulvis.model.Contact;
-
 import java.lang.reflect.Type;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -29,17 +16,44 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.messaging.converter.MappingJackson2MessageConverter;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.simp.stomp.StompFrameHandler;
+import org.springframework.messaging.simp.stomp.StompHeaders;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandler;
+import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.messaging.WebSocketStompClient;
+import org.springframework.web.socket.sockjs.client.SockJsClient;
+import org.springframework.web.socket.sockjs.client.Transport;
+import org.springframework.web.socket.sockjs.client.WebSocketTransport;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
+import pt.omst.pulvis.api.ContactsApi;
+import pt.omst.pulvis.invoker.ApiClient;
+import pt.omst.pulvis.model.Contact;
+
 /**
  * WebSocket connection client for Pulvis contact updates.
  * Connects to the Pulvis WebSocket endpoint and subscribes to contact events.
+ * Also provides REST API access through ContactsApi.
  */
-public class PulvisWSConnection {
+public class PulvisConnection {
     
-    private static final Logger log = LoggerFactory.getLogger(PulvisWSConnection.class);
-    private static final String DEFAULT_WS_URL = "http://localhost:8080/ws/contacts";
+    private static final Logger log = LoggerFactory.getLogger(PulvisConnection.class);
+    private static final String DEFAULT_HOSTNAME = "localhost";
+    private static final int DEFAULT_PORT = 8080;
     private static final String TOPIC_CONTACTS = "/topic/contacts";
     
+    private final String hostname;
+    private final int port;
     private final String wsUrl;
+    private final ContactsApi contactsApi;
     private WebSocketStompClient stompClient;
     private StompSession stompSession;
     private boolean connected = false;
@@ -48,19 +62,29 @@ public class PulvisWSConnection {
     private int eventCount = 0;
     
     /**
-     * Creates a WebSocket connection with the default URL.
+     * Creates a WebSocket connection with the default hostname and port.
      */
-    public PulvisWSConnection() {
-        this(DEFAULT_WS_URL);
+    public PulvisConnection() {
+        this(DEFAULT_HOSTNAME, DEFAULT_PORT);
     }
     
     /**
-     * Creates a WebSocket connection with a custom URL.
+     * Creates a WebSocket connection with a custom hostname and port.
      * 
-     * @param wsUrl The WebSocket URL (e.g., "http://localhost:8080/ws/contacts")
+     * @param hostname The server hostname (e.g., "localhost")
+     * @param port The server port (e.g., 8080)
      */
-    public PulvisWSConnection(String wsUrl) {
-        this.wsUrl = wsUrl;
+    public PulvisConnection(String hostname, int port) {
+        this.hostname = hostname;
+        this.port = port;
+        this.wsUrl = String.format("http://%s:%d/ws/contacts", hostname, port);
+        
+        // Initialize REST API client
+        ApiClient apiClient = new ApiClient();
+        apiClient.setHost(hostname);
+        apiClient.setPort(port);
+        this.contactsApi = new ContactsApi(apiClient);
+        
         initializeStompClient();
     }
     
@@ -226,6 +250,33 @@ public class PulvisWSConnection {
     }
     
     /**
+     * Gets the ContactsApi instance for REST API calls.
+     * 
+     * @return ContactsApi instance configured for this connection
+     */
+    public ContactsApi getContactsApi() {
+        return contactsApi;
+    }
+    
+    /**
+     * Gets the hostname of the Pulvis server.
+     * 
+     * @return The server hostname
+     */
+    public String getHostname() {
+        return hostname;
+    }
+    
+    /**
+     * Gets the port of the Pulvis server.
+     * 
+     * @return The server port
+     */
+    public int getPort() {
+        return port;
+    }
+    
+    /**
      * Handles incoming contact events.
      */
     private void handleEvent(ContactEvent event) {
@@ -338,12 +389,16 @@ public class PulvisWSConnection {
     public enum EventType {
         ADDED, CREATED, UPDATED, DELETED
     }
-    
+
+    public ContactsApi contacts() {
+        return contactsApi;
+    }
+
     /**
      * Example usage and testing.
      */
     public static void main(String[] args) {
-        PulvisWSConnection connection = new PulvisWSConnection();
+        PulvisConnection connection = new PulvisConnection();
         
         // Add event listener
         connection.addEventListener(event -> {
@@ -370,7 +425,7 @@ public class PulvisWSConnection {
         });
         
         // Connect
-        System.out.println("Connecting to " + DEFAULT_WS_URL + "...");
+        System.out.println("Connecting to " + connection.hostname + ":" + connection.port + "...");
         CompletableFuture<Void> connectFuture = connection.connect();
         
         try {

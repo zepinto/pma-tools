@@ -6,7 +6,7 @@
 
 package pt.omst.pulvis;
 
-import pt.omst.pulvis.PulvisWSConnection.ContactEvent;
+import pt.omst.pulvis.PulvisConnection.ContactEvent;
 import pt.omst.pulvis.model.Contact;
 
 import java.time.format.DateTimeFormatter;
@@ -35,7 +35,7 @@ public class PulvisWSDemo {
         System.out.println("Connecting to: " + wsUrl);
         System.out.println();
         
-        PulvisWSConnection connection = new PulvisWSConnection(wsUrl);
+        PulvisConnection connection = new PulvisConnection("localhost", 8080);
         
         // Add event listener to display incoming contact events
         connection.addEventListener(event -> displayEvent(event));

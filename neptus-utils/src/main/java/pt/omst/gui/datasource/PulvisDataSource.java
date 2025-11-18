@@ -21,7 +21,7 @@ import pt.lsts.neptus.util.I18n;
  * A data source representing a Pulvis server connection.
  */
 @Slf4j
-public class PulvisConnection implements DataSource {
+public class PulvisDataSource implements DataSource {
     
     @Getter
     private final String host;
@@ -41,7 +41,7 @@ public class PulvisConnection implements DataSource {
      * @param host the Pulvis server host
      * @param port the Pulvis server port
      */
-    public PulvisConnection(String host, int port) {
+    public PulvisDataSource(String host, int port) {
         if (host == null || host.trim().isEmpty()) {
             throw new IllegalArgumentException("Host cannot be null or empty");
         }
@@ -148,8 +148,8 @@ public class PulvisConnection implements DataSource {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (!(obj instanceof PulvisConnection)) return false;
-        PulvisConnection other = (PulvisConnection) obj;
+        if (!(obj instanceof PulvisDataSource)) return false;
+        PulvisDataSource other = (PulvisDataSource) obj;
         return host.equals(other.host) && port == other.port;
     }
     

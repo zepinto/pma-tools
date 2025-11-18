@@ -82,8 +82,8 @@ public class DataChip extends JPanel {
         }
         
         // LED indicator for PulvisConnection
-        if (dataSource instanceof PulvisConnection) {
-            PulvisConnection pulvis = (PulvisConnection) dataSource;
+        if (dataSource instanceof PulvisDataSource) {
+            PulvisDataSource pulvis = (PulvisDataSource) dataSource;
             ledLabel = new JLabel(pulvis.getStatusIcon());
             ledLabel.setToolTipText(pulvis.isConnected() ? "Connected" : "Not connected");
             add(ledLabel);
@@ -136,8 +136,8 @@ public class DataChip extends JPanel {
      * Should be called periodically to refresh the connection status.
      */
     public void updateLedStatus() {
-        if (ledLabel != null && dataSource instanceof PulvisConnection) {
-            PulvisConnection pulvis = (PulvisConnection) dataSource;
+        if (ledLabel != null && dataSource instanceof PulvisDataSource) {
+            PulvisDataSource pulvis = (PulvisDataSource) dataSource;
             ledLabel.setIcon(pulvis.getStatusIcon());
             ledLabel.setToolTipText(pulvis.isConnected() ? "Connected" : "Not connected");
         }
@@ -178,7 +178,7 @@ public class DataChip extends JPanel {
         if (dataSource instanceof FolderDataSource) {
             bgColor = isDark ? DARK_FOLDER_BG : LIGHT_FOLDER_BG;
             borderColor = isDark ? DARK_FOLDER_BORDER : LIGHT_FOLDER_BORDER;
-        } else if (dataSource instanceof PulvisConnection) {
+        } else if (dataSource instanceof PulvisDataSource) {
             bgColor = isDark ? DARK_DB_BG : LIGHT_DB_BG;
             borderColor = isDark ? DARK_DB_BORDER : LIGHT_DB_BORDER;
         } else {

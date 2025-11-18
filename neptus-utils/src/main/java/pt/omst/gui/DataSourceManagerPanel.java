@@ -34,7 +34,7 @@ import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.DatabaseConnectionDialog;
 import pt.omst.gui.datasource.FolderDataSource;
-import pt.omst.gui.datasource.PulvisConnection;
+import pt.omst.gui.datasource.PulvisDataSource;
 
 /**
  * A panel for managing multiple data sources with a visual chip-based interface.
@@ -185,7 +185,7 @@ public class DataSourceManagerPanel extends JPanel {
     
     private void addDatabaseConnection() {
         Window window = SwingUtilities.getWindowAncestor(this);
-        PulvisConnection dataSource = DatabaseConnectionDialog.showDialog(window);
+        PulvisDataSource dataSource = DatabaseConnectionDialog.showDialog(window);
         
         if (dataSource != null) {
             addDataSource(dataSource);
@@ -267,11 +267,11 @@ public class DataSourceManagerPanel extends JPanel {
         return new ArrayList<>(dataSources);
     }
 
-    public List<PulvisConnection> getDatabaseConnections() {
-        List<PulvisConnection> dbConnections = new ArrayList<>();
+    public List<PulvisDataSource> getDatabaseConnections() {
+        List<PulvisDataSource> dbConnections = new ArrayList<>();
         for (DataSource source : dataSources) {
-            if (source instanceof PulvisConnection) {
-                dbConnections.add((PulvisConnection) source);
+            if (source instanceof PulvisDataSource) {
+                dbConnections.add((PulvisDataSource) source);
             }
         }
         return dbConnections;
@@ -384,8 +384,8 @@ public class DataSourceManagerPanel extends JPanel {
                 FolderDataSource folder = (FolderDataSource) source;
                 prefs.put("folder." + folderCount, folder.getFolder().getAbsolutePath());
                 folderCount++;
-            } else if (source instanceof PulvisConnection) {
-                PulvisConnection db = (PulvisConnection) source;
+            } else if (source instanceof PulvisDataSource) {
+                PulvisDataSource db = (PulvisDataSource) source;
                 prefs.put("db." + dbCount + ".host", db.getHost());
                 prefs.putInt("db." + dbCount + ".port", db.getPort());
                 dbCount++;
@@ -434,7 +434,7 @@ public class DataSourceManagerPanel extends JPanel {
             int port = prefs.getInt("db." + i + ".port", 8080);
             
             if (host != null) {
-                addDataSource(new PulvisConnection(host, port));
+                addDataSource(new PulvisDataSource(host, port));
                 log.debug("Loaded database connection from preferences: {}:{}", host, port);
             }
         }
