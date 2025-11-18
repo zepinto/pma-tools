@@ -17,6 +17,7 @@ import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -30,6 +31,7 @@ import javax.swing.SwingUtilities;
 import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
@@ -42,7 +44,6 @@ import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.mapview.SlippyMap;
-import pt.omst.neptus.util.GuiUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.contacts.QuadTree;
@@ -473,6 +474,21 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // Preferences submenu
         JMenu preferencesMenu = new JMenu("Preferences");
+        
+        // Dark Mode toggle
+        JCheckBoxMenuItem darkModeItem = new JCheckBoxMenuItem("Dark Mode");
+        darkModeItem.setSelected(GuiUtils.isDarkTheme());
+        darkModeItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                boolean isDark = darkModeItem.isSelected();
+                GuiUtils.setTheme(isDark ? "dark" : "light");
+                GuiUtils.infoMessage(frame, "Theme Changed", 
+                    "The theme will be applied when you restart the application.");
+            }
+        });
+        preferencesMenu.add(darkModeItem);
+        preferencesMenu.addSeparator();
         
         // Contact Types menu item
         JMenuItem contactTypesItem = new JMenuItem("Contact Types");

@@ -17,17 +17,13 @@ import java.util.Collection;
 import java.util.Optional;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.WGS84Utilities;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.core.SystemPositionAndAttitude;
 import pt.lsts.neptus.mra.LogMarker;
 import pt.lsts.neptus.mra.SidescanLogMarker;
-import pt.omst.WGS84Utilities;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.core.SystemPositionAndAttitude;
-import pt.omst.neptus.sidescan.ISidescanLine;
-import pt.omst.neptus.sidescan.SidescanHistogramNormalizer;
-import pt.omst.neptus.sidescan.SidescanParser;
-import pt.omst.neptus.sidescan.SidescanParserFactory;
-import pt.omst.neptus.util.StreamUtil;
-import pt.omst.neptus.util.ZipUtils;
+import pt.lsts.neptus.util.StreamUtil;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
@@ -39,6 +35,10 @@ import pt.omst.rasterlib.MeasurementType;
 import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.SensorInfo;
 import pt.omst.rasterlib.contacts.CompressedContact;
+import pt.omst.sidescan.ISidescanLine;
+import pt.omst.sidescan.SidescanHistogramNormalizer;
+import pt.omst.sidescan.SidescanParser;
+import pt.omst.sidescan.SidescanParserFactory;
 
 @Slf4j
 public class ContactUtils {

@@ -21,7 +21,7 @@ import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.java.Log;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterfall.overlays.RasterfallOverlays;
 
 @Log

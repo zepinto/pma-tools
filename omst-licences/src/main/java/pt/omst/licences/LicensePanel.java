@@ -24,8 +24,8 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
 import javax0.license3j.License;
-import pt.omst.neptus.util.GuiUtils;
-import pt.omst.neptus.util.ImageUtils;
+import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.ImageUtils;
 
 public class LicensePanel extends JPanel {
 

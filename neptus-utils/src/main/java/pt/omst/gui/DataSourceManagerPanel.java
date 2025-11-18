@@ -26,6 +26,8 @@ import javax.swing.Timer;
 import javax.swing.UIManager;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.I18n;
 import pt.omst.gui.datasource.DataChip;
 import pt.omst.gui.datasource.DataSource;
 import pt.omst.gui.datasource.DataSourceEvent;
@@ -33,8 +35,6 @@ import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.DatabaseConnectionDialog;
 import pt.omst.gui.datasource.FolderDataSource;
 import pt.omst.gui.datasource.PulvisConnection;
-import pt.omst.neptus.util.GuiUtils;
-import pt.omst.neptus.util.I18n;
 
 /**
  * A panel for managing multiple data sources with a visual chip-based interface.

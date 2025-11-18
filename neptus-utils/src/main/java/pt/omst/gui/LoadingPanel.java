@@ -29,7 +29,7 @@ import javax.swing.JWindow;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 
-import pt.omst.neptus.util.ImageUtils;
+import pt.lsts.neptus.util.ImageUtils;
 
 /**
  * A sleek animated loading panel with OceanScan logo for use as a splash screen.
@@ -327,7 +327,7 @@ public class LoadingPanel extends JPanel {
      * Demo main method
      */
     public static void main(String[] args) {
-        pt.omst.neptus.util.GuiUtils.setLookAndFeel();
+        pt.lsts.neptus.util.GuiUtils.setLookAndFeel();
         
         JWindow splash = LoadingPanel.showSplashScreen("Loading application...");
         LoadingPanel panel = getLoadingPanel(splash);

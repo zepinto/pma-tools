@@ -12,7 +12,7 @@ import java.util.List;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 

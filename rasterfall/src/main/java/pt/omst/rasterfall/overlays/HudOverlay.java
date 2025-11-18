@@ -11,10 +11,10 @@ import java.awt.image.BufferedImage;
 
 import javax.swing.JComponent;
 
-import pt.omst.neptus.sidescan.SidescanParser;
-import pt.omst.neptus.sidescan.SidescanParserFactory;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.VehiclePositionHUD;
+import pt.omst.sidescan.SidescanParser;
+import pt.omst.sidescan.SidescanParserFactory;
 
 public class HudOverlay extends AbstractOverlay {
 

@@ -5,9 +5,10 @@
 //***************************************************************************
 package pt.omst.mapview;
 
-import pt.omst.neptus.core.LocationType;
-
 import javax.swing.*;
+
+import pt.lsts.neptus.core.LocationType;
+
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Point2D;

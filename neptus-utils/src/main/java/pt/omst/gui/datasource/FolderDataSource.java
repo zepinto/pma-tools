@@ -11,7 +11,7 @@ import javax.swing.Icon;
 import javax.swing.UIManager;
 
 import lombok.Getter;
-import pt.omst.neptus.util.I18n;
+import pt.lsts.neptus.util.I18n;
 
 /**
  * A data source representing a folder on the file system.

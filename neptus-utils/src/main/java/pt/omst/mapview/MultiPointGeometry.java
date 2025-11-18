@@ -18,7 +18,7 @@ import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.core.LocationType;
+import pt.lsts.neptus.core.LocationType;
 
 /**
  * A geometry class that holds a list of coordinates (LocationType + offsets),

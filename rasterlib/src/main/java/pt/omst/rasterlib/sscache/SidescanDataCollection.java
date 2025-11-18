@@ -6,11 +6,11 @@ import java.util.HashSet;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.sidescan.SidescanParser;
-import pt.omst.neptus.sidescan.SidescanParserFactory;
 import pt.omst.rasterlib.IndexedRasterCreator;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.SensorInfo;
+import pt.omst.sidescan.SidescanParser;
+import pt.omst.sidescan.SidescanParserFactory;
 
 @Slf4j
 public class SidescanDataCollection {

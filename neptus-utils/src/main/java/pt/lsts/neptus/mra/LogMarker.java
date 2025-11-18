@@ -32,9 +32,9 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.core.Pair;
-import pt.omst.tablelayout.TableLayout;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.core.Pair;
+import pt.lsts.neptus.tablelayout.TableLayout;
 
 /**
  * Represents a temporal and spatial marker associated with log data.

@@ -48,10 +48,10 @@ import java.util.Vector;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.core.SystemPositionAndAttitude;
-import pt.omst.neptus.sidescan.SidescanParameters;
-import pt.omst.neptus.sidescan.SidescanParser;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.core.SystemPositionAndAttitude;
+import pt.omst.sidescan.SidescanParameters;
+import pt.omst.sidescan.SidescanParser;
 
 /**
  * @author zp

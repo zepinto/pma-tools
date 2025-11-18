@@ -5,9 +5,10 @@
 //***************************************************************************
 package pt.omst.mapview;
 
-import pt.omst.neptus.util.GuiUtils;
-
 import javax.swing.*;
+
+import pt.lsts.neptus.util.GuiUtils;
+
 import java.awt.*;
 import java.util.ArrayList;
 

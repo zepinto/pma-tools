@@ -37,8 +37,8 @@ import javax.swing.event.DocumentListener;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.util.GuiUtils;
-import pt.omst.neptus.util.ZipUtils;
+import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;

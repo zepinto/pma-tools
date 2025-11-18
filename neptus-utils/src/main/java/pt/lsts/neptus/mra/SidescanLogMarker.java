@@ -8,8 +8,8 @@ package pt.lsts.neptus.mra;
 import java.io.Serial;
 
 import lombok.Setter;
-import pt.omst.neptus.colormap.ColorMap;
-import pt.omst.neptus.colormap.ColorMapFactory;
+import pt.lsts.neptus.colormap.ColorMap;
+import pt.lsts.neptus.colormap.ColorMapFactory;
 
 /**
  * Specialized log marker for sidescan sonar data annotations.

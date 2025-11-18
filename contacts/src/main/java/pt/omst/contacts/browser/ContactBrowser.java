@@ -15,12 +15,12 @@ import javax.swing.JScrollPane;
 import org.jdesktop.swingx.JXTable;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.tablelayout.TableLayout;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.contacts.ContactEditor;
 import pt.omst.mapview.SlippyMap;
-import pt.omst.neptus.util.GuiUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
-import pt.omst.tablelayout.TableLayout;
 
 @Slf4j
 public class ContactBrowser extends JPanel {

@@ -38,8 +38,8 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.util.GuiUtils;
 
 @Slf4j
 public class SlippyMap extends JPanel implements AutoCloseable {

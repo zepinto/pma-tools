@@ -22,9 +22,9 @@ import org.imgscalr.Scalr;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.mapview.MapMarker;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;

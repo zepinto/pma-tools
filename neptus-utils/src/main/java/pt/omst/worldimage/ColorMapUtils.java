@@ -11,10 +11,10 @@ import java.awt.image.BufferedImage;
 import java.util.Collections;
 import java.util.Vector;
 
-import pt.omst.neptus.colormap.ColorMap;
-import pt.omst.neptus.colormap.ColorMapFactory;
-import pt.omst.neptus.colormap.InterpolationColorMap;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.colormap.ColorMap;
+import pt.lsts.neptus.colormap.ColorMapFactory;
+import pt.lsts.neptus.colormap.InterpolationColorMap;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.worldimage.DataDiscretizer.DataPoint;
 
 public class ColorMapUtils {

@@ -30,16 +30,16 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.sidescan.ISidescanLine;
-import pt.omst.neptus.sidescan.SidescanHistogramNormalizer;
-import pt.omst.neptus.sidescan.SidescanLine;
-import pt.omst.neptus.sidescan.SidescanParameters;
-import pt.omst.neptus.sidescan.SidescanParser;
-import pt.omst.neptus.sidescan.SidescanParserFactory;
-import pt.omst.neptus.util.StreamUtil;
-import pt.omst.neptus.util.ZipUtils;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.util.StreamUtil;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
+import pt.omst.sidescan.ISidescanLine;
+import pt.omst.sidescan.SidescanHistogramNormalizer;
+import pt.omst.sidescan.SidescanLine;
+import pt.omst.sidescan.SidescanParameters;
+import pt.omst.sidescan.SidescanParser;
+import pt.omst.sidescan.SidescanParserFactory;
 
 @Slf4j
 public class IndexedRasterUtils {

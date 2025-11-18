@@ -29,17 +29,17 @@ import javax.print.attribute.standard.Sides;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.colormap.ColorMap;
+import pt.lsts.neptus.colormap.ColorMapFactory;
 import pt.lsts.neptus.mra.SidescanLogMarker;
-import pt.omst.neptus.colormap.ColorMap;
-import pt.omst.neptus.colormap.ColorMapFactory;
-import pt.omst.neptus.sidescan.ISidescanLine;
-import pt.omst.neptus.sidescan.SidescanHistogramNormalizer;
-import pt.omst.neptus.sidescan.SidescanLine;
-import pt.omst.neptus.sidescan.SidescanMarkerUtils;
-import pt.omst.neptus.sidescan.SidescanParameters;
-import pt.omst.neptus.sidescan.SidescanParser;
-import pt.omst.neptus.sidescan.SidescanParserFactory;
-import pt.omst.neptus.util.ImageUtils;
+import pt.lsts.neptus.util.ImageUtils;
+import pt.omst.sidescan.ISidescanLine;
+import pt.omst.sidescan.SidescanHistogramNormalizer;
+import pt.omst.sidescan.SidescanLine;
+import pt.omst.sidescan.SidescanMarkerUtils;
+import pt.omst.sidescan.SidescanParameters;
+import pt.omst.sidescan.SidescanParser;
+import pt.omst.sidescan.SidescanParserFactory;
 
 @Slf4j
 public class IndexedRasterCreator {

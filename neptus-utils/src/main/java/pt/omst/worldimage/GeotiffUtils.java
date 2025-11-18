@@ -12,7 +12,7 @@ import org.gdal.gdal.gdal;
 import org.gdal.gdalconst.gdalconst;
 
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.core.LocationType;
+import pt.lsts.neptus.core.LocationType;
 
 /**
  * Utility class for exporting BufferedImage objects as GeoTIFF files using
@@ -37,7 +37,7 @@ public class GeotiffUtils {
      * @return A WorldImage containing the sampled raster data and geographic information
      * @throws IOException If there's an error reading the file
      */
-    public static WorldImage readGeoTiff(String filePath, pt.omst.neptus.colormap.ColorMap colorMap, 
+    public static WorldImage readGeoTiff(String filePath, pt.lsts.neptus.colormap.ColorMap colorMap, 
                                          int cellWidth, int sampleStep) throws IOException {
         // Open the GeoTIFF file
         Dataset dataset = gdal.Open(filePath, gdalconst.GA_ReadOnly);
@@ -129,7 +129,7 @@ public class GeotiffUtils {
      * @return A WorldImage containing the raster data and geographic information
      * @throws IOException If there's an error reading the file
      */
-    public static WorldImage readGeoTiff(String filePath, pt.omst.neptus.colormap.ColorMap colorMap) throws IOException {
+    public static WorldImage readGeoTiff(String filePath, pt.lsts.neptus.colormap.ColorMap colorMap) throws IOException {
         return readGeoTiff(filePath, colorMap, 5, 1);
     }
 

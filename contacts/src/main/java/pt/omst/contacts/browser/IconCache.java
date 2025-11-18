@@ -8,7 +8,7 @@ import java.util.Map;
 import javax.swing.ImageIcon;
 
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.GuiUtils;
 
 @Slf4j
 public class IconCache {

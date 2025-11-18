@@ -23,9 +23,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import lombok.Setter;
+import pt.lsts.neptus.core.LocationType;
 import pt.omst.mapview.MapPainter;
 import pt.omst.mapview.SlippyMap;
-import pt.omst.neptus.core.LocationType;
 
 /**
  * @author zp

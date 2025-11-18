@@ -3,8 +3,8 @@ package pt.omst.worldimage;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 
-import pt.omst.neptus.colormap.ColorMap;
-import pt.omst.neptus.core.LocationType;
+import pt.lsts.neptus.colormap.ColorMap;
+import pt.lsts.neptus.core.LocationType;
 
 /**
  * @author zp

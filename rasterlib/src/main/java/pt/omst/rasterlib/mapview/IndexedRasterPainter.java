@@ -16,10 +16,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.LocationType;
 import pt.omst.mapview.MapPainter;
 import pt.omst.mapview.MultiPointGeometry;
 import pt.omst.mapview.SlippyMap;
-import pt.omst.neptus.core.LocationType;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.SampleDescription;

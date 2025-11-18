@@ -28,8 +28,8 @@ import javax.swing.JScrollPane;
 
 import lombok.Getter;
 import lombok.extern.java.Log;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.IndexedRasterUtils;

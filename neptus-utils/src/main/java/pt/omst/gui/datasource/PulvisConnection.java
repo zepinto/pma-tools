@@ -15,7 +15,7 @@ import javax.swing.UIManager;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.util.I18n;
+import pt.lsts.neptus.util.I18n;
 
 /**
  * A data source representing a Pulvis server connection.

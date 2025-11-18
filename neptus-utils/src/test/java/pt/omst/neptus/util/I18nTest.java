@@ -13,6 +13,9 @@
 package pt.omst.neptus.util;
 
 import org.junit.jupiter.api.Test;
+
+import pt.lsts.neptus.util.I18n;
+
 import org.junit.jupiter.api.BeforeEach;
 import java.util.Locale;
 

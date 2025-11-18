@@ -12,8 +12,8 @@ import java.io.IOException;
 import javax.swing.JPanel;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.LocationType;
 import pt.omst.mapview.SlippyMap;
-import pt.omst.neptus.core.LocationType;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.mapview.IndexedRasterPainter;

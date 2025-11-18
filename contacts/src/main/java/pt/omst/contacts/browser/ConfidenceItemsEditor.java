@@ -6,9 +6,9 @@
 package pt.omst.contacts.browser;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.Folders;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.contacts.ItemList;
-import pt.omst.neptus.core.Folders;
-import pt.omst.neptus.util.GuiUtils;
 
 import javax.swing.*;
 import java.awt.event.WindowAdapter;

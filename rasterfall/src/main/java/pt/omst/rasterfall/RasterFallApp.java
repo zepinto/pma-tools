@@ -23,11 +23,11 @@ import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
 
 import javax0.license3j.License;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
-import pt.omst.neptus.util.GuiUtils;
 
 public class RasterFallApp extends JFrame {
 

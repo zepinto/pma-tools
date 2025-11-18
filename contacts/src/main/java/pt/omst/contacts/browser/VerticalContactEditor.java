@@ -35,12 +35,12 @@ import javax.swing.event.DocumentListener;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.ContactChangeListener;
 import pt.omst.contacts.ContactSaveListener;
 import pt.omst.contacts.ItemList;
 import pt.omst.contacts.ObservationsPanel;
-import pt.omst.neptus.util.GuiUtils;
-import pt.omst.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;

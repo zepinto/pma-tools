@@ -35,8 +35,8 @@ import javax.swing.JToggleButton;
 
 import lombok.Getter;
 import lombok.Setter;
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Converter;

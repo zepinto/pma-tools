@@ -8,8 +8,8 @@ package pt.omst.contacts.browser;
 import com.csvreader.CsvReader;
 import com.csvreader.CsvWriter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.util.GuiUtils;
-import pt.omst.neptus.util.I18n;
+import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.I18n;
 
 import javax.swing.*;
 import javax.swing.border.Border;

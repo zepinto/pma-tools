@@ -15,8 +15,8 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
-import pt.omst.neptus.core.LocationType;
-import pt.omst.neptus.core.Pair;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.core.Pair;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.MeasurementType;

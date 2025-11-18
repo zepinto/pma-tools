@@ -22,7 +22,7 @@ import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 
 import lombok.Getter;
-import pt.omst.neptus.util.I18n;
+import pt.lsts.neptus.util.I18n;
 
 /**
  * Dialog for configuring a Pulvis server connection.

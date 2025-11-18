@@ -19,7 +19,7 @@ import javax.swing.ListCellRenderer;
 import com.csvreader.CsvReader;
 
 import lombok.extern.java.Log;
-import pt.omst.neptus.core.Folders;
+import pt.lsts.neptus.core.Folders;
 
 /**
  * This class is used to load a list of items from a CSV file.

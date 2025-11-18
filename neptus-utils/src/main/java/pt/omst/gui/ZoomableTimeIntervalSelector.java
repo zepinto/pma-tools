@@ -34,7 +34,7 @@ import javax.swing.JPanel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import pt.omst.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.GuiUtils;
 
 /**
  * A zoomable and scrollable time interval selector component.
