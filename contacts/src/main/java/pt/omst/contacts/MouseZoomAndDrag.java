@@ -9,6 +9,7 @@ import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 
 public class MouseZoomAndDrag extends AbstractInteraction<SidescanObservationPanel> {
 
@@ -75,8 +76,21 @@ public class MouseZoomAndDrag extends AbstractInteraction<SidescanObservationPan
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             Point2D.Double imgCoords = component.screenToImageCoords(new Point2D.Double(component.getMousePosition().x, component.getMousePosition().y));
             Point2D.Double worldCoords = component.imageToWorldCoords(imgCoords);
+            
+            // Draw text with translucent background for visibility
+            String coordText = (float)worldCoords.x + ", " + (float)worldCoords.y;
+            FontMetrics metrics = g2d.getFontMetrics();
+            Rectangle2D bounds = metrics.getStringBounds(coordText, g2d);
+            int padding = 3;
+            
+            // Draw semi-transparent background
+            g2d.setColor(new Color(0, 0, 0, 180));
+            g2d.fillRect(10 - padding, 20 - (int)bounds.getHeight() - padding, 
+                        (int)bounds.getWidth() + padding * 2, (int)bounds.getHeight() + padding * 2);
+            
+            // Draw white text on top
             g2d.setColor(Color.white);
-            g2d.drawString((float)worldCoords.x + ", " + (float)worldCoords.y, 10, 20);
+            g2d.drawString(coordText, 10, 20);
         }
     }
 }

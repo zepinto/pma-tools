@@ -3,6 +3,7 @@ build/
 .gradle/
 */build/
 **/build/
+dist/
 
 # IDE files
 .idea/
@@ -23,3 +24,6 @@ Thumbs.db
 *.tmp
 *.swp
 *~
+
+#licenses
+conf/licenses

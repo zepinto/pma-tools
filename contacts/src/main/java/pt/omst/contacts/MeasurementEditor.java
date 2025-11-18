@@ -242,14 +242,24 @@ public class MeasurementEditor extends MouseZoomAndDrag {
 
             Double distance = getDistance();
             if (distance != null) {
-                g2d.setColor(Color.WHITE);
                 String measurementTypeString = measurementType.toString().toLowerCase();
                 String str = measurementTypeString+": "+String.format("%.2f m", distance);
                 //calculate string size
                 FontMetrics metrics = g2d.getFontMetrics();
                 Rectangle2D rect = metrics.getStringBounds(str, g2d);
-                //draw string centered in the bottom of the panel
-                g2d.drawString(str, (int) (component.getWidth() - rect.getWidth()) / 2, component.getHeight() - 12);
+                
+                int textX = (int) (component.getWidth() - rect.getWidth()) / 2;
+                int textY = component.getHeight() - 12;
+                int padding = 3;
+                
+                // Draw semi-transparent background for visibility
+                g2d.setColor(new Color(0, 0, 0, 180));
+                g2d.fillRect(textX - padding, textY - (int)rect.getHeight() - padding,
+                            (int)rect.getWidth() + padding * 2, (int)rect.getHeight() + padding * 2);
+                
+                // Draw white text on top
+                g2d.setColor(Color.WHITE);
+                g2d.drawString(str, textX, textY);
 
             }
         }

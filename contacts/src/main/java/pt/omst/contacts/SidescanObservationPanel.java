@@ -30,8 +30,12 @@ import java.util.ArrayList;
 
 import javax.imageio.ImageIO;
 import javax.swing.ButtonGroup;
+import javax.swing.JFrame;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JToggleButton;
+import javax.swing.SwingUtilities;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -45,6 +49,7 @@ import pt.omst.rasterlib.MeasurementType;
 import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.SampleDescription;
+import pt.omst.rasterlib.mapview.IndexedRasterViewer;
 
 public class SidescanObservationPanel extends JPanel implements Closeable {
 
@@ -56,6 +61,8 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     private final BufferedImage image;
     @Getter
     private double widthMeters, heightMeters, headingDegrees;
+    @Getter
+    private final File folder;
 
     @Getter @Setter
     private double zoomFactorX = 1.0, zoomFactorY = 1.0;
@@ -148,6 +155,7 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     }
 
     public SidescanObservationPanel(File folder, Observation observation) {
+        this.folder = folder;
         this.observation = observation;
         if (observation.getRasterFilename() == null) {
             throw new RuntimeException("Observation does not have a raster file");
@@ -186,6 +194,11 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
             @Override
             public void mouseClicked(MouseEvent e) {
                 requestFocusInWindow();
+                
+                // Show context menu on right-click
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    showContextMenu(e);
+                }
             }
         });
 
@@ -448,6 +461,43 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     public void addNotify() {
         super.addNotify();
         requestFocusInWindow();
+    }
+
+    /**
+     * Shows a context menu with option to view sample in IndexedRasterViewer.
+     */
+    private void showContextMenu(MouseEvent e) {
+        JPopupMenu contextMenu = new JPopupMenu();
+        
+        JMenuItem viewSampleItem = new JMenuItem("View Sample with IndexedRasterViewer");
+        viewSampleItem.addActionListener(evt -> openIndexedRasterViewer());
+        
+        contextMenu.add(viewSampleItem);
+        contextMenu.show(e.getComponent(), e.getX(), e.getY());
+    }
+    
+    /**
+     * Opens the IndexedRasterViewer in a new window.
+     */
+    private void openIndexedRasterViewer() {
+        try {
+            // Create the viewer
+            IndexedRasterViewer viewer = new IndexedRasterViewer(raster, image);
+            
+            // Create frame
+            JFrame frame = new JFrame("IndexedRaster Viewer - " + observation.getRasterFilename());
+            frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            frame.setSize(1200, 800);
+            frame.setContentPane(viewer);
+            frame.setLocationRelativeTo(this);
+            frame.setVisible(true);
+            
+        } catch (Exception ex) {
+            javax.swing.JOptionPane.showMessageDialog(this,
+                "Error opening IndexedRaster Viewer: " + ex.getMessage(),
+                "Error",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     @Override

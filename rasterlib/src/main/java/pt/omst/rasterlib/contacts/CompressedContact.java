@@ -15,6 +15,7 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
@@ -31,6 +32,7 @@ import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.Observation;
+import pt.omst.rasterlib.SampleDescription;
 
 /**
  * A compressed contact is a contact that is stored in a compressed (.zct) file.
@@ -77,6 +79,8 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         this.timestamp = contact.getObservations().stream().min(Comparator.comparing(Observation::getTimestamp))
                 .orElseThrow().getTimestamp().toInstant().toEpochMilli();        
     }
+
+    
 
     /**
      * Set the label of the contact but DOES NOT save it.
@@ -188,6 +192,29 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
                         log.info("Raster file {} exists, reading...", rasterFile.getAbsolutePath());
                         IndexedRaster indexedRaster =  Converter.IndexedRasterFromJsonString(Files.readString(rasterFile.toPath()));
                         BufferedImage img = ImageIO.read(new File(getTempDir(), indexedRaster.getFilename()));
+                        SampleDescription firstSample = indexedRaster.getSamples().getFirst();
+                        SampleDescription lastSample = indexedRaster.getSamples().getLast();
+
+                        LocationType topLocation = new LocationType(
+                                firstSample.getPose().getLatitude(),
+                                firstSample.getPose().getLongitude());
+                        LocationType bottomLocation = new LocationType(
+                                lastSample.getPose().getLatitude(),
+                                lastSample.getPose().getLongitude());
+
+                        long startTime = firstSample.getTimestamp().toInstant().toEpochMilli();
+                        long endTime = lastSample.getTimestamp().toInstant().toEpochMilli();
+
+                        double ellapsedSeconds = (endTime - startTime) / 1000.0;
+                        double averageSpeed = indexedRaster.getSamples().stream().map(s -> s.getPose().getU())
+                        .collect(Collectors.averagingDouble(Double::doubleValue));
+                                
+
+                        double distanceMeters = topLocation.getHorizontalDistanceInMeters(bottomLocation);
+                        double widthMeters = indexedRaster.getSensorInfo().getMaxRange() - indexedRaster.getSensorInfo().getMinRange();
+
+                        log.info("Raster {} loaded, size: {}x{}, distance covered: {} x {} meters, time: {}s, avg speed: {} m/s",
+                                indexedRaster.getFilename(), img.getWidth(null), img.getHeight(null), distanceMeters, widthMeters, ellapsedSeconds, averageSpeed);
                         thumbnail = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.AUTOMATIC, 256, 256);
                         log.info("Thumbnail loaded for contact {} from raster {}, resolution: {}x{}", 
                                 contact.getLabel(), obs.getRasterFilename(), img.getWidth(null), img.getHeight(null));

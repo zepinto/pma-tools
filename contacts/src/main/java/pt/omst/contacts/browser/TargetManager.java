@@ -49,7 +49,6 @@ import pt.omst.pulvis.PulvisConnection;
 import pt.omst.pulvis.invoker.ApiException;
 import pt.omst.pulvis.model.ContactResponse;
 import pt.omst.pulvis.model.ContactUpdateRequest;
-import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
