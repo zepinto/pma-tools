@@ -39,6 +39,12 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
     private boolean isSelecting = false;
     private boolean hasDragged = false; // Track if actual dragging occurred
 
+    // Fields for cycling through contacts at same location
+    private Point lastClickLocation = null;
+    private List<CompressedContact> contactsAtLastClick = new ArrayList<>();
+    private int currentContactIndex = 0;
+    private static final int CLICK_DISTANCE_THRESHOLD = 5; // pixels
+
     public ContactsMapOverlay(ContactCollection collection) {
         this.collection = collection;
         // do in background thread
@@ -151,19 +157,53 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         
         if (e.getID() == MouseEvent.MOUSE_CLICKED && SwingUtilities.isLeftMouseButton(e)) {
             // Handle single contact click with left button
-            for (CompressedContact contact : collection.getFilteredContacts()) {
-                double[] screenPos = map.latLonToScreen(
-                    contact.getContact().getLatitude(), 
-                    contact.getContact().getLongitude());
-                double dx = e.getX() - screenPos[0];
-                double dy = e.getY() - screenPos[1];
-                double distanceSq = dx * dx + dy * dy;
-                if (distanceSq <= 100) { // within 10 pixels
-                   selectedContact = contact;
-                   if (selectionListener != null) {
-                       selectionListener.contactSelected(contact);
-                       return true;
-                   }                   
+            Point clickPoint = e.getPoint();
+            
+            // Check if this is a click at approximately the same location as the last click
+            boolean isSameLocation = false;
+            if (lastClickLocation != null) {
+                int dx = Math.abs(clickPoint.x - lastClickLocation.x);
+                int dy = Math.abs(clickPoint.y - lastClickLocation.y);
+                isSameLocation = (dx <= CLICK_DISTANCE_THRESHOLD && dy <= CLICK_DISTANCE_THRESHOLD);
+            }
+            
+            if (!isSameLocation) {
+                // New location - find all contacts at this location
+                contactsAtLastClick.clear();
+                for (CompressedContact contact : collection.getFilteredContacts()) {
+                    double[] screenPos = map.latLonToScreen(
+                        contact.getContact().getLatitude(), 
+                        contact.getContact().getLongitude());
+                    double dx = clickPoint.x - screenPos[0];
+                    double dy = clickPoint.y - screenPos[1];
+                    double distanceSq = dx * dx + dy * dy;
+                    if (distanceSq <= 100) { // within 10 pixels
+                        contactsAtLastClick.add(contact);
+                    }
+                }
+                
+                lastClickLocation = clickPoint;
+                currentContactIndex = 0;
+                
+                // Select first contact if any found
+                if (!contactsAtLastClick.isEmpty()) {
+                    selectedContact = contactsAtLastClick.get(0);
+                    if (selectionListener != null) {
+                        selectionListener.contactSelected(selectedContact);
+                    }
+                    map.repaint();
+                    return true;
+                }
+            } else {
+                // Same location - cycle to next contact
+                if (!contactsAtLastClick.isEmpty()) {
+                    currentContactIndex = (currentContactIndex + 1) % contactsAtLastClick.size();
+                    selectedContact = contactsAtLastClick.get(currentContactIndex);
+                    if (selectionListener != null) {
+                        selectionListener.contactSelected(selectedContact);
+                    }
+                    map.repaint();
+                    return true;
                 }
             }
         }
