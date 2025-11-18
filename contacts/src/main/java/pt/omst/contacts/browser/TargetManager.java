@@ -324,8 +324,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private JPanel createContactEditorSection() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-
         JScrollPane scrollPane = new JScrollPane(contactEditor);
+        contactEditor.setPreferredSize(new Dimension(240, 240));
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
@@ -470,6 +470,34 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // File menu
         JMenu fileMenu = new JMenu("File");
+
+        // Preferences submenu
+        JMenu preferencesMenu = new JMenu("Preferences");
+        
+        // Contact Types menu item
+        JMenuItem contactTypesItem = new JMenuItem("Contact Types");
+        contactTypesItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                ContactItemsEditor editor = new ContactItemsEditor();
+                editor.setVisible(true);
+            }
+        });
+        preferencesMenu.add(contactTypesItem);
+        
+        // Labels menu item
+        JMenuItem labelsItem = new JMenuItem("Labels");
+        labelsItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                LabelsEditor editor = new LabelsEditor();
+                editor.setVisible(true);
+            }
+        });
+        preferencesMenu.add(labelsItem);
+        
+        fileMenu.add(preferencesMenu);
+        fileMenu.addSeparator();
 
         // Exit menu item
         JMenuItem exitItem = new JMenuItem("Exit");

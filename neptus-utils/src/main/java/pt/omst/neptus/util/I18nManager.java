@@ -29,8 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class I18nManager {
     private static final String DEFAULT_BUNDLE_NAME = "messages";
-    private static final String MISSING_KEY_PREFIX = "!";
-    private static final String MISSING_KEY_SUFFIX = "!";
+    private static final String MISSING_KEY_PREFIX = "";
+    private static final String MISSING_KEY_SUFFIX = "";
     
     private static volatile I18nManager instance;
     private static final Object lock = new Object();

@@ -56,8 +56,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             }
             catch (Exception e) {
                 log.warn("Unable to load contact from disk:", e);
-            }
-            
+            }            
         }
     }
 

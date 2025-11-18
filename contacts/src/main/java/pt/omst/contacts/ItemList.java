@@ -36,6 +36,9 @@ public class ItemList {
     private static final File CONTACT_TYPES_FILE = new File(Folders.getConfigFolder(), "contact_items.csv");
     private static final File CONFIDENCE_TYPES_FILE = new File(Folders.getConfigFolder(), "confidence_items.csv");
 
+    private static ItemList cachedContactTypes = null;
+    private static ItemList cachedConfidenceTypes = null;
+
     private LinkedHashMap<String, String> categories = new LinkedHashMap<String, String>();
     private ArrayList<String> labels = new ArrayList<String>();
     private LinkedHashMap<String, ArrayList<String>> subLabels = new LinkedHashMap<>();
@@ -45,12 +48,15 @@ public class ItemList {
      * @return a list of contact types
      */
     public static ItemList getContactTypes() {
-        try {
-            return new ItemList(CONTACT_TYPES_FILE);
-        } catch (Exception e) {
-            log.warning("Error loading contact types: " + e.getMessage());
-            return new ItemList();
+        if (cachedContactTypes == null) {
+            try {
+                cachedContactTypes = new ItemList(CONTACT_TYPES_FILE);
+            } catch (Exception e) {
+                log.warning("Error loading contact types: " + e.getMessage());
+                cachedContactTypes = new ItemList();
+            }
         }
+        return cachedContactTypes;
     }
 
     /**
@@ -58,11 +64,42 @@ public class ItemList {
      * @return a list of confidence types
      */
     public static ItemList getConfidenceTypes() {
+        if (cachedConfidenceTypes == null) {
+            try {
+                cachedConfidenceTypes = new ItemList(CONFIDENCE_TYPES_FILE);
+            } catch (Exception e) {
+                log.warning("Error loading confidence types: " + e.getMessage());
+                cachedConfidenceTypes = new ItemList();
+            }
+        }
+        return cachedConfidenceTypes;
+    }
+
+    /**
+     * Reload the contact types from the default file.
+     * This method should be called after the CSV file has been modified.
+     */
+    public static void reloadContactTypes() {
         try {
-            return new ItemList(CONFIDENCE_TYPES_FILE);
+            cachedContactTypes = new ItemList(CONTACT_TYPES_FILE);
+            log.info("Contact types reloaded successfully");
         } catch (Exception e) {
-            log.warning("Error loading confidence types: " + e.getMessage());
-            return new ItemList();
+            log.warning("Error reloading contact types: " + e.getMessage());
+            cachedContactTypes = new ItemList();
+        }
+    }
+
+    /**
+     * Reload the confidence types from the default file.
+     * This method should be called after the CSV file has been modified.
+     */
+    public static void reloadConfidenceTypes() {
+        try {
+            cachedConfidenceTypes = new ItemList(CONFIDENCE_TYPES_FILE);
+            log.info("Confidence types reloaded successfully");
+        } catch (Exception e) {
+            log.warning("Error reloading confidence types: " + e.getMessage());
+            cachedConfidenceTypes = new ItemList();
         }
     }
 

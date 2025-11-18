@@ -75,7 +75,7 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         setLayout(new BorderLayout());
 
         observationsPanel = new ObservationsPanel();
-        observationsPanel.setPreferredSize(new Dimension(600, 300));
+        observationsPanel.setPreferredSize(new Dimension(240, 500));
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         splitPane.setTopComponent(observationsPanel);

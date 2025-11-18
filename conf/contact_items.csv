@@ -1,10 +1,11 @@
-label, description, sub-labels
-UNKNOWN, Not yet classified,
-MILCO, Mine-Like Contact
-MINE, Mine
-NOMBO, Non-Mine-Like Contact
-MILEC, Mine-Like Echo
-CUI, Critical Underwater Infrastructure
-WRECK, Wreck
-BODY, Body
-SPECIAL, Special Object
+label,description,sub-labels
+UNKNOWN,Not yet classified
+MILCO,Mine-Like Contact
+MINE,Mine
+NOMBO,Non-Mine-Like Contact
+MILEC,Mine-Like Echo
+CUI,Critical Underwater Infrastructure
+WRECK,Wreck
+BODY,Body
+SPECIAL,Special Object
+teste,sdf
