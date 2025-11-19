@@ -15,6 +15,17 @@ import java.util.UUID;
  */
 @lombok.Data
 public class Contact {
+    
+    /**
+     * Constructor that ensures a UUID is always present.
+     */
+    public Contact() {
+        // Auto-generate UUID if not set
+        if (this.uuid == null) {
+            this.uuid = UUID.randomUUID();
+        }
+    }
+    
     @lombok.Getter(onMethod_ = {@JsonProperty("depth")})
     @lombok.Setter(onMethod_ = {@JsonProperty("depth")})
     private Double depth;

@@ -6,7 +6,9 @@
 package pt.omst.contacts.browser;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -30,6 +32,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -38,12 +41,16 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
+import javax.swing.border.BevelBorder;
+import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 
 import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.lsts.neptus.util.ZipUtils;
+import pt.omst.contacts.PulvisContactSynchronizer;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.browser.filtering.ContactFilterListener;
 import pt.omst.contacts.browser.filtering.ContactFilterPanel;
@@ -56,14 +63,14 @@ import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.FolderDataSource;
 import pt.omst.gui.datasource.PulvisDataSource;
+import pt.omst.gui.jobs.BackgroundJob;
+import pt.omst.gui.jobs.JobManager;
+import pt.omst.gui.jobs.TaskStatusIndicator;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.pulvis.PulvisConnection;
-import pt.omst.pulvis.invoker.ApiException;
-import pt.omst.pulvis.model.ContactResponse;
-import pt.omst.pulvis.model.ContactUpdateRequest;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
@@ -94,22 +101,27 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final JPanel eastPanel;
     private final JButton toggleEastPanelButton;
     private boolean eastPanelVisible = true;
+    private final JPanel statusBar;
+    private final JLabel totalContactsLabel;
+    private final JLabel visibleContactsLabel;
+    private final TaskStatusIndicator taskStatusIndicator;
     private boolean firstPaintDone = false;
     private final Map<PulvisDataSource, PulvisConnection> pulvisConnections = new HashMap<>();
-    
+    private final Map<PulvisDataSource, PulvisContactSynchronizer> pulvisSynchronizers = new HashMap<>();
+
     // File watcher for auto-refresh
     private RecursiveFileWatcher fileWatcher;
     private final Map<File, Long> ignoreOwnWritesUntil = new ConcurrentHashMap<>();
     private static final long IGNORE_WINDOW_MS = 500; // 500ms after save
     private boolean autoRefreshEnabled = true; // User preference
-    
+
     // West panel (filter panel)
     private final ContactFilterPanel filterPanel;
     private final JPanel westPanel;
     private final JSplitPane outerSplitPane;
     private final JButton toggleWestPanelButton;
     private boolean westPanelVisible = false;
-    
+
     // Debouncing for zoom events
     private javax.swing.Timer updateContactsTimer;
     private boolean isZooming = false;
@@ -128,9 +140,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * @param maxTime Maximum time for the time selector
      */
     public TargetManager(Instant minTime, Instant maxTime) {
-        setLayout(new BorderLayout(5, 5));
-        setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-
+        setLayout(new BorderLayout(5, 0));
+        
         contactCollection = new ContactCollection();
 
         // Initialize components
@@ -148,7 +159,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.info("Contact selected: {}", contact.getContact().getLabel());
             setContact(contact);
         });
-        
+
         // Add component listener to detect first paint and update contacts
         slippyMap.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
@@ -162,9 +173,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 }
             }
         });
-        
+
         contactEditor = new VerticalContactEditor();
-        
+
         // Initialize file watcher
         try {
             fileWatcher = new RecursiveFileWatcher(this::handleFileChange);
@@ -174,27 +185,40 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         } catch (IOException e) {
             log.error("Failed to initialize file watcher", e);
         }
-        
+
         // Listen for contact saves to refresh the map overlay
         contactEditor.addSaveListener((contactId, zctFile) -> {
             log.info("Contact saved: {}, refreshing map overlay", contactId);
-            
+
             // Register this as our own write to ignore file watcher event
             ignoreOwnWritesUntil.put(zctFile, System.currentTimeMillis() + IGNORE_WINDOW_MS);
-            
+
             contactCollection.refreshContact(zctFile);
             contactsMapOverlay.refreshContact(zctFile);
             slippyMap.repaint();
             saveContact(contactId, zctFile);
+            updateStatusBar();
         });
 
         // Create top panel with data source manager
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(dataSourceManager, BorderLayout.CENTER);
 
-        // Create bottom panel with time selector
+        // Initialize status bar labels
+        totalContactsLabel = new JLabel("Total: 0");
+        visibleContactsLabel = new JLabel("Visible: 0");
+        totalContactsLabel.setPreferredSize(new Dimension(100, 8));
+        visibleContactsLabel.setPreferredSize(new Dimension(100, 8));
+        taskStatusIndicator = new TaskStatusIndicator(null); // Will set proper parent later
+        taskStatusIndicator.setBorder(new EmptyBorder(0,0,0,0));
+
+        // Create status bar with background job indicator and contact counts
+        statusBar = createStatusBar();
+
+        // Create bottom panel with time selector and status bar
         JPanel bottomPanel = new JPanel(new BorderLayout());
         bottomPanel.add(timeSelector, BorderLayout.CENTER);
+        bottomPanel.add(statusBar, BorderLayout.SOUTH);
 
         // Create east panel (collapsible side panel)
         eastPanel = createEastPanel();
@@ -218,8 +242,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         mainSplitPane.setResizeWeight(0.7); // Give 70% space to map
         mainSplitPane.setOneTouchExpandable(false);
         mainSplitPane.setContinuousLayout(true);
-        
-        // Create outer split pane (horizontal split between west filter panel and main split pane)
+
+        // Create outer split pane (horizontal split between west filter panel and main
+        // split pane)
         outerSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         outerSplitPane.setLeftComponent(null); // Start with west panel hidden
         outerSplitPane.setRightComponent(mainSplitPane);
@@ -250,7 +275,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         JPanel toggleWestButtonPanel = new JPanel(new BorderLayout());
         toggleWestButtonPanel.add(toggleWestPanelButton, BorderLayout.NORTH);
         centerPanel.add(toggleWestButtonPanel, BorderLayout.WEST);
-        
+
         // Create toggle button for east panel (contact editor)
         toggleEastPanelButton = new JButton("▸");
         toggleEastPanelButton.setFocusable(false);
@@ -289,7 +314,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.info("Zoom settled, updated contacts with filter panel refresh");
         });
         updateContactsTimer.setRepeats(false);
-        
+
         SwingUtilities.invokeLater(() -> {
             // Connect filter panel listeners
             filterPanel.addFilterListener(new ContactFilterListener() {
@@ -298,7 +323,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                     log.info("Filters changed, updating visible contacts");
                     updateVisibleContacts(true); // Always update filter panel when filters change
                 }
-                
+
                 @Override
                 public void onContactSelected(CompressedContact contact) {
                     log.info("Contact selected from filter panel: {}", contact.getContact().getLabel());
@@ -313,6 +338,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 Instant startTime = selection[0];
                 Instant endTime = selection[1];
                 updateVisibleContacts(true); // Update filter panel when time selection changes
+                updateStatusBar();
                 log.info("Selection changed: {} to {}", startTime, endTime);
             });
 
@@ -322,6 +348,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 updateContactsTimer.restart();
                 // Update contacts immediately but skip filter panel refresh during zoom
                 updateVisibleContacts(false);
+                updateStatusBar();
                 log.debug("Map bounds changed, debouncing contact update");
             });
         });
@@ -370,7 +397,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.debug("Auto-refresh disabled, ignoring file change: {}", file.getName());
             return;
         }
-        
+
         // Must run on EDT for UI updates
         SwingUtilities.invokeLater(() -> {
             try {
@@ -379,18 +406,19 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                         log.info("New contact detected: {}", file.getName());
                         contactCollection.addContact(file);
                         updateVisibleContacts(true);
+                        updateStatusBar();
                         slippyMap.repaint();
                         break;
-                        
+
                     case "MODIFY":
                         if (!shouldIgnoreOwnWrite(file)) {
                             log.info("Contact modified externally: {}", file.getName());
                             contactCollection.refreshContact(file);
                             contactsMapOverlay.refreshContact(file);
-                            
+
                             // Auto-reload if this is the currently displayed contact
                             if (contactEditor.getZctFile() != null &&
-                                contactEditor.getZctFile().equals(file)) {
+                                    contactEditor.getZctFile().equals(file)) {
                                 try {
                                     log.info("Reloading modified contact in editor: {}", file.getName());
                                     contactEditor.loadZct(file);
@@ -398,23 +426,25 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                                     log.error("Failed to reload contact in editor", e);
                                 }
                             }
-                            
+
                             updateVisibleContacts(true);
+                            updateStatusBar();
                             slippyMap.repaint();
                         }
                         break;
-                        
+
                     case "DELETE":
                         log.info("Contact deleted: {}", file.getName());
                         contactCollection.removeContact(file);
-                        
+
                         // Clear editor if displaying deleted contact
                         if (contactEditor.getZctFile() != null &&
-                            contactEditor.getZctFile().equals(file)) {
+                                contactEditor.getZctFile().equals(file)) {
                             contactEditor.clearObservations();
                         }
-                        
+
                         updateVisibleContacts(true);
+                        updateStatusBar();
                         slippyMap.repaint();
                         break;
                 }
@@ -425,7 +455,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     /**
-     * Checks if a file modification should be ignored because it was caused by this application.
+     * Checks if a file modification should be ignored because it was caused by this
+     * application.
      */
     private boolean shouldIgnoreOwnWrite(File file) {
         Long ignoreUntil = ignoreOwnWritesUntil.get(file);
@@ -451,7 +482,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // Save east panel visibility
         prefs.putBoolean("eastPanel.visible", eastPanelVisible);
         log.debug("Saved east panel visibility: {}", eastPanelVisible);
-        
+
         // Save west panel state
         prefs.putBoolean("westPanel.visible", westPanelVisible);
         if (westPanelVisible) {
@@ -460,7 +491,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.debug("Saved west panel divider location: {}", westDivider);
         }
         log.debug("Saved west panel visibility: {}", westPanelVisible);
-        
+
         // Save filter selections
         Set<String> classifications = filterPanel.getSelectedClassifications();
         Set<String> confidences = filterPanel.getSelectedConfidences();
@@ -469,11 +500,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         prefs.put("filters.confidence", String.join(",", confidences));
         prefs.put("filters.labels", String.join(",", labels));
         log.debug("Saved filter selections");
-        
+
         // Save auto-refresh preference
         prefs.putBoolean("autoRefresh.enabled", autoRefreshEnabled);
         log.debug("Saved auto-refresh preference: {}", autoRefreshEnabled);
-        
+
         // Save icon size preference
         int iconSize = IconCache.getInstance().getIconSize();
         prefs.putInt("iconSize", iconSize);
@@ -521,7 +552,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 hideContactDetails();
             }
         });
-        
+
         // Load west panel visibility (default to false - collapsed)
         boolean westVisible = prefs.getBoolean("westPanel.visible", false);
         int westDivider = prefs.getInt("westPanel.dividerLocation", 300);
@@ -534,12 +565,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 }
             }
         });
-        
+
         // Load filter selections
         String classificationsStr = prefs.get("filters.classifications", "");
         String confidencesStr = prefs.get("filters.confidence", "");
         String labelsStr = prefs.get("filters.labels", "");
-        
+
         javax.swing.SwingUtilities.invokeLater(() -> {
             if (!classificationsStr.isEmpty()) {
                 Set<String> classifications = Set.of(classificationsStr.split(","));
@@ -557,11 +588,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 log.debug("Loaded label filters: {}", labels);
             }
         });
-        
+
         // Load auto-refresh preference (default to true)
         autoRefreshEnabled = prefs.getBoolean("autoRefresh.enabled", true);
         log.debug("Loaded auto-refresh preference: {}", autoRefreshEnabled);
-        
+
         // Load icon size preference (default to 12)
         int iconSize = prefs.getInt("iconSize", 12);
         IconCache.getInstance().setIconSize(iconSize);
@@ -570,7 +601,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // Load time selection
         long startTimeMillis = prefs.getLong("timeSelector.startTime", -1);
         long endTimeMillis = prefs.getLong("timeSelector.endTime", -1);
-        
+
         if (startTimeMillis > 0 && endTimeMillis > 0) {
             Instant startTime = Instant.ofEpochMilli(startTimeMillis);
             Instant endTime = Instant.ofEpochMilli(endTimeMillis);
@@ -611,12 +642,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private JPanel createWestPanel() {
         JPanel panel = new JPanel(new BorderLayout(0, 0));
         panel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
-        
+
         JScrollPane scrollPane = new JScrollPane(filterPanel);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        
+
         panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
     }
@@ -631,6 +662,43 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
+    }
+
+    /**
+     * Creates the status bar with background job indicator and contact counts.
+     */
+    private JPanel createStatusBar() {
+        JPanel panel = new JPanel(new BorderLayout(0, 0));
+        panel.setBorder(new EmptyBorder(2,2,0,2));
+        panel.setPreferredSize(new Dimension(100, 26));
+        
+        // Left side: Contact counts
+        JPanel countsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // countsPanel.add(totalContactsLabel);
+        // countsPanel.add(new JLabel("|"));
+        // countsPanel.add(visibleContactsLabel);
+
+        // Right side: Background job indicator
+        JPanel jobPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        jobPanel.add(taskStatusIndicator);
+
+        panel.add(countsPanel, BorderLayout.WEST);
+        panel.add(jobPanel, BorderLayout.EAST);
+
+        return panel;
+    }
+
+    /**
+     * Updates the status bar with current contact counts.
+     */
+    private void updateStatusBar() {
+        SwingUtilities.invokeLater(() -> {
+            int totalContacts = contactCollection.getAllContacts().size();
+            int visibleContacts = contactCollection.getFilteredContacts().size();
+
+            totalContactsLabel.setText("Total: " + totalContacts);
+            visibleContactsLabel.setText("Visible: " + visibleContacts);
+        });
     }
 
     /**
@@ -652,9 +720,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     public void clearObservations() {
         contactEditor.clearObservations();
     }
-    
+
     /**
-     * Connects to a Pulvis server via WebSocket.
+     * Connects to a Pulvis server via WebSocket and initiates synchronization.
      * 
      * @param pcs the Pulvis connection configuration
      */
@@ -664,24 +732,87 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.warn("Already connected to Pulvis at {}", pcs.getBaseUrl());
             return;
         }
-        
+
+        // Create connection
         PulvisConnection connection = new PulvisConnection(pcs.getHost(), pcs.getPort());
         pulvisConnections.put(pcs, connection);
-        
+
+        // Create sync folder for this Pulvis instance
+        String syncFolderName = String.format("pulvis-%s-%d", pcs.getHost(), pcs.getPort());
+        File syncFolder = new File("contacts", syncFolderName);
+
+        // Create synchronizer
+        PulvisContactSynchronizer synchronizer = new PulvisContactSynchronizer(
+                connection,
+                syncFolder,
+                contactCollection,
+                progress -> {
+                    // Progress callback - could update UI here if needed
+                    log.debug("Sync progress: {} contacts", progress.get());
+                });
+        pulvisSynchronizers.put(pcs, synchronizer);
+
         connection.connect().thenRun(() -> {
             log.info("Connected to Pulvis WS for contacts at {}", pcs.getBaseUrl());
+
+            // Start initial download in background job
+            BackgroundJob downloadJob = new BackgroundJob("Download from " + pcs.getHost()) {
+                private int totalContacts = 0;
+
+                @Override
+                protected Void doInBackground() throws Exception {
+                    updateStatus("Starting download...");
+
+                    // Start download and track progress
+                    synchronizer.downloadAllContacts().whenComplete((count, throwable) -> {
+                        if (throwable != null) {
+                            log.error("Download failed", throwable);
+                            updateStatus("Failed: " + throwable.getMessage());
+                        } else {
+                            totalContacts = count;
+                            updateStatus("Completed: " + count + " contacts");
+                            setProgress(100);
+
+                            // Add sync folder to file watcher
+                            if (fileWatcher != null) {
+                                try {
+                                    fileWatcher.addRoot(syncFolder);
+                                } catch (IOException e) {
+                                    log.error("Failed to add sync folder to file watcher", e);
+                                }
+                            }
+                        }
+                    });
+
+                    // Poll for progress updates
+                    while (!synchronizer.isInitialSyncComplete() && !isCancelled()) {
+                        Thread.sleep(500);
+                        int current = synchronizer.getStatistics().get("downloaded");
+                        if (totalContacts > 0) {
+                            setProgress((current * 100) / totalContacts);
+                        }
+                        updateStatus(String.format("Downloaded %d contacts...", current));
+                    }
+
+                    return null;
+                }
+            };
+
+            JobManager.getInstance().submit(downloadJob);
+
         }).exceptionally(ex -> {
             log.error("Error connecting to Pulvis WS at {}", pcs.getBaseUrl(), ex);
             pulvisConnections.remove(pcs);
+            pulvisSynchronizers.remove(pcs);
             return null;
         });
-        
+
         connection.addEventListener(ce -> {
             log.info("Received contact event from Pulvis: {}", ce.getEventType());
-            // Handle contact events (added/updated/removed)
+            synchronizer.handleContactEvent(ce);
         });
     }
-    
+
     /**
      * Disconnects from a Pulvis server.
      * 
@@ -698,7 +829,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         }
     }
-    
+
     /**
      * Updates the visible contacts based on current map bounds and time selection.
      * 
@@ -707,12 +838,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private void updateVisibleContacts(boolean updateFilterPanel) {
         Instant startTime = timeSelector.getSelectedStartTime();
         Instant endTime = timeSelector.getSelectedEndTime();
-        
+
         // Get filter criteria from filter panel
         Set<String> classifications = filterPanel.getSelectedClassifications();
         Set<String> confidences = filterPanel.getSelectedConfidences();
         Set<String> labels = filterPanel.getSelectedLabels();
-        
+
         // Apply filters with all criteria
         contactCollection.applyFilters(
                 new QuadTree.Region(slippyMap.getVisibleBounds()),
@@ -721,13 +852,15 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 classifications,
                 confidences,
                 labels);
-        
+
         // Update the filter panel's contact list only if requested
         // (skip during rapid zoom/pan to improve performance)
         if (updateFilterPanel) {
-            // Schedule filter panel update after a short delay to allow background filtering to complete
+            // Schedule filter panel update after a short delay to allow background
+            // filtering to complete
             javax.swing.Timer filterPanelTimer = new javax.swing.Timer(350, e -> {
                 filterPanel.setContacts(contactCollection.getFilteredContacts());
+                updateStatusBar();
             });
             filterPanelTimer.setRepeats(false);
             filterPanelTimer.start();
@@ -796,14 +929,14 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // Preferences submenu
         JMenu preferencesMenu = new JMenu("Preferences");
-        
+
         // Base Map submenu (only if targetManager has a slippyMap)
         if (targetManager != null && targetManager.slippyMap != null) {
             JMenu baseMapMenu = targetManager.slippyMap.getBaseMapManager().createBaseMapMenu();
             preferencesMenu.add(baseMapMenu);
             preferencesMenu.addSeparator();
         }
-        
+
         // Dark Mode toggle
         JCheckBoxMenuItem darkModeItem = new JCheckBoxMenuItem("Dark Mode");
         darkModeItem.setSelected(GuiUtils.isDarkTheme());
@@ -820,7 +953,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         });
         preferencesMenu.add(darkModeItem);
         preferencesMenu.addSeparator();
-        
+
         // Auto-Refresh toggle
         JCheckBoxMenuItem autoRefreshItem = new JCheckBoxMenuItem("Auto-Refresh Contacts");
         autoRefreshItem.setSelected(targetManager != null && targetManager.autoRefreshEnabled);
@@ -835,12 +968,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         });
         preferencesMenu.add(autoRefreshItem);
         preferencesMenu.addSeparator();
-        
+
         // Icon Size submenu
         JMenu iconSizeMenu = new JMenu("Icon Size");
-        int[] iconSizes = {8, 12, 16, 20, 24, 32};
+        int[] iconSizes = { 8, 12, 16, 20, 24, 32 };
         int currentSize = IconCache.getInstance().getIconSize();
-        
+
         for (int size : iconSizes) {
             JMenuItem sizeItem = new JMenuItem(size + " px" + (size == currentSize ? " ✓" : ""));
             final int selectedSize = size;
@@ -867,7 +1000,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         }
         preferencesMenu.add(iconSizeMenu);
         preferencesMenu.addSeparator();
-        
+
         // Contact Types menu item
         JMenuItem contactTypesItem = new JMenuItem("Contact Types");
         contactTypesItem.addActionListener(new ActionListener() {
@@ -878,7 +1011,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
         preferencesMenu.add(contactTypesItem);
-        
+
         // Labels menu item
         JMenuItem labelsItem = new JMenuItem("Labels");
         labelsItem.addActionListener(new ActionListener() {
@@ -889,13 +1022,13 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
         preferencesMenu.add(labelsItem);
-        
+
         fileMenu.add(preferencesMenu);
         fileMenu.addSeparator();
 
         // Reports submenu
         JMenu reportsMenu = new JMenu("Reports");
-        
+
         // Generate Report menu item
         JMenuItem generateReportItem = new JMenuItem("Generate Report...");
         generateReportItem.addActionListener(new ActionListener() {
@@ -910,7 +1043,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
         reportsMenu.add(generateReportItem);
-        
+
         // Edit Template menu item
         JMenuItem editTemplateItem = new JMenuItem("Edit Template...");
         editTemplateItem.addActionListener(new ActionListener() {
@@ -918,22 +1051,24 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             public void actionPerformed(ActionEvent e) {
                 try {
                     // Extract template from resources to temp file
-                    java.io.InputStream templateStream = TargetManager.class.getResourceAsStream("/templates/report-template.html");
+                    java.io.InputStream templateStream = TargetManager.class
+                            .getResourceAsStream("/templates/report-template.html");
                     if (templateStream == null) {
                         GuiUtils.errorMessage(frame, "Error", "Template file not found in resources.");
                         return;
                     }
-                    
+
                     java.io.File tempFile = java.io.File.createTempFile("contact-report-template-", ".html");
-                    java.nio.file.Files.copy(templateStream, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    java.nio.file.Files.copy(templateStream, tempFile.toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     templateStream.close();
-                    
-                    GuiUtils.infoMessage(frame, "Template Editor", 
-                        "Opening template in system editor.\n\n" +
-                        "Note: Changes will NOT be saved to the application.\n" +
-                        "This is a temporary file for reference only.\n\n" +
-                        "File location: " + tempFile.getAbsolutePath());
-                    
+
+                    GuiUtils.infoMessage(frame, "Template Editor",
+                            "Opening template in system editor.\n\n" +
+                                    "Note: Changes will NOT be saved to the application.\n" +
+                                    "This is a temporary file for reference only.\n\n" +
+                                    "File location: " + tempFile.getAbsolutePath());
+
                     if (java.awt.Desktop.isDesktopSupported()) {
                         java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
                         if (desktop.isSupported(java.awt.Desktop.Action.EDIT)) {
@@ -941,14 +1076,14 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                         } else if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
                             desktop.open(tempFile);
                         } else {
-                            GuiUtils.errorMessage(frame, "Not Supported", 
-                                "Desktop edit operation not supported on this system.\n" +
-                                "Please open the file manually: " + tempFile.getAbsolutePath());
+                            GuiUtils.errorMessage(frame, "Not Supported",
+                                    "Desktop edit operation not supported on this system.\n" +
+                                            "Please open the file manually: " + tempFile.getAbsolutePath());
                         }
                     } else {
-                        GuiUtils.errorMessage(frame, "Not Supported", 
-                            "Desktop operations not supported on this system.\n" +
-                            "Please open the file manually: " + tempFile.getAbsolutePath());
+                        GuiUtils.errorMessage(frame, "Not Supported",
+                                "Desktop operations not supported on this system.\n" +
+                                        "Please open the file manually: " + tempFile.getAbsolutePath());
                     }
                 } catch (java.io.IOException ex) {
                     log.error("Error editing template", ex);
@@ -957,7 +1092,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
         reportsMenu.add(editTemplateItem);
-        
+
         fileMenu.add(reportsMenu);
         fileMenu.addSeparator();
 
@@ -1003,7 +1138,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 log.error("Error closing file watcher", e);
             }
         }
-        
+
         // Close all Pulvis connections
         for (Map.Entry<PulvisDataSource, PulvisConnection> entry : pulvisConnections.entrySet()) {
             try {
@@ -1014,7 +1149,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         }
         pulvisConnections.clear();
-        
+
         if (slippyMap != null) {
             slippyMap.close();
         }
@@ -1027,7 +1162,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             case FolderDataSource cds -> {
                 log.info("Folder data source added: {}", cds.getFolder().getName());
                 contactCollection.addRootFolder(cds.getFolder());
-                
+                updateStatusBar();
+
                 // Add folder to file watcher
                 if (fileWatcher != null && autoRefreshEnabled) {
                     try {
@@ -1054,7 +1190,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             case FolderDataSource cds -> {
                 log.info("Folder data source removed: {}", cds.getFolder().getName());
                 contactCollection.removeRootFolder(cds.getFolder());
-                
+                updateStatusBar();
+
                 // Remove folder from file watcher
                 if (fileWatcher != null) {
                     fileWatcher.removeRoot(cds.getFolder());
@@ -1075,65 +1212,66 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
     /**
      * Groups multiple contacts into a main contact asynchronously.
-     * Merges observations, raster files, and annotations from merge contacts into main contact.
+     * Merges observations, raster files, and annotations from merge contacts into
+     * main contact.
      * Deletes merged contacts on success, rolls back on failure.
      * 
-     * @param mainContact The contact to merge into
+     * @param mainContact   The contact to merge into
      * @param mergeContacts The contacts to merge (will be deleted)
      */
     public void groupContactsAsync(CompressedContact mainContact, List<CompressedContact> mergeContacts) {
         IndexedRasterUtils.background(() -> {
             List<File> backupFiles = new ArrayList<>();
             Path tempDir = null;
-            
+
             try {
                 // Step 1: Extract main contact to temp directory
                 tempDir = Files.createTempDirectory("contact_group_");
                 log.info("Extracting main contact to temp directory: {}", tempDir);
-                
+
                 if (!ZipUtils.unZip(mainContact.getZctFile().getAbsolutePath(), tempDir.toString())) {
                     throw new IOException("Failed to extract main contact ZIP");
                 }
-                
+
                 // Step 2: Load main contact data
                 pt.omst.rasterlib.Contact mainContactData = pt.omst.rasterlib.contacts.CompressedContact
-                    .extractCompressedContact(mainContact.getZctFile());
-                
+                        .extractCompressedContact(mainContact.getZctFile());
+
                 if (mainContactData.getObservations() == null) {
                     mainContactData.setObservations(new ArrayList<>());
                 }
-                
+
                 int initialObsCount = mainContactData.getObservations().size();
                 log.debug("Initial main contact has {} observations", initialObsCount);
-                
+
                 // Step 3: Collect all labels for deduplication
                 Set<String> labelSet = new HashSet<>();
                 for (pt.omst.rasterlib.Observation obs : mainContactData.getObservations()) {
                     if (obs.getAnnotations() != null) {
                         for (pt.omst.rasterlib.Annotation ann : obs.getAnnotations()) {
-                            if (ann.getAnnotationType() == pt.omst.rasterlib.AnnotationType.LABEL 
-                                && ann.getText() != null && !ann.getText().trim().isEmpty()) {
+                            if (ann.getAnnotationType() == pt.omst.rasterlib.AnnotationType.LABEL
+                                    && ann.getText() != null && !ann.getText().trim().isEmpty()) {
                                 labelSet.add(ann.getText().toLowerCase());
                             }
                         }
                     }
                 }
-                
+
                 // Step 4: Process each merge contact
                 for (CompressedContact mergeContact : mergeContacts) {
                     log.info("Processing merge contact: {}", mergeContact.getContact().getLabel());
-                    
+
                     // Extract merge contact data
                     pt.omst.rasterlib.Contact mergeContactData = pt.omst.rasterlib.contacts.CompressedContact
-                        .extractCompressedContact(mergeContact.getZctFile());
-                    
+                            .extractCompressedContact(mergeContact.getZctFile());
+
                     if (mergeContactData.getObservations() == null) {
                         log.debug("Merge contact has no observations, skipping");
                         continue;
                     }
-                    
+
                     log.debug("Merge contact has {} observations", mergeContactData.getObservations().size());
-                    
+
                     // Extract merge contact to temp location for raster file access
                     Path mergeTempDir = Files.createTempDirectory("contact_merge_");
                     try {
@@ -1141,7 +1279,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                             log.warn("Failed to extract merge contact ZIP: {}", mergeContact.getZctFile());
                             continue;
                         }
-                        
+
                         // Process each observation
                         for (pt.omst.rasterlib.Observation obs : mergeContactData.getObservations()) {
                             // Ensure observation has a UUID (generate if missing)
@@ -1149,10 +1287,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                                 obs.setUuid(java.util.UUID.randomUUID());
                                 log.debug("Generated UUID for observation without UUID");
                             }
-                            
-                            log.debug("Processing observation {} with raster: {}", 
-                                obs.getUuid(), obs.getRasterFilename());
-                            
+
+                            log.debug("Processing observation {} with raster: {}",
+                                    obs.getUuid(), obs.getRasterFilename());
+
                             // Create new observation copy (preserve UUID as per requirements)
                             pt.omst.rasterlib.Observation newObs = new pt.omst.rasterlib.Observation();
                             newObs.setUuid(obs.getUuid()); // Preserve original UUID
@@ -1162,14 +1300,14 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                             newObs.setSystemName(obs.getSystemName());
                             newObs.setTimestamp(obs.getTimestamp());
                             newObs.setUserName(obs.getUserName());
-                            
+
                             // Copy raster file if exists
                             if (obs.getRasterFilename() != null && !obs.getRasterFilename().isEmpty()) {
                                 File sourceRasterFile = mergeTempDir.resolve(obs.getRasterFilename()).toFile();
                                 if (sourceRasterFile.exists()) {
                                     String targetFilename = obs.getRasterFilename();
                                     File targetRasterFile = tempDir.resolve(targetFilename).toFile();
-                                    
+
                                     // Handle filename conflict by postfixing observation UUID
                                     if (targetRasterFile.exists()) {
                                         String baseName = targetFilename;
@@ -1181,27 +1319,28 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                                         }
                                         targetFilename = baseName + "_" + obs.getUuid().toString() + extension;
                                         targetRasterFile = tempDir.resolve(targetFilename).toFile();
-                                        log.info("Raster filename conflict resolved: {} -> {}", 
-                                            obs.getRasterFilename(), targetFilename);
+                                        log.info("Raster filename conflict resolved: {} -> {}",
+                                                obs.getRasterFilename(), targetFilename);
                                     }
-                                    
-                                    Files.copy(sourceRasterFile.toPath(), targetRasterFile.toPath(), 
-                                        StandardCopyOption.REPLACE_EXISTING);
+
+                                    Files.copy(sourceRasterFile.toPath(), targetRasterFile.toPath(),
+                                            StandardCopyOption.REPLACE_EXISTING);
                                     newObs.setRasterFilename(targetFilename);
-                                    log.debug("Copied raster file: {} -> {}", 
-                                        obs.getRasterFilename(), targetFilename);
-                                    
+                                    log.debug("Copied raster file: {} -> {}",
+                                            obs.getRasterFilename(), targetFilename);
+
                                     // Also copy the associated image file referenced in the raster JSON
                                     try {
                                         String rasterJson = Files.readString(sourceRasterFile.toPath());
-                                        pt.omst.rasterlib.IndexedRaster indexedRaster = 
-                                            pt.omst.rasterlib.Converter.IndexedRasterFromJsonString(rasterJson);
+                                        pt.omst.rasterlib.IndexedRaster indexedRaster = pt.omst.rasterlib.Converter
+                                                .IndexedRasterFromJsonString(rasterJson);
                                         if (indexedRaster.getFilename() != null) {
-                                            File sourceImageFile = mergeTempDir.resolve(indexedRaster.getFilename()).toFile();
+                                            File sourceImageFile = mergeTempDir.resolve(indexedRaster.getFilename())
+                                                    .toFile();
                                             if (sourceImageFile.exists()) {
                                                 String imageFilename = indexedRaster.getFilename();
                                                 File targetImageFile = tempDir.resolve(imageFilename).toFile();
-                                                
+
                                                 // Handle image filename conflict
                                                 if (targetImageFile.exists()) {
                                                     String imageBaseName = imageFilename;
@@ -1211,27 +1350,29 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                                                         imageBaseName = imageFilename.substring(0, imageDot);
                                                         imageExtension = imageFilename.substring(imageDot);
                                                     }
-                                                    imageFilename = imageBaseName + "_" + obs.getUuid().toString() + imageExtension;
+                                                    imageFilename = imageBaseName + "_" + obs.getUuid().toString()
+                                                            + imageExtension;
                                                     targetImageFile = tempDir.resolve(imageFilename).toFile();
-                                                    
+
                                                     // Update the raster JSON with new image filename
                                                     indexedRaster.setFilename(imageFilename);
-                                                    String updatedRasterJson = pt.omst.rasterlib.Converter.IndexedRasterToJsonString(indexedRaster);
+                                                    String updatedRasterJson = pt.omst.rasterlib.Converter
+                                                            .IndexedRasterToJsonString(indexedRaster);
                                                     Files.writeString(targetRasterFile.toPath(), updatedRasterJson);
-                                                    log.debug("Image filename conflict resolved: {} -> {}", 
-                                                        sourceImageFile.getName(), imageFilename);
+                                                    log.debug("Image filename conflict resolved: {} -> {}",
+                                                            sourceImageFile.getName(), imageFilename);
                                                 }
-                                                
-                                                Files.copy(sourceImageFile.toPath(), targetImageFile.toPath(), 
-                                                    StandardCopyOption.REPLACE_EXISTING);
+
+                                                Files.copy(sourceImageFile.toPath(), targetImageFile.toPath(),
+                                                        StandardCopyOption.REPLACE_EXISTING);
                                                 log.debug("Copied image file: {}", imageFilename);
                                             } else {
                                                 log.warn("Image file not found: {}", sourceImageFile);
                                             }
                                         }
                                     } catch (Exception e) {
-                                        log.warn("Failed to copy associated image file for raster {}: {}", 
-                                            obs.getRasterFilename(), e.getMessage());
+                                        log.warn("Failed to copy associated image file for raster {}: {}",
+                                                obs.getRasterFilename(), e.getMessage());
                                     }
                                 } else {
                                     log.warn("Raster file not found: {}", sourceRasterFile);
@@ -1240,8 +1381,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                             } else {
                                 log.debug("Observation has no raster filename");
                             }
-                            
-                            // Filter and copy annotations (exclude CLASSIFICATION and CONFIDENCE, deduplicate labels)
+
+                            // Filter and copy annotations (exclude CLASSIFICATION and CONFIDENCE,
+                            // deduplicate labels)
                             List<pt.omst.rasterlib.Annotation> newAnnotations = new ArrayList<>();
                             if (obs.getAnnotations() != null) {
                                 for (pt.omst.rasterlib.Annotation ann : obs.getAnnotations()) {
@@ -1250,7 +1392,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                                         continue;
                                     }
                                     // Note: CONFIDENCE is not in the enum, so we only check CLASSIFICATION
-                                    
+
                                     // For LABEL annotations, deduplicate case-insensitively
                                     if (ann.getAnnotationType() == pt.omst.rasterlib.AnnotationType.LABEL) {
                                         if (ann.getText() == null || ann.getText().trim().isEmpty()) {
@@ -1262,82 +1404,82 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                                         }
                                         labelSet.add(labelKey);
                                     }
-                                    
+
                                     // Copy annotation
                                     newAnnotations.add(ann);
                                 }
                             }
                             newObs.setAnnotations(newAnnotations);
-                            
+
                             // Add observation to main contact
                             mainContactData.getObservations().add(newObs);
-                            log.debug("Added observation {} to main contact, total now: {}", 
-                                newObs.getUuid(), mainContactData.getObservations().size());
+                            log.debug("Added observation {} to main contact, total now: {}",
+                                    newObs.getUuid(), mainContactData.getObservations().size());
                         }
                     } finally {
                         // Clean up merge temp directory
                         try {
                             Files.walk(mergeTempDir)
-                                .sorted(java.util.Comparator.reverseOrder())
-                                .map(Path::toFile)
-                                .forEach(File::delete);
+                                    .sorted(java.util.Comparator.reverseOrder())
+                                    .map(Path::toFile)
+                                    .forEach(File::delete);
                         } catch (Exception e) {
                             log.warn("Failed to clean up merge temp directory: {}", mergeTempDir, e);
                         }
                     }
                 }
-                
+
                 // Step 5: Save updated contact.json
                 int finalObsCount = mainContactData.getObservations().size();
-                log.debug("Saving merged contact with {} observations (started with {}, added {})", 
-                    finalObsCount, initialObsCount, finalObsCount - initialObsCount);
+                log.debug("Saving merged contact with {} observations (started with {}, added {})",
+                        finalObsCount, initialObsCount, finalObsCount - initialObsCount);
                 String updatedJson = pt.omst.rasterlib.Converter.ContactToJsonString(mainContactData);
                 File contactJsonFile = tempDir.resolve("contact.json").toFile();
                 Files.writeString(contactJsonFile.toPath(), updatedJson);
                 log.debug("Wrote contact.json to temp directory");
-                
+
                 // Step 6: Repackage main contact ZIP
                 File mainZctFile = mainContact.getZctFile();
-                File backupMainZct = new File(mainZctFile.getParentFile(), 
-                    mainZctFile.getName() + ".backup");
-                Files.copy(mainZctFile.toPath(), backupMainZct.toPath(), 
-                    StandardCopyOption.REPLACE_EXISTING);
+                File backupMainZct = new File(mainZctFile.getParentFile(),
+                        mainZctFile.getName() + ".backup");
+                Files.copy(mainZctFile.toPath(), backupMainZct.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING);
                 backupFiles.add(backupMainZct);
-                
+
                 if (!ZipUtils.zipDir(mainZctFile.getAbsolutePath(), tempDir.toString())) {
                     throw new IOException("Failed to repackage main contact ZIP");
                 }
-                
+
                 log.info("Successfully saved merged contact: {}", mainZctFile);
-                
+
                 // Verify what was saved
                 pt.omst.rasterlib.Contact verifyContact = pt.omst.rasterlib.contacts.CompressedContact
-                    .extractCompressedContact(mainZctFile);
-                log.debug("Verification: Saved ZIP contains {} observations", 
-                    verifyContact.getObservations().size());
-                
+                        .extractCompressedContact(mainZctFile);
+                log.debug("Verification: Saved ZIP contains {} observations",
+                        verifyContact.getObservations().size());
+
                 // Step 7: Backup and delete merged contacts
                 for (CompressedContact mergeContact : mergeContacts) {
                     File mergeZctFile = mergeContact.getZctFile();
-                    File backupMergeZct = new File(mergeZctFile.getParentFile(), 
-                        mergeZctFile.getName() + ".backup");
-                    Files.copy(mergeZctFile.toPath(), backupMergeZct.toPath(), 
-                        StandardCopyOption.REPLACE_EXISTING);
+                    File backupMergeZct = new File(mergeZctFile.getParentFile(),
+                            mergeZctFile.getName() + ".backup");
+                    Files.copy(mergeZctFile.toPath(), backupMergeZct.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING);
                     backupFiles.add(backupMergeZct);
                 }
-                
+
                 // Register all modified/deleted files to ignore watcher events
                 ignoreOwnWritesUntil.put(mainZctFile, System.currentTimeMillis() + 2000); // 2 second window for batch
                 for (CompressedContact mergeContact : mergeContacts) {
                     ignoreOwnWritesUntil.put(mergeContact.getZctFile(), System.currentTimeMillis() + 2000);
                 }
-                
+
                 // Delete merged contacts
                 for (CompressedContact mergeContact : mergeContacts) {
                     Files.delete(mergeContact.getZctFile().toPath());
                     log.info("Deleted merged contact: {}", mergeContact.getZctFile());
                 }
-                
+
                 // Step 8: Clean up backups on success
                 for (File backup : backupFiles) {
                     try {
@@ -1346,71 +1488,70 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                         log.warn("Failed to delete backup file: {}", backup, e);
                     }
                 }
-                
+
                 // Step 9: Update UI on success
                 SwingUtilities.invokeLater(() -> {
                     // Remove merged contacts from collection
                     for (CompressedContact mergeContact : mergeContacts) {
                         contactCollection.removeContact(mergeContact.getZctFile());
                     }
-                    
+
                     log.debug("Refreshing main contact in collection: {}", mainZctFile);
                     // Refresh main contact in collection
                     contactCollection.refreshContact(mainZctFile);
-                    
+
                     // Reload the main contact in the editor if it's currently displayed
                     try {
                         log.debug("Reloading contact in editor from file: {}", mainZctFile);
                         CompressedContact refreshedContact = new CompressedContact(mainZctFile);
-                        log.debug("CompressedContact created with {} observations", 
-                            refreshedContact.getContact().getObservations().size());
+                        log.debug("CompressedContact created with {} observations",
+                                refreshedContact.getContact().getObservations().size());
                         contactEditor.loadZct(mainZctFile);
-                        log.info("Reloaded merged contact in editor with {} observations", 
-                            refreshedContact.getContact().getObservations().size());
+                        log.info("Reloaded merged contact in editor with {} observations",
+                                refreshedContact.getContact().getObservations().size());
                     } catch (Exception e) {
                         log.error("Failed to reload contact in editor after grouping", e);
                     }
-                    
+
                     // Repaint map
                     slippyMap.repaint();
-                    
+
                     // Update filter panel
                     updateVisibleContacts(true);
-                    
+
                     log.info("Contact grouping completed successfully");
                 });
-                
+
             } catch (Exception e) {
                 log.error("Error grouping contacts, rolling back changes", e);
-                
+
                 // Rollback: restore from backups
                 for (File backup : backupFiles) {
                     try {
                         String originalPath = backup.getAbsolutePath().replace(".backup", "");
-                        Files.copy(backup.toPath(), Path.of(originalPath), 
-                            StandardCopyOption.REPLACE_EXISTING);
+                        Files.copy(backup.toPath(), Path.of(originalPath),
+                                StandardCopyOption.REPLACE_EXISTING);
                         Files.deleteIfExists(backup.toPath());
                         log.info("Restored from backup: {}", originalPath);
                     } catch (Exception rollbackEx) {
                         log.error("Failed to restore from backup: {}", backup, rollbackEx);
                     }
                 }
-                
+
                 SwingUtilities.invokeLater(() -> {
                     pt.lsts.neptus.util.GuiUtils.errorMessage(
-                        slippyMap, 
-                        "Group Contacts Failed", 
-                        "Failed to group contacts: " + e.getMessage()
-                    );
+                            slippyMap,
+                            "Group Contacts Failed",
+                            "Failed to group contacts: " + e.getMessage());
                 });
             } finally {
                 // Clean up temp directory
                 if (tempDir != null) {
                     try {
                         Files.walk(tempDir)
-                            .sorted(java.util.Comparator.reverseOrder())
-                            .map(Path::toFile)
-                            .forEach(File::delete);
+                                .sorted(java.util.Comparator.reverseOrder())
+                                .map(Path::toFile)
+                                .forEach(File::delete);
                     } catch (Exception e) {
                         log.warn("Failed to clean up temp directory: {}", tempDir, e);
                     }
@@ -1419,48 +1560,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         });
     }
 
-    private void createContact(PulvisConnection connection, CompressedContact contact) {
-        try {
-            ContactResponse response = connection.contacts().createContact(contact.getZctFile());
-            log.info("Created contact {} in Pulvis with ID {}", contact.getContact().getLabel(), response.getUuid());
-        } catch (ApiException e) {
-            log.error("Error creating contact {} in Pulvis: {}", contact.getContact().getLabel(), e.getMessage());
-        }
-    }
-    
-
-    public void saveContact(PulvisConnection connection, CompressedContact contact) {
-        if (contact.getContact().getUuid() == null) {
-            log.warn("Contact has no UUID, cannot save to Pulvis");
-            return;
-        }
-
-        try {
-            ContactResponse response = connection.contacts().getContact(contact.getContact().getUuid());
-            log.info("Updating contact {} in Pulvis...", contact.getContact().getLabel());
-            ContactUpdateRequest updateRequest = new ContactUpdateRequest();
-            
-        }
-        catch (ApiException e) {
-            if (e.getCode() == 404) {
-                log.info("Contact {} not found in Pulvis, creating new contact...", contact.getContact().getLabel());
-                createContact(connection, contact);
-                return;
-            }
-            else {  
-                log.warn("Error retrieving contact from Pulvis: {}.", e.getMessage());
-            }
-            return;
-        }
-    }
-
     public void saveContact(final UUID contactId, final File zctFile) {
         log.info("Saving contact {} to Pulvis...", contactId);
-        // do in background
+        // Upload to all connected Pulvis servers
         IndexedRasterUtils.background(() -> {
-            CompressedContact contact = contactCollection.getContact(zctFile);
-            for (PulvisConnection connection : pulvisConnections.values()) {
-                saveContact(connection, contact);
+            for (PulvisContactSynchronizer synchronizer : pulvisSynchronizers.values()) {
+                synchronizer.uploadContact(zctFile);
             }
         });
     }
@@ -1471,10 +1576,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     public static void main(String[] args) {
 
         GuiUtils.setLookAndFeel();
-        
+
         JWindow splash = LoadingPanel.showSplashScreen("Loading application...");
         LoadingPanel panel = LoadingPanel.getLoadingPanel(splash);
-        panel.setStatus("Checking license...");        
+        panel.setStatus("Checking license...");
 
         // Check license
         try {
@@ -1484,10 +1589,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             splash.dispose();
             try {
                 SwingUtilities.invokeAndWait(() -> {
-                    GuiUtils.errorMessage(null, "License Check Failed", 
-                        "The application license is invalid or missing.\n\n" +
-                        "Error: " + e.getMessage() + "\n\n" +
-                        "Please contact support or check your license activation.");
+                    GuiUtils.errorMessage(null, "License Check Failed",
+                            "The application license is invalid or missing.\n\n" +
+                                    "Error: " + e.getMessage() + "\n\n" +
+                                    "Please contact support or check your license activation.");
                 });
             } catch (Exception dialogEx) {
                 dialogEx.printStackTrace();
@@ -1496,11 +1601,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         }
 
         panel.setStatus("Starting application...");
-        
+
         // Create test time range (last 10 years to tomorrow)
         Instant minTime = Instant.now().minusSeconds(10L * 365 * 86400); // Approximately 10 years
         Instant maxTime = Instant.now().plusSeconds(86400); // 1 day ahead
-        
+
         TargetManager layout = new TargetManager(minTime, maxTime);
 
         panel.setStatus("Launching main window...");
@@ -1511,16 +1616,16 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         frame.setSize(1400, 900);
         frame.setJMenuBar(createMenuBar(frame, layout));
         frame.add(layout);
-        
+
         // Load preferences after adding to frame but before making visible
         SwingUtilities.invokeLater(() -> {
             layout.loadPreferences();
         });
-        
+
         GuiUtils.centerOnScreen(frame);
         frame.setVisible(true);
         splash.dispose();
-        
+
         frame.addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {

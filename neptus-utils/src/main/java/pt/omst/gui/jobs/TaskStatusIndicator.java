@@ -39,7 +39,7 @@ public class TaskStatusIndicator extends JComponent {
     public TaskStatusIndicator(Window parentWindow) {
         this.parentWindow = parentWindow;
 
-        setPreferredSize(new Dimension(30, 30));
+        setPreferredSize(new Dimension(20, 20));
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         // 1. Blink Timer
