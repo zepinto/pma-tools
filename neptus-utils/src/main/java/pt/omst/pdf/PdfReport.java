@@ -5,6 +5,8 @@ import org.jsoup.nodes.Document;
 import org.xhtmlrenderer.pdf.ITextRenderer;
 
 import javax.imageio.ImageIO;
+
+import java.awt.Desktop;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -132,7 +134,7 @@ public class PdfReport {
         }
 
         if (open)
-            Runtime.getRuntime().exec(new String[]{"xdg-open", new File(outputPath).getAbsolutePath()});
+            Desktop.getDesktop().open(new File(outputPath));
     }
 
     public static void main(String[] args) throws Exception {

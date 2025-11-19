@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{{reportTitle}}</title>
+    <style>
+        /* 1. Define Page Size and Margins */
+        @page {
+            size: A4;
+            /* Important: Make space for header/footer so content doesn't overlap */
+            margin-top: 3.5cm;   
+            margin-bottom: 2.5cm;
+            margin-left: 2cm;
+            margin-right: 2cm;
+
+            /* 2. Place the HTML elements into the margins */
+            @top-center {
+                content: element(pageHeader); 
+            }
+            
+            @bottom-left {
+                content: element(pageFooter);
+            }
+
+            /* 3. Page Numbering (Done purely in CSS) */
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: Arial, sans-serif;
+                font-size: 10pt;
+                color: #777;
+            }
+        }
+
+        body { font-family: Arial, sans-serif; color: #333; font-size: 12pt; }
+
+        /* 4. Define the styles for the Header HTML Block */
+        #header-container {
+            position: running(pageHeader); /* Matches element(pageHeader) above */
+            width: 100%;
+            border-bottom: 2px solid #004488;
+            padding-bottom: 10px;
+            text-align: center;
+        }
+
+        #header-container h1 {
+            margin: 0;
+            color: #004488;
+            font-size: 18pt;
+        }
+
+        #header-container .sub-info {
+            font-size: 10pt;
+            color: #666;
+            margin-top: 5px;
+            display: flex; /* Note: FS has limited Flexbox support, table often safer for layout */
+            justify-content: space-between; 
+        }
+
+        /* 5. Define the styles for the Footer HTML Block */
+        #footer-container {
+            position: running(pageFooter); /* Matches element(pageFooter) above */
+            width: 100%;
+            font-size: 9pt;
+            color: #777;
+            border-top: 1px solid #ccc;
+            padding-top: 5px;
+        }
+
+        /* --- Content Styles (Same as before) --- */
+        .contact-card {
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 20px;
+            page-break-inside: avoid; 
+        }
+        
+        .contact-header {
+            background-color: #004488;
+            color: white;
+            padding: 5px 10px;
+            font-weight: bold;
+        }
+
+        .sonar-image img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #555;
+        }
+
+        table.meta { width: 100%; margin-top: 10px; border-collapse: collapse; }
+        table.meta td { border-bottom: 1px solid #eee; padding: 5px; }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER CONTENT -->
+    <!-- This div is removed from normal flow and repeated on every page top -->
+    <div id="header-container">
+        <h1>{{reportTitle}}</h1>
+        <!-- Using a table for layout because Flying Saucer Flexbox support is partial -->
+        <table style="width: 100%; margin-top: 5px;">
+            <tr>
+                <td style="text-align: left;">Mission: <b>{{missionName}}</b></td>
+                <td style="text-align: right;">Date: {{generationDate}}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- FOOTER CONTENT -->
+    <!-- This div is removed from normal flow and repeated on every page bottom-left -->
+    <div id="footer-container">
+        OceanScan - Marine Systems & Technology | CONFIDENTIAL
+    </div>
+
+    <!-- MAIN CONTENT LOOP -->
+    {{#contacts}}
+    <div class="contact-card">
+        <div class="contact-header">
+            Target ID: {{id}} ({{classification}})
+        </div>
+        
+        <div style="text-align: center; margin: 10px 0;">
+             <img src="data:image/png;base64,{{base64Image}}" />
+        </div>
+
+        <table class="meta">
+            <tr>
+                <td><strong>Lat/Lon:</strong> {{lat}}, {{lon}}</td>
+                <td><strong>Dimensions:</strong> {{width}}m x {{length}}m</td>
+            </tr>
+            <tr>
+                <td><strong>Altitude:</strong> {{altitude}}m</td>
+                <td><strong>Confidence:</strong> {{confidence}}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><strong>Remarks:</strong> {{remarks}}</td>
+            </tr>
+        </table>
+    </div>
+    {{/contacts}}
+
+</body>
+</html>
