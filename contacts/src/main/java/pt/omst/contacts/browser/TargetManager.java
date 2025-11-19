@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
@@ -46,6 +47,7 @@ import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.browser.filtering.ContactFilterListener;
 import pt.omst.contacts.browser.filtering.ContactFilterPanel;
+import pt.omst.contacts.watcher.RecursiveFileWatcher;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
@@ -93,6 +95,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private boolean eastPanelVisible = true;
     private boolean firstPaintDone = false;
     private final Map<PulvisDataSource, PulvisConnection> pulvisConnections = new HashMap<>();
+    
+    // File watcher for auto-refresh
+    private RecursiveFileWatcher fileWatcher;
+    private final Map<File, Long> ignoreOwnWritesUntil = new ConcurrentHashMap<>();
+    private static final long IGNORE_WINDOW_MS = 500; // 500ms after save
+    private boolean autoRefreshEnabled = true; // User preference
     
     // West panel (filter panel)
     private final ContactFilterPanel filterPanel;
@@ -156,9 +164,23 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         
         contactEditor = new VerticalContactEditor();
         
+        // Initialize file watcher
+        try {
+            fileWatcher = new RecursiveFileWatcher(this::handleFileChange);
+            fileWatcher.addExtension("zct");
+            fileWatcher.start();
+            log.info("File watcher initialized and started");
+        } catch (IOException e) {
+            log.error("Failed to initialize file watcher", e);
+        }
+        
         // Listen for contact saves to refresh the map overlay
         contactEditor.addSaveListener((contactId, zctFile) -> {
-            log.info("Contact saved: {}, refreshing map overlay", contactId);        
+            log.info("Contact saved: {}, refreshing map overlay", contactId);
+            
+            // Register this as our own write to ignore file watcher event
+            ignoreOwnWritesUntil.put(zctFile, System.currentTimeMillis() + IGNORE_WINDOW_MS);
+            
             contactCollection.refreshContact(zctFile);
             contactsMapOverlay.refreshContact(zctFile);
             slippyMap.repaint();
@@ -338,6 +360,84 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         outerSplitPane.repaint();
     }
 
+    /**
+     * Handles file system changes detected by the file watcher.
+     * Processes CREATE, MODIFY, and DELETE events for .zct files.
+     */
+    private void handleFileChange(String eventType, File file) {
+        if (!autoRefreshEnabled) {
+            log.debug("Auto-refresh disabled, ignoring file change: {}", file.getName());
+            return;
+        }
+        
+        // Must run on EDT for UI updates
+        SwingUtilities.invokeLater(() -> {
+            try {
+                switch (eventType) {
+                    case "CREATE":
+                        log.info("New contact detected: {}", file.getName());
+                        contactCollection.addContact(file);
+                        updateVisibleContacts(true);
+                        slippyMap.repaint();
+                        break;
+                        
+                    case "MODIFY":
+                        if (!shouldIgnoreOwnWrite(file)) {
+                            log.info("Contact modified externally: {}", file.getName());
+                            contactCollection.refreshContact(file);
+                            contactsMapOverlay.refreshContact(file);
+                            
+                            // Auto-reload if this is the currently displayed contact
+                            if (contactEditor.getZctFile() != null &&
+                                contactEditor.getZctFile().equals(file)) {
+                                try {
+                                    log.info("Reloading modified contact in editor: {}", file.getName());
+                                    contactEditor.loadZct(file);
+                                } catch (IOException e) {
+                                    log.error("Failed to reload contact in editor", e);
+                                }
+                            }
+                            
+                            updateVisibleContacts(true);
+                            slippyMap.repaint();
+                        }
+                        break;
+                        
+                    case "DELETE":
+                        log.info("Contact deleted: {}", file.getName());
+                        contactCollection.removeContact(file);
+                        
+                        // Clear editor if displaying deleted contact
+                        if (contactEditor.getZctFile() != null &&
+                            contactEditor.getZctFile().equals(file)) {
+                            contactEditor.clearObservations();
+                        }
+                        
+                        updateVisibleContacts(true);
+                        slippyMap.repaint();
+                        break;
+                }
+            } catch (Exception e) {
+                log.error("Error handling file change event", e);
+            }
+        });
+    }
+
+    /**
+     * Checks if a file modification should be ignored because it was caused by this application.
+     */
+    private boolean shouldIgnoreOwnWrite(File file) {
+        Long ignoreUntil = ignoreOwnWritesUntil.get(file);
+        if (ignoreUntil != null) {
+            if (System.currentTimeMillis() < ignoreUntil) {
+                log.debug("Ignoring own write for file: {}", file.getName());
+                return true;
+            }
+            ignoreOwnWritesUntil.remove(file); // Expired
+        }
+        return false;
+    }
+
     public void savePreferences() {
         // store divider location and data sources
         Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
@@ -368,6 +468,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         prefs.put("filters.confidence", String.join(",", confidences));
         prefs.put("filters.labels", String.join(",", labels));
         log.debug("Saved filter selections");
+        
+        // Save auto-refresh preference
+        prefs.putBoolean("autoRefresh.enabled", autoRefreshEnabled);
+        log.debug("Saved auto-refresh preference: {}", autoRefreshEnabled);
 
         // Save time selection
         Instant startTime = timeSelector.getSelectedStartTime();
@@ -447,6 +551,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 log.debug("Loaded label filters: {}", labels);
             }
         });
+        
+        // Load auto-refresh preference (default to true)
+        autoRefreshEnabled = prefs.getBoolean("autoRefresh.enabled", true);
+        log.debug("Loaded auto-refresh preference: {}", autoRefreshEnabled);
 
         // Load time selection
         long startTimeMillis = prefs.getLong("timeSelector.startTime", -1);
@@ -702,6 +810,21 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         preferencesMenu.add(darkModeItem);
         preferencesMenu.addSeparator();
         
+        // Auto-Refresh toggle
+        JCheckBoxMenuItem autoRefreshItem = new JCheckBoxMenuItem("Auto-Refresh Contacts");
+        autoRefreshItem.setSelected(targetManager != null && targetManager.autoRefreshEnabled);
+        autoRefreshItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (targetManager != null) {
+                    targetManager.autoRefreshEnabled = autoRefreshItem.isSelected();
+                    log.info("Auto-refresh contacts: {}", targetManager.autoRefreshEnabled);
+                }
+            }
+        });
+        preferencesMenu.add(autoRefreshItem);
+        preferencesMenu.addSeparator();
+        
         // Contact Types menu item
         JMenuItem contactTypesItem = new JMenuItem("Contact Types");
         contactTypesItem.addActionListener(new ActionListener() {
@@ -760,6 +883,16 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
     @Override
     public void close() throws Exception {
+        // Close file watcher
+        if (fileWatcher != null) {
+            try {
+                fileWatcher.close();
+                log.info("File watcher closed");
+            } catch (Exception e) {
+                log.error("Error closing file watcher", e);
+            }
+        }
+        
         // Close all Pulvis connections
         for (Map.Entry<PulvisDataSource, PulvisConnection> entry : pulvisConnections.entrySet()) {
             try {
@@ -783,6 +916,16 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             case FolderDataSource cds -> {
                 log.info("Folder data source added: {}", cds.getFolder().getName());
                 contactCollection.addRootFolder(cds.getFolder());
+                
+                // Add folder to file watcher
+                if (fileWatcher != null && autoRefreshEnabled) {
+                    try {
+                        fileWatcher.addRoot(cds.getFolder());
+                        log.info("Added folder to file watcher: {}", cds.getFolder());
+                    } catch (IOException e) {
+                        log.error("Failed to add folder to file watcher", e);
+                    }
+                }
             }
             case PulvisDataSource pcs -> {
                 log.info("Pulvis connection added: {}", pcs.getDisplayName());
@@ -800,6 +943,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             case FolderDataSource cds -> {
                 log.info("Folder data source removed: {}", cds.getFolder().getName());
                 contactCollection.removeRootFolder(cds.getFolder());
+                
+                // Remove folder from file watcher
+                if (fileWatcher != null) {
+                    fileWatcher.removeRoot(cds.getFolder());
+                    log.info("Removed folder from file watcher: {}", cds.getFolder());
+                }
                 break;
             }
             case PulvisDataSource pcs -> {
@@ -884,6 +1033,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                         
                         // Process each observation
                         for (pt.omst.rasterlib.Observation obs : mergeContactData.getObservations()) {
+                            // Ensure observation has a UUID (generate if missing)
+                            if (obs.getUuid() == null) {
+                                obs.setUuid(java.util.UUID.randomUUID());
+                                log.debug("Generated UUID for observation without UUID");
+                            }
+                            
                             log.debug("Processing observation {} with raster: {}", 
                                 obs.getUuid(), obs.getRasterFilename());
                             
@@ -1058,6 +1213,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                     Files.copy(mergeZctFile.toPath(), backupMergeZct.toPath(), 
                         StandardCopyOption.REPLACE_EXISTING);
                     backupFiles.add(backupMergeZct);
+                }
+                
+                // Register all modified/deleted files to ignore watcher events
+                ignoreOwnWritesUntil.put(mainZctFile, System.currentTimeMillis() + 2000); // 2 second window for batch
+                for (CompressedContact mergeContact : mergeContacts) {
+                    ignoreOwnWritesUntil.put(mergeContact.getZctFile(), System.currentTimeMillis() + 2000);
                 }
                 
                 // Delete merged contacts

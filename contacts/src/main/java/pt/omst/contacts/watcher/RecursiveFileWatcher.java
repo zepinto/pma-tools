@@ -156,6 +156,7 @@ public class RecursiveFileWatcher implements AutoCloseable {
                         if (isWatchedExtension(fileName.toString())) {
                             if (shouldProcess(fullPath, kind)) {
                                 String type = kind.name().replace("ENTRY_", "");
+                                System.out.println("File watcher detected event: " + type + " - " + fullPath);
                                 try {
                                     listener.onEvent(type, fullPath.toFile());
                                 } catch (Exception e) {
