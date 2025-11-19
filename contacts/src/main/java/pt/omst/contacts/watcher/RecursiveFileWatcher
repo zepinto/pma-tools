@@ -1,0 +1,212 @@
+package pt.omst.contacts.watcher;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class RecursiveFileWatcher implements AutoCloseable {
+
+    // Callback Interface
+    public interface FileListener {
+        void onEvent(String eventType, File file);
+    }
+
+    private final WatchService watchService;
+    private final FileListener listener;
+    private final ExecutorService executor;
+    private volatile boolean active = false;
+
+    // Thread-safe set for extensions (e.g., ".zct", ".txt")
+    private final Set<String> extensions = new CopyOnWriteArraySet<>();
+
+    // Maps WatchKeys to Paths
+    private final Map<WatchKey, Path> keys = new ConcurrentHashMap<>();
+    
+    // Debounce map to handle OS event bursts
+    private final Map<Path, Long> eventDebounceMap = new ConcurrentHashMap<>();
+
+    public RecursiveFileWatcher(FileListener listener) throws IOException {
+        this.listener = listener;
+        this.watchService = FileSystems.getDefault().newWatchService();
+        
+        // Single background thread for 0% CPU idle waiting
+        this.executor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "FileWatcher-Thread");
+            t.setDaemon(true); 
+            return t;
+        });
+    }
+
+    /**
+     * Programmatically adds an extension to watch.
+     * Example: addExtension("zct") or addExtension(".txt")
+     */
+    public void addExtension(String extension) {
+        if (extension == null || extension.trim().isEmpty()) return;
+        
+        String ext = extension.trim().toLowerCase();
+        if (!ext.startsWith(".")) {
+            ext = "." + ext;
+        }
+        this.extensions.add(ext);
+    }
+
+    /**
+     * Removes an extension from the watchlist.
+     */
+    public void removeExtension(String extension) {
+        if (extension == null) return;
+        String ext = extension.trim().toLowerCase();
+        if (!ext.startsWith(".")) {
+            ext = "." + ext;
+        }
+        this.extensions.remove(ext);
+    }
+
+    /**
+     * Add a folder (and its subfolders) to the watcher.
+     */
+    public void addRoot(File rootFile) throws IOException {
+        Path root = rootFile.toPath();
+        if (!Files.exists(root) || !Files.isDirectory(root)) {
+            throw new IllegalArgumentException("Root must be an existing directory: " + root);
+        }
+        registerAll(root);
+    }
+
+    /**
+     * Remove a folder (and its subfolders) from the watcher.
+     */
+    public void removeRoot(File rootFile) {
+        Path rootToRemove = rootFile.toPath();
+        keys.entrySet().removeIf(entry -> {
+            Path registeredPath = entry.getValue();
+            if (registeredPath.startsWith(rootToRemove)) {
+                entry.getKey().cancel();
+                return true;
+            }
+            return false;
+        });
+    }
+
+    public void start() {
+        if (active) return;
+        active = true;
+        executor.submit(this::watchLoop);
+    }
+
+    private void registerAll(final Path start) throws IOException {
+        Files.walkFileTree(start, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                register(dir);
+                return FileVisitResult.CONTINUE;
+            }
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                return FileVisitResult.CONTINUE; 
+            }
+        });
+    }
+
+    private void register(Path dir) throws IOException {
+        if (!keys.containsValue(dir)) {
+            WatchKey key = dir.register(watchService,
+                    StandardWatchEventKinds.ENTRY_CREATE,
+                    StandardWatchEventKinds.ENTRY_DELETE,
+                    StandardWatchEventKinds.ENTRY_MODIFY);
+            keys.put(key, dir);
+        }
+    }
+
+    private void watchLoop() {
+        while (active) {
+            try {
+                // Blocks until event occurs
+                WatchKey key = watchService.take();
+                
+                Path dir = keys.get(key);
+                if (dir != null) {
+                    for (WatchEvent<?> event : key.pollEvents()) {
+                        WatchEvent.Kind<?> kind = event.kind();
+                        if (kind == StandardWatchEventKinds.OVERFLOW) continue;
+
+                        @SuppressWarnings("unchecked")
+                        WatchEvent<Path> ev = (WatchEvent<Path>) event;
+                        Path fileName = ev.context();
+                        Path fullPath = dir.resolve(fileName);
+
+                        // 1. Handle Dynamic Recursion (New Folders)
+                        if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
+                            if (Files.isDirectory(fullPath, LinkOption.NOFOLLOW_LINKS)) {
+                                try {
+                                    registerAll(fullPath);
+                                } catch (IOException ignored) {}
+                            }
+                        }
+
+                        // 2. Handle File Filtering (Check Extensions)
+                        if (isWatchedExtension(fileName.toString())) {
+                            if (shouldProcess(fullPath, kind)) {
+                                String type = kind.name().replace("ENTRY_", "");
+                                try {
+                                    listener.onEvent(type, fullPath.toFile());
+                                } catch (Exception e) {
+                                    e.printStackTrace(); // Don't let callback crash watcher
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!key.reset()) {
+                    keys.remove(key);
+                }
+
+            } catch (InterruptedException | ClosedWatchServiceException e) {
+                active = false;
+            }
+        }
+    }
+
+    /**
+     * Checks if the filename ends with any of the registered extensions.
+     */
+    private boolean isWatchedExtension(String fileName) {
+        if (extensions.isEmpty()) return false;
+        String lowerName = fileName.toLowerCase();
+        for (String ext : extensions) {
+            if (lowerName.endsWith(ext)) return true;
+        }
+        return false;
+    }
+
+    private boolean shouldProcess(Path file, WatchEvent.Kind<?> kind) {
+        long now = System.currentTimeMillis();
+        Long lastTime = eventDebounceMap.get(file);
+        
+        // 50ms debounce for Modify events
+        if (kind == StandardWatchEventKinds.ENTRY_MODIFY && lastTime != null && (now - lastTime) < 50) {
+            return false;
+        }
+        
+        eventDebounceMap.put(file, now);
+        if (eventDebounceMap.size() > 1000) eventDebounceMap.clear();
+        return true;
+    }
+
+    @Override
+    public void close() throws IOException {
+        active = false;
+        watchService.close();
+        executor.shutdownNow();
+        keys.clear();
+    }
+}
