@@ -69,31 +69,27 @@ function Test-Prerequisites {
     Write-Info "Checking prerequisites..."
     
     # Check for Java 21
-    $javaFound = $false
+    # Note: java -version outputs to stderr, so we capture with 2>&1
     $javaVersion = $null
     
     try {
-        # Try to get java version
-        $versionOutput = & java -version 2>&1
-        if ($LASTEXITCODE -eq 0 -or $versionOutput) {
-            $javaFound = $true
-            $javaVersion = $versionOutput | Select-String -Pattern 'version' | Select-Object -First 1
+        # Capture java version output (goes to stderr)
+        $versionOutput = & java -version 2>&1 | Out-String
+        $javaVersion = $versionOutput | Select-String -Pattern 'version "([^"]+)"' | Select-Object -First 1
+        
+        if (-not $javaVersion) {
+            throw "Could not get Java version"
         }
     } catch {
-        # java command failed, will check below
-    }
-    
-    if (-not $javaFound) {
         Write-Error-Msg "Java not found in PATH. Please ensure JDK 21 is installed and 'java' command is available."
-        Write-Host "Hint: You have javac available, but java.exe might not be in your PATH." -ForegroundColor Yellow
-        Write-Host "Try running: java -version" -ForegroundColor Yellow
+        Write-Host "Error: $_" -ForegroundColor Yellow
         exit 1
     }
     
-    # Parse version
-    if ($javaVersion -match '"(\d+)\.') {
+    # Parse version - extract the version number from the match
+    if ($javaVersion -match 'version "(\d+)\.') {
         $majorVersion = [int]$Matches[1]
-    } elseif ($javaVersion -match '"(\d+)"') {
+    } elseif ($javaVersion -match 'version "(\d+)"') {
         $majorVersion = [int]$Matches[1]
     } else {
         Write-Error-Msg "Could not parse Java version from: $javaVersion"
@@ -105,7 +101,7 @@ function Test-Prerequisites {
         exit 1
     }
     
-    Write-Host "Found Java $majorVersion" -ForegroundColor Green
+    Write-Success "Found Java $majorVersion"
     
     # Check for jpackage
     try {
