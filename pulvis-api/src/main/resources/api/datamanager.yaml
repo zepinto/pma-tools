@@ -351,6 +351,29 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ContactResponse'
+  /api/contacts/group:
+    post:
+      tags:
+      - Contacts
+      summary: Group contacts together
+      description: Merge multiple contacts into a main contact. All observations and
+        annotations from contacts being merged will be transferred to the main contact.
+        The main contact's location and label are preserved. Merged contacts are deleted.
+        A GROUPED event is broadcast via WebSocket.
+      operationId: groupContacts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactGroupRequest'
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ContactGroupResponse'
   /api:
     get:
       tags:
@@ -1063,6 +1086,15 @@ components:
         depth:
           type: number
           format: double
+        classification:
+          type: string
+        confidence:
+          type: number
+          format: double
+        tags:
+          type: array
+          items:
+            type: string
     AnnotationResponse:
       required:
       - uuid
@@ -1133,6 +1165,15 @@ components:
         updatedAt:
           type: string
           format: date-time
+        classification:
+          type: string
+        confidence:
+          type: number
+          format: double
+        tags:
+          type: array
+          items:
+            type: string
     ObservationResponse:
       required:
       - depth
@@ -1279,6 +1320,41 @@ components:
         updatedAt:
           type: string
           format: date-time
+    ContactGroupRequest:
+      required:
+      - contactIdsToMerge
+      - mainContactId
+      type: object
+      properties:
+        mainContactId:
+          type: string
+          format: uuid
+        contactIdsToMerge:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ContactGroupResponse:
+      required:
+      - annotationsMerged
+      - mainContact
+      - mergedContactIds
+      - observationsMerged
+      type: object
+      properties:
+        mainContact:
+          $ref: '#/components/schemas/ContactResponse'
+        mergedContactIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        observationsMerged:
+          type: integer
+          format: int32
+        annotationsMerged:
+          type: integer
+          format: int32
     ApiInfo:
       required:
       - description

@@ -14,6 +14,7 @@ import java.io.File;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.prefs.Preferences;
 
@@ -34,6 +35,9 @@ import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.omst.contacts.browser.editor.VerticalContactEditor;
+import pt.omst.contacts.browser.filtering.ContactFilterListener;
+import pt.omst.contacts.browser.filtering.ContactFilterPanel;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
@@ -81,6 +85,17 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private boolean eastPanelVisible = true;
     private boolean firstPaintDone = false;
     private final Map<PulvisDataSource, PulvisConnection> pulvisConnections = new HashMap<>();
+    
+    // West panel (filter panel)
+    private final ContactFilterPanel filterPanel;
+    private final JPanel westPanel;
+    private final JSplitPane outerSplitPane;
+    private final JButton toggleWestPanelButton;
+    private boolean westPanelVisible = false;
+    
+    // Debouncing for zoom events
+    private javax.swing.Timer updateContactsTimer;
+    private boolean isZooming = false;
 
     /**
      * Creates a new MapViewerLayout with default time range.
@@ -123,7 +138,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 if (!firstPaintDone && slippyMap.getWidth() > 0 && slippyMap.getHeight() > 0) {
                     firstPaintDone = true;
                     SwingUtilities.invokeLater(() -> {
-                        updateVisibleContacts();
+                        updateVisibleContacts(true);
                         log.info("First paint completed, updated visible contacts");
                     });
                 }
@@ -154,7 +169,13 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         eastPanel.setPreferredSize(new Dimension(400, 600));
         eastPanel.setMinimumSize(new Dimension(300, 400));
 
-        // Create center panel with map and toggle button
+        // Create filter panel (west panel)
+        filterPanel = new ContactFilterPanel();
+        westPanel = createWestPanel();
+        westPanel.setPreferredSize(new Dimension(300, 600));
+        westPanel.setMinimumSize(new Dimension(250, 400));
+
+        // Create center panel with map and toggle buttons
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.add(slippyMap, BorderLayout.CENTER);
 
@@ -165,8 +186,40 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         mainSplitPane.setResizeWeight(0.7); // Give 70% space to map
         mainSplitPane.setOneTouchExpandable(false);
         mainSplitPane.setContinuousLayout(true);
+        
+        // Create outer split pane (horizontal split between west filter panel and main split pane)
+        outerSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        outerSplitPane.setLeftComponent(null); // Start with west panel hidden
+        outerSplitPane.setRightComponent(mainSplitPane);
+        outerSplitPane.setResizeWeight(0.0); // Give priority to main content
+        outerSplitPane.setOneTouchExpandable(false);
+        outerSplitPane.setContinuousLayout(true);
 
-        // Create toggle button for side panel (after split pane is created)
+        // Create toggle button for west panel (filter panel)
+        toggleWestPanelButton = new JButton("◂");
+        toggleWestPanelButton.setFocusable(false);
+        toggleWestPanelButton.setPreferredSize(new Dimension(12, 12));
+        toggleWestPanelButton.setMinimumSize(new Dimension(12, 12));
+        toggleWestPanelButton.setMaximumSize(new Dimension(12, 12));
+        toggleWestPanelButton.setMargin(new Insets(0, 0, 0, 0));
+        toggleWestPanelButton.setBorderPainted(false);
+        toggleWestPanelButton.setContentAreaFilled(false);
+        toggleWestPanelButton.setOpaque(false);
+        toggleWestPanelButton.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        toggleWestPanelButton.addActionListener(e -> {
+            westPanelVisible = !westPanelVisible;
+            if (westPanelVisible) {
+                showFilters();
+            } else {
+                hideFilters();
+            }
+        });
+
+        JPanel toggleWestButtonPanel = new JPanel(new BorderLayout());
+        toggleWestButtonPanel.add(toggleWestPanelButton, BorderLayout.NORTH);
+        centerPanel.add(toggleWestButtonPanel, BorderLayout.WEST);
+        
+        // Create toggle button for east panel (contact editor)
         toggleEastPanelButton = new JButton("▸");
         toggleEastPanelButton.setFocusable(false);
         toggleEastPanelButton.setPreferredSize(new Dimension(12, 12));
@@ -186,31 +239,58 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
 
-        JPanel toggleButtonPanel = new JPanel(new BorderLayout());
-        toggleButtonPanel.add(toggleEastPanelButton, BorderLayout.NORTH);
-        centerPanel.add(toggleButtonPanel, BorderLayout.EAST);
+        JPanel toggleEastButtonPanel = new JPanel(new BorderLayout());
+        toggleEastButtonPanel.add(toggleEastPanelButton, BorderLayout.NORTH);
+        centerPanel.add(toggleEastButtonPanel, BorderLayout.EAST);
 
         // Assemble main layout
         add(topPanel, BorderLayout.NORTH);
-        add(mainSplitPane, BorderLayout.CENTER);
+        add(outerSplitPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
 
         loadPreferences();
 
+        // Initialize debounce timer for zoom events (300ms delay)
+        updateContactsTimer = new javax.swing.Timer(300, e -> {
+            isZooming = false;
+            updateVisibleContacts(true); // Update filter panel after zoom settles
+            log.info("Zoom settled, updated contacts with filter panel refresh");
+        });
+        updateContactsTimer.setRepeats(false);
+        
         SwingUtilities.invokeLater(() -> {
+            // Connect filter panel listeners
+            filterPanel.addFilterListener(new ContactFilterListener() {
+                @Override
+                public void onFilterChanged() {
+                    log.info("Filters changed, updating visible contacts");
+                    updateVisibleContacts(true); // Always update filter panel when filters change
+                }
+                
+                @Override
+                public void onContactSelected(CompressedContact contact) {
+                    log.info("Contact selected from filter panel: {}", contact.getContact().getLabel());
+                    setContact(contact);
+                    // Center map on contact (maintain zoom level by passing current z)
+                    slippyMap.focus(contact.getLatitude(), contact.getLongitude(), slippyMap.getLevelOfDetail());
+                }
+            });
 
             timeSelector.addPropertyChangeListener("selection", evt -> {
                 Instant[] selection = (Instant[]) evt.getNewValue();
                 Instant startTime = selection[0];
                 Instant endTime = selection[1];
-                updateVisibleContacts();
+                updateVisibleContacts(true); // Update filter panel when time selection changes
                 log.info("Selection changed: {} to {}", startTime, endTime);
             });
 
             slippyMap.addPropertyChangeListener("visibleBounds", evt -> {
-                // When map bounds change, re-apply filters to update contacts
-                updateVisibleContacts();
-                log.info("Map bounds changed, re-applied contact filters");
+                // Debounce rapid zoom/pan events
+                isZooming = true;
+                updateContactsTimer.restart();
+                // Update contacts immediately but skip filter panel refresh during zoom
+                updateVisibleContacts(false);
+                log.debug("Map bounds changed, debouncing contact update");
             });
         });
     }
@@ -232,18 +312,53 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         mainSplitPane.repaint();
     }
 
+    public void showFilters() {
+        westPanelVisible = true;
+        outerSplitPane.setLeftComponent(westPanel);
+        outerSplitPane.setDividerLocation(300); // Default width for filter panel
+        toggleWestPanelButton.setText("◂");
+        outerSplitPane.revalidate();
+        outerSplitPane.repaint();
+    }
+
+    public void hideFilters() {
+        westPanelVisible = false;
+        outerSplitPane.setLeftComponent(null);
+        toggleWestPanelButton.setText("▸");
+        outerSplitPane.revalidate();
+        outerSplitPane.repaint();
+    }
+
     public void savePreferences() {
         // store divider location and data sources
         Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
 
-        // Save divider location
+        // Save main divider location
         int dividerLocation = mainSplitPane.getDividerLocation();
         prefs.putInt("mainSplitPane.dividerLocation", dividerLocation);
         log.debug("Saved divider location: {}", dividerLocation);
 
-        // Save side panel visibility
+        // Save east panel visibility
         prefs.putBoolean("eastPanel.visible", eastPanelVisible);
-        log.debug("Saved side panel visibility: {}", eastPanelVisible);
+        log.debug("Saved east panel visibility: {}", eastPanelVisible);
+        
+        // Save west panel state
+        prefs.putBoolean("westPanel.visible", westPanelVisible);
+        if (westPanelVisible) {
+            int westDivider = outerSplitPane.getDividerLocation();
+            prefs.putInt("westPanel.dividerLocation", westDivider);
+            log.debug("Saved west panel divider location: {}", westDivider);
+        }
+        log.debug("Saved west panel visibility: {}", westPanelVisible);
+        
+        // Save filter selections
+        Set<String> classifications = filterPanel.getSelectedClassifications();
+        Set<String> confidences = filterPanel.getSelectedConfidences();
+        Set<String> labels = filterPanel.getSelectedLabels();
+        prefs.put("filters.classifications", String.join(",", classifications));
+        prefs.put("filters.confidence", String.join(",", confidences));
+        prefs.put("filters.labels", String.join(",", labels));
+        log.debug("Saved filter selections");
 
         // Save time selection
         Instant startTime = timeSelector.getSelectedStartTime();
@@ -267,24 +382,60 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // load divider location and data sources
         Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
 
-        // Load divider location (default to -1 which means use default)
+        // Load main divider location (default to -1 which means use default)
         int dividerLocation = prefs.getInt("mainSplitPane.dividerLocation", -1);
         if (dividerLocation > 0) {
             // Defer setting divider location until after component is visible
             javax.swing.SwingUtilities.invokeLater(() -> {
                 mainSplitPane.setDividerLocation(dividerLocation);
-                log.debug("Loaded divider location: {}", dividerLocation);
+                log.debug("Loaded main divider location: {}", dividerLocation);
             });
         }
 
-        // Load side panel visibility (default to true)
-        boolean visible = prefs.getBoolean("eastPanel.visible", true);
-        log.debug("Loaded side panel visibility: {}", visible);
+        // Load east panel visibility (default to true)
+        boolean eastVisible = prefs.getBoolean("eastPanel.visible", true);
+        log.debug("Loaded east panel visibility: {}", eastVisible);
         javax.swing.SwingUtilities.invokeLater(() -> {
-            if (visible && !eastPanelVisible) {
+            if (eastVisible && !eastPanelVisible) {
                 showContactDetails();
-            } else if (!visible && eastPanelVisible) {
+            } else if (!eastVisible && eastPanelVisible) {
                 hideContactDetails();
+            }
+        });
+        
+        // Load west panel visibility (default to false - collapsed)
+        boolean westVisible = prefs.getBoolean("westPanel.visible", false);
+        int westDivider = prefs.getInt("westPanel.dividerLocation", 300);
+        log.debug("Loaded west panel visibility: {}, divider: {}", westVisible, westDivider);
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            if (westVisible) {
+                showFilters();
+                if (westDivider > 0) {
+                    outerSplitPane.setDividerLocation(westDivider);
+                }
+            }
+        });
+        
+        // Load filter selections
+        String classificationsStr = prefs.get("filters.classifications", "");
+        String confidencesStr = prefs.get("filters.confidence", "");
+        String labelsStr = prefs.get("filters.labels", "");
+        
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            if (!classificationsStr.isEmpty()) {
+                Set<String> classifications = Set.of(classificationsStr.split(","));
+                filterPanel.setSelectedClassifications(classifications);
+                log.debug("Loaded classification filters: {}", classifications);
+            }
+            if (!confidencesStr.isEmpty()) {
+                Set<String> confidences = Set.of(confidencesStr.split(","));
+                filterPanel.setSelectedConfidences(confidences);
+                log.debug("Loaded confidence filters: {}", confidences);
+            }
+            if (!labelsStr.isEmpty()) {
+                Set<String> labels = Set.of(labelsStr.split(","));
+                filterPanel.setSelectedLabels(labels);
+                log.debug("Loaded label filters: {}", labels);
             }
         });
 
@@ -298,12 +449,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.debug("Loaded time selection: {} to {}", startTime, endTime);
             javax.swing.SwingUtilities.invokeLater(() -> {
                 timeSelector.setSelectedInterval(startTime, endTime);
-                updateVisibleContacts();
+                updateVisibleContacts(true);
             });
         }
 
         javax.swing.SwingUtilities.invokeLater(() -> {
-            updateVisibleContacts();
+            updateVisibleContacts(true);
             log.info("Applied contact filters on load");
         });
 
@@ -323,6 +474,22 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         JPanel panel = new JPanel(new BorderLayout(5, 5));
 
         panel.add(createContactEditorSection(), BorderLayout.CENTER);
+        return panel;
+    }
+
+    /**
+     * Creates the west panel containing the contact filter panel.
+     */
+    private JPanel createWestPanel() {
+        JPanel panel = new JPanel(new BorderLayout(0, 0));
+        panel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        
+        JScrollPane scrollPane = new JScrollPane(filterPanel);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        
+        panel.add(scrollPane, BorderLayout.CENTER);
         return panel;
     }
 
@@ -406,14 +573,37 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     
     /**
      * Updates the visible contacts based on current map bounds and time selection.
+     * 
+     * @param updateFilterPanel whether to update the filter panel contact list
      */
-    private void updateVisibleContacts() {
+    private void updateVisibleContacts(boolean updateFilterPanel) {
         Instant startTime = timeSelector.getSelectedStartTime();
         Instant endTime = timeSelector.getSelectedEndTime();
+        
+        // Get filter criteria from filter panel
+        Set<String> classifications = filterPanel.getSelectedClassifications();
+        Set<String> confidences = filterPanel.getSelectedConfidences();
+        Set<String> labels = filterPanel.getSelectedLabels();
+        
+        // Apply filters with all criteria
         contactCollection.applyFilters(
                 new QuadTree.Region(slippyMap.getVisibleBounds()),
                 startTime,
-                endTime);
+                endTime,
+                classifications,
+                confidences,
+                labels);
+        
+        // Update the filter panel's contact list only if requested
+        // (skip during rapid zoom/pan to improve performance)
+        if (updateFilterPanel) {
+            // Schedule filter panel update after a short delay to allow background filtering to complete
+            javax.swing.Timer filterPanelTimer = new javax.swing.Timer(350, e -> {
+                filterPanel.setContacts(contactCollection.getFilteredContacts());
+            });
+            filterPanelTimer.setRepeats(false);
+            filterPanelTimer.start();
+        }
     }
 
     /**

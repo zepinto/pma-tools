@@ -3,7 +3,7 @@
 //***************************************************************************
 // Author: José Pinto                                                       *
 //***************************************************************************
-package pt.omst.contacts.browser;
+package pt.omst.contacts.browser.editor;
 
 import pt.omst.rasterlib.Contact;
 

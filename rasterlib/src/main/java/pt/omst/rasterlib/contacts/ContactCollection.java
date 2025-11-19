@@ -12,12 +12,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.mapview.MapPainter;
 import pt.omst.mapview.SlippyMap;
+import pt.omst.rasterlib.AnnotationType;
 
 /**
  * A collection of contacts.
@@ -29,6 +32,9 @@ public class ContactCollection implements MapPainter {
     private QuadTree.Region currentRegion = null;
     private Instant currentStart = null;
     private Instant currentEnd = null;
+    private Set<String> currentClassifications = null;
+    private Set<String> currentConfidences = null;
+    private Set<String> currentLabels = null;
 
     public static ContactCollection empty() {
         return new ContactCollection();
@@ -72,6 +78,109 @@ public class ContactCollection implements MapPainter {
         log.info("Filtered contacts: {} in region {} between {} and {}", 
             newFilteredContacts.size(), region, start, end);
         this.filteredContacts = newFilteredContacts;
+    }
+
+    /**
+     * Applies filters to the contacts based on region, time, and classification/confidence/label criteria.
+     * Empty sets for classification/confidence/label filters mean "show all" for that criterion.
+     * 
+     * @param region The geographic region to filter by
+     * @param start Start time for filtering
+     * @param end End time for filtering
+     * @param classifications Set of classification types to include (empty = show all)
+     * @param confidences Set of confidence levels to include (empty = show all)
+     * @param labels Set of label annotations to include (empty = show all)
+     */
+    public void applyFilters(QuadTree.Region region, Instant start, Instant end,
+                            Set<String> classifications, Set<String> confidences, Set<String> labels) {
+        this.currentRegion = region;
+        this.currentStart = start;
+        this.currentEnd = end;
+        this.currentClassifications = classifications;
+        this.currentConfidences = confidences;
+        this.currentLabels = labels;
+        
+        // Run filtering in background thread to avoid UI blocking
+        CompletableFuture.runAsync(() -> {
+            List<CompressedContact> contactsInRegion = quadTree.query(region);
+
+            long startMillis = start.toEpochMilli();
+            long endMillis = end.toEpochMilli();
+
+            log.info("Applying filters: region {}, time {} to {}, classifications: {}, confidences: {}, labels: {}",
+                    region, start, end, 
+                    classifications.isEmpty() ? "all" : classifications,
+                    confidences.isEmpty() ? "all" : confidences,
+                    labels.isEmpty() ? "all" : labels);
+
+            List<File> newFilteredContacts = contactsInRegion.stream()
+                .filter(c -> c.getTimestamp() >= startMillis && c.getTimestamp() <= endMillis)
+                .filter(c -> matchesClassificationFilter(c, classifications))
+                .filter(c -> matchesConfidenceFilter(c, confidences))
+                .filter(c -> matchesLabelFilter(c, labels))
+                .map(CompressedContact::getZctFile)
+                .toList();
+
+            log.info("Filtered contacts: {} match all criteria", newFilteredContacts.size());
+            this.filteredContacts = newFilteredContacts;
+        });
+    }
+
+    /**
+     * Checks if a contact matches the classification filter.
+     * Empty filter set means show all.
+     */
+    private boolean matchesClassificationFilter(CompressedContact contact, Set<String> classifications) {
+        if (classifications == null || classifications.isEmpty()) {
+            return true; // Show all if no filter
+        }
+        String contactClassification = contact.getClassification();
+        return contactClassification != null && classifications.contains(contactClassification);
+    }
+
+    /**
+     * Checks if a contact matches the confidence filter.
+     * Empty filter set means show all.
+     */
+    private boolean matchesConfidenceFilter(CompressedContact contact, Set<String> confidences) {
+        if (confidences == null || confidences.isEmpty()) {
+            return true; // Show all if no filter
+        }
+        
+        // Extract confidence from CLASSIFICATION annotations
+        if (contact.getContact().getObservations() != null) {
+            return contact.getContact().getObservations().stream()
+                .filter(obs -> obs.getAnnotations() != null)
+                .flatMap(obs -> obs.getAnnotations().stream())
+                .filter(ann -> ann.getAnnotationType() == AnnotationType.CLASSIFICATION)
+                .filter(ann -> ann.getConfidence() != null)
+                .anyMatch(ann -> {
+                    String confStr = String.valueOf(ann.getConfidence().intValue());
+                    return confidences.contains(confStr);
+                });
+        }
+        return false;
+    }
+
+    /**
+     * Checks if a contact matches the label filter (AnnotationType.LABEL annotations).
+     * Empty filter set means show all.
+     */
+    private boolean matchesLabelFilter(CompressedContact contact, Set<String> labels) {
+        if (labels == null || labels.isEmpty()) {
+            return true; // Show all if no filter
+        }
+        
+        // Check if contact has any LABEL annotations matching the filter
+        if (contact.getContact().getObservations() != null) {
+            return contact.getContact().getObservations().stream()
+                .filter(obs -> obs.getAnnotations() != null)
+                .flatMap(obs -> obs.getAnnotations().stream())
+                .filter(ann -> ann.getAnnotationType() == AnnotationType.LABEL)
+                .filter(ann -> ann.getCategory() != null)
+                .anyMatch(ann -> labels.contains(ann.getCategory()));
+        }
+        return false;
     }
 
     public List<CompressedContact> getFilteredContacts() {        

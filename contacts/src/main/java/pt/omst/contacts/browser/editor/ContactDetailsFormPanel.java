@@ -1,4 +1,4 @@
-package pt.omst.contacts.browser;
+package pt.omst.contacts.browser.editor;
 
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
