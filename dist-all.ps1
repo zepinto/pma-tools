@@ -69,25 +69,43 @@ function Test-Prerequisites {
     Write-Info "Checking prerequisites..."
     
     # Check for Java 21
+    $javaFound = $false
+    $javaVersion = $null
+    
     try {
-        $javaVersion = & java -version 2>&1 | Select-String -Pattern 'version' | Select-Object -First 1
-        if ($javaVersion -match '"(\d+)\.') {
-            $majorVersion = [int]$Matches[1]
-        } elseif ($javaVersion -match '"(\d+)"') {
-            $majorVersion = [int]$Matches[1]
-        } else {
-            Write-Error-Msg "Could not parse Java version"
-            exit 1
-        }
-        
-        if ($majorVersion -lt 21) {
-            Write-Error-Msg "Java 21 or higher required. Found Java $majorVersion."
-            exit 1
+        # Try to get java version
+        $versionOutput = & java -version 2>&1
+        if ($LASTEXITCODE -eq 0 -or $versionOutput) {
+            $javaFound = $true
+            $javaVersion = $versionOutput | Select-String -Pattern 'version' | Select-Object -First 1
         }
     } catch {
-        Write-Error-Msg "Java not found. Please install JDK 21."
+        # java command failed, will check below
+    }
+    
+    if (-not $javaFound) {
+        Write-Error-Msg "Java not found in PATH. Please ensure JDK 21 is installed and 'java' command is available."
+        Write-Host "Hint: You have javac available, but java.exe might not be in your PATH." -ForegroundColor Yellow
+        Write-Host "Try running: java -version" -ForegroundColor Yellow
         exit 1
     }
+    
+    # Parse version
+    if ($javaVersion -match '"(\d+)\.') {
+        $majorVersion = [int]$Matches[1]
+    } elseif ($javaVersion -match '"(\d+)"') {
+        $majorVersion = [int]$Matches[1]
+    } else {
+        Write-Error-Msg "Could not parse Java version from: $javaVersion"
+        exit 1
+    }
+    
+    if ($majorVersion -lt 21) {
+        Write-Error-Msg "Java 21 or higher required. Found Java $majorVersion."
+        exit 1
+    }
+    
+    Write-Host "Found Java $majorVersion" -ForegroundColor Green
     
     # Check for jpackage
     try {
