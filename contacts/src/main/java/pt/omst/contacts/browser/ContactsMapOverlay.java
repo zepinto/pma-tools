@@ -38,6 +38,12 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
     private Point selectionEnd = null;
     private boolean isSelecting = false;
     private boolean hasDragged = false; // Track if actual dragging occurred
+    
+    // Circle selection fields
+    private Point circleSelectionStart = null;
+    private Point circleSelectionEnd = null;
+    private boolean isCircleSelecting = false;
+    private boolean hasCircleDragged = false;
 
     // Fields for cycling through contacts at same location
     private Point lastClickLocation = null;
@@ -79,8 +85,25 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     @Override
     public boolean processMouseMotionEvent(MouseEvent e, SlippyMap map) {
-        // Ignore mouse motion when SHIFT is pressed (used for distance measurement)
-        if (e.isShiftDown()) {
+        // Handle circle selection dragging (SHIFT + right mouse button drag)
+        if (isCircleSelecting && e.getID() == MouseEvent.MOUSE_DRAGGED) {
+            circleSelectionEnd = e.getPoint();
+            
+            // Check if we've moved enough to consider this a drag (threshold of 3 pixels)
+            if (circleSelectionStart != null) {
+                int dx = Math.abs(circleSelectionEnd.x - circleSelectionStart.x);
+                int dy = Math.abs(circleSelectionEnd.y - circleSelectionStart.y);
+                if (dx > 3 || dy > 3) {
+                    hasCircleDragged = true;
+                }
+            }
+            
+            map.repaint();
+            return true; // Consume the event
+        }
+        
+        // Ignore mouse motion when SHIFT is pressed (except for circle selection)
+        if (e.isShiftDown() && !isCircleSelecting) {
             // Clear any hovering state
             if (hoveringContact != null) {
                 hoveringContact = null;
@@ -128,18 +151,51 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     @Override
     public boolean processMouseEvent(MouseEvent e, SlippyMap map) {
-        // Ignore mouse events when SHIFT is pressed (used for distance measurement)
-        if (e.isShiftDown()) {
-            return false;
+        if (e.getID() == MouseEvent.MOUSE_PRESSED && SwingUtilities.isRightMouseButton(e)) {
+            if (e.isShiftDown()) {
+                // Start circle selection with SHIFT + right-click
+                circleSelectionStart = e.getPoint();
+                circleSelectionEnd = e.getPoint();
+                isCircleSelecting = true;
+                hasCircleDragged = false;
+                return true; // Consume the event
+            } else {
+                // Start rectangular selection with right-click (no SHIFT)
+                selectionStart = e.getPoint();
+                selectionEnd = e.getPoint();
+                isSelecting = true;
+                hasDragged = false;
+                return false; // Don't consume - let other handlers see it
+            }
         }
         
-        if (e.getID() == MouseEvent.MOUSE_PRESSED && SwingUtilities.isRightMouseButton(e)) {
-            // Start potential rectangular selection with right-click
-            selectionStart = e.getPoint();
-            selectionEnd = e.getPoint();
-            isSelecting = true;
-            hasDragged = false; // Reset drag flag
-            return false; // Don't consume - let other handlers see it
+        if (e.getID() == MouseEvent.MOUSE_RELEASED && isCircleSelecting) {
+            // End circle selection
+            isCircleSelecting = false;
+            circleSelectionEnd = e.getPoint();
+            
+            // Only show selection popup if user actually dragged
+            if (hasCircleDragged) {
+                // Find all contacts within the circle
+                List<CompressedContact> selectedContacts = getContactsInCircle(
+                    circleSelectionStart, circleSelectionEnd, map);
+                
+                // Show popup menu with selected contacts (only if contacts found)
+                if (!selectedContacts.isEmpty()) {
+                    showSelectionPopup(selectedContacts, e.getPoint(), map);
+                    // Clear selection circle
+                    circleSelectionStart = null;
+                    circleSelectionEnd = null;
+                    map.repaint();
+                    return true; // Consume the event
+                }
+            }
+            
+            // No drag occurred or no contacts selected - clear selection
+            circleSelectionStart = null;
+            circleSelectionEnd = null;
+            map.repaint();
+            return false;
         }
         
         if (e.getID() == MouseEvent.MOUSE_RELEASED && isSelecting) {
@@ -227,16 +283,18 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
     }
     
     /**
-     * Find all contacts within the rectangular selection area
+     * Find all contacts within the rectangular selection area (from center)
      */
-    private List<CompressedContact> getContactsInRectangle(Point start, Point end, SlippyMap map) {
+    private List<CompressedContact> getContactsInRectangle(Point center, Point corner, SlippyMap map) {
         List<CompressedContact> result = new ArrayList<>();
         
-        // Calculate rectangle bounds
-        int minX = Math.min(start.x, end.x);
-        int maxX = Math.max(start.x, end.x);
-        int minY = Math.min(start.y, end.y);
-        int maxY = Math.max(start.y, end.y);
+        // Calculate rectangle bounds from center
+        int dx = Math.abs(corner.x - center.x);
+        int dy = Math.abs(corner.y - center.y);
+        int minX = center.x - dx;
+        int maxX = center.x + dx;
+        int minY = center.y - dy;
+        int maxY = center.y + dy;
         
         // Check each contact
         for (CompressedContact contact : collection.getFilteredContacts()) {
@@ -246,6 +304,35 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             
             if (screenPos[0] >= minX && screenPos[0] <= maxX &&
                 screenPos[1] >= minY && screenPos[1] <= maxY) {
+                result.add(contact);
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Find all contacts within the circular selection area
+     */
+    private List<CompressedContact> getContactsInCircle(Point center, Point edge, SlippyMap map) {
+        List<CompressedContact> result = new ArrayList<>();
+        
+        // Convert center and edge points to lat/lon using SlippyMap method
+        pt.lsts.neptus.core.LocationType centerLocation = map.getRealWorldPosition(center.x, center.y);
+        pt.lsts.neptus.core.LocationType edgeLocation = map.getRealWorldPosition(edge.x, edge.y);
+        
+        // Calculate radius in meters
+        double radiusMeters = centerLocation.getDistanceInMeters(edgeLocation);
+        
+        // Check each contact
+        for (CompressedContact contact : collection.getFilteredContacts()) {
+            pt.lsts.neptus.core.LocationType contactLocation = new pt.lsts.neptus.core.LocationType();
+            contactLocation.setLatitudeDegs(contact.getContact().getLatitude());
+            contactLocation.setLongitudeDegs(contact.getContact().getLongitude());
+            
+            double distance = centerLocation.getDistanceInMeters(contactLocation);
+            
+            if (distance <= radiusMeters) {
                 result.add(contact);
             }
         }
@@ -332,14 +419,64 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             g2d.setColor(new java.awt.Color(0, 120, 215, 100)); // Semi-transparent blue
             g2d.setStroke(new java.awt.BasicStroke(2.0f));
             
-            int x = Math.min(selectionStart.x, selectionEnd.x);
-            int y = Math.min(selectionStart.y, selectionEnd.y);
-            int width = Math.abs(selectionEnd.x - selectionStart.x);
-            int height = Math.abs(selectionEnd.y - selectionStart.y);
+            // Calculate rectangle from center (like circle selection)
+            int dx = selectionEnd.x - selectionStart.x;
+            int dy = selectionEnd.y - selectionStart.y;
+            int width = Math.abs(dx) * 2;
+            int height = Math.abs(dy) * 2;
+            int x = selectionStart.x - Math.abs(dx);
+            int y = selectionStart.y - Math.abs(dy);
             
             g2d.fillRect(x, y, width, height);
             g2d.setColor(new java.awt.Color(0, 120, 215)); // Solid blue border
             g2d.drawRect(x, y, width, height);
+        }
+        
+        // Draw circle selection if selecting with SHIFT
+        if (isCircleSelecting && circleSelectionStart != null && circleSelectionEnd != null) {
+            // Calculate radius in pixels
+            int dx = circleSelectionEnd.x - circleSelectionStart.x;
+            int dy = circleSelectionEnd.y - circleSelectionStart.y;
+            int radiusPixels = (int) Math.sqrt(dx * dx + dy * dy);
+            
+            // Calculate radius in meters for display
+            pt.lsts.neptus.core.LocationType centerLocation = map.getRealWorldPosition(circleSelectionStart.x, circleSelectionStart.y);
+            pt.lsts.neptus.core.LocationType edgeLocation = map.getRealWorldPosition(circleSelectionEnd.x, circleSelectionEnd.y);
+            double radiusMeters = centerLocation.getDistanceInMeters(edgeLocation);
+            
+            // Draw the circle
+            g2d.setColor(new java.awt.Color(0, 120, 215, 100)); // Semi-transparent blue
+            g2d.setStroke(new java.awt.BasicStroke(2.0f));
+            g2d.fillOval(
+                circleSelectionStart.x - radiusPixels,
+                circleSelectionStart.y - radiusPixels,
+                radiusPixels * 2,
+                radiusPixels * 2);
+            g2d.setColor(new java.awt.Color(0, 120, 215)); // Solid blue border
+            g2d.drawOval(
+                circleSelectionStart.x - radiusPixels,
+                circleSelectionStart.y - radiusPixels,
+                radiusPixels * 2,
+                radiusPixels * 2);
+            
+            // Draw radius text in meters
+            String radiusText = String.format("%.1f m", radiusMeters);
+            g2d.setColor(java.awt.Color.WHITE);
+            g2d.setFont(new java.awt.Font("SansSerif", java.awt.Font.BOLD, 14));
+            
+            // Draw text with shadow for better visibility
+            java.awt.FontMetrics fm = g2d.getFontMetrics();
+            int textWidth = fm.stringWidth(radiusText);
+            int textX = circleSelectionStart.x + radiusPixels / 2 - textWidth / 2;
+            int textY = circleSelectionStart.y - radiusPixels / 2;
+            
+            // Draw shadow
+            g2d.setColor(java.awt.Color.BLACK);
+            g2d.drawString(radiusText, textX + 1, textY + 1);
+            
+            // Draw text
+            g2d.setColor(java.awt.Color.WHITE);
+            g2d.drawString(radiusText, textX, textY);
         }
 
         if (hoveringContact != null && hoveringContact != selectedContact) {
