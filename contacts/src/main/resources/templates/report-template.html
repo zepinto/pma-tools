@@ -136,6 +136,42 @@
                 <td colspan="2"><strong>Remarks:</strong> {{remarks}}</td>
             </tr>
         </table>
+
+        <!-- Observations Section -->
+        <div style="margin-top: 15px;">
+            <h3 style="color: #004488; font-size: 12pt; margin-bottom: 5px;">Observations</h3>
+            {{#observations}}
+            <div style="margin-bottom: 10px; background-color: #f5f5f5; padding: 8px; border-left: 3px solid #004488;">
+                <div style="font-weight: bold; margin-bottom: 5px;">
+                    {{formattedTimestamp}}
+                    {{#userName}} - User: {{userName}}{{/userName}}
+                    {{#systemName}} - System: {{systemName}}{{/systemName}}
+                </div>
+                {{#annotations}}
+                <table style="width: 100%; font-size: 10pt; margin-top: 5px; border-collapse: collapse;">
+                    <tr style="background-color: #e0e0e0;">
+                        <td style="padding: 3px; border: 1px solid #ccc; width: 20%;"><strong>Type:</strong> {{type}}</td>
+                        {{#category}}<td style="padding: 3px; border: 1px solid #ccc; width: 25%;"><strong>Category:</strong> {{category}}</td>{{/category}}
+                        {{#confidence}}<td style="padding: 3px; border: 1px solid #ccc; width: 20%;"><strong>Confidence:</strong> {{confidence}}</td>{{/confidence}}
+                    </tr>
+                    {{#text}}
+                    <tr>
+                        <td colspan="3" style="padding: 3px; border: 1px solid #ccc;"><strong>Text:</strong> {{text}}</td>
+                    </tr>
+                    {{/text}}
+                    {{#measurements}}
+                    <tr>
+                        <td colspan="3" style="padding: 3px; border: 1px solid #ccc;"><strong>Measurements:</strong> {{measurements}}</td>
+                    </tr>
+                    {{/measurements}}
+                </table>
+                {{/annotations}}
+            </div>
+            {{/observations}}
+            {{^observations}}
+            <p style="color: #777; font-style: italic;">No observations recorded</p>
+            {{/observations}}
+        </div>
     </div>
     {{/contacts}}
 

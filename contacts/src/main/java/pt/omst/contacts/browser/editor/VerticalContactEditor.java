@@ -121,25 +121,37 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
             observation.getRasterFilename() != null && !observation.getRasterFilename().isEmpty(),
             observation.getAnnotations() != null ? observation.getAnnotations().size() : 0);
             
+        // Reset classification fields to default values
+        boolean hasClassification = false;
+        
         if (observation.getAnnotations() == null || observation.getAnnotations().isEmpty()) {
             log.info("No annotations for observation {}", observation.getUuid());
-            return;
-        }
-        for (Annotation annot : observation.getAnnotations()) {
-            log.info("Processing annotation type={}, text={}", annot.getAnnotationType(), annot.getText());
-            if (annot.getAnnotationType().equals(AnnotationType.TEXT)) {
-                descriptionTextArea.setText(annot.getText());
-            } else if (annot.getAnnotationType().equals(AnnotationType.CLASSIFICATION)) {
-                typeComboBox.setSelectedItem(annot.getCategory());
-                for (int i = 0; i < confidenceComboBox.getItemCount(); i++) {
-                    if (sameThing(confidenceComboBox.getItemAt(i), annot.getConfidence())) {
-                        confidenceComboBox.setSelectedIndex(i);
-                        break;
+        } else {
+            for (Annotation annot : observation.getAnnotations()) {
+                log.info("Processing annotation type={}, text={}", annot.getAnnotationType(), annot.getText());
+                if (annot.getAnnotationType().equals(AnnotationType.TEXT)) {
+                    descriptionTextArea.setText(annot.getText());
+                } else if (annot.getAnnotationType().equals(AnnotationType.CLASSIFICATION)) {
+                    hasClassification = true;
+                    typeComboBox.setSelectedItem(annot.getCategory());
+                    for (int i = 0; i < confidenceComboBox.getItemCount(); i++) {
+                        if (sameThing(confidenceComboBox.getItemAt(i), annot.getConfidence())) {
+                            confidenceComboBox.setSelectedIndex(i);
+                            break;
+                        }
                     }
+                    log.info("Setting type to {} and confidence to {}", annot.getCategory(), annot.getConfidence());
                 }
-                log.info("Setting type to {} and confidence to {}", annot.getCategory(), annot.getConfidence());
             }
         }
+        
+        // If no classification found, set to UNKNOWN/0
+        if (!hasClassification) {
+            typeComboBox.setSelectedItem("UNKNOWN");
+            confidenceComboBox.setSelectedItem("0");
+            log.info("No classification found, setting to UNKNOWN/0");
+        }
+        
         if (observation.getRasterFilename() == null || observation.getRasterFilename().isEmpty()) {
             log.warn("No raster file for observation {}, skipping visual display", observation.getUuid());
         } else {

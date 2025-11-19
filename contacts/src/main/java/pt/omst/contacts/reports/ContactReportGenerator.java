@@ -24,6 +24,8 @@ import com.github.mustachejava.DefaultMustacheFactory;
 import com.github.mustachejava.Mustache;
 import com.github.mustachejava.MustacheFactory;
 
+import pt.omst.rasterlib.contacts.CompressedContact;
+
 public class ContactReportGenerator {
 
     // The Data Container for the Template
@@ -56,6 +58,15 @@ public class ContactReportGenerator {
         public List<SidescanContact> getContacts() {
             return contacts;
         }
+    }
+
+    public static void generateReport(List<CompressedContact> contacts) {
+        MustacheFactory mf = new DefaultMustacheFactory();
+        InputStream templateStream = ContactReportGenerator.class.getResourceAsStream("/templates/report-template.html");
+        if (templateStream == null) {
+            throw new IllegalArgumentException("Template not found in resources: " + "/templates/report-template.html");
+        }
+        Reader templateReader = new InputStreamReader(templateStream);
     }
 
     public void generateReport(String templatePath, String outputPdfPath, ReportData data) throws Exception {
@@ -114,11 +125,7 @@ public class ContactReportGenerator {
 
         SidescanContact c1 = new SidescanContact("C-001", 41.15, -8.61, "Mine-like", "High", null);
         c1.setDims(1.2, 2.5, 5.0);
-        // In reality, pass a real file path here. I'm using a dummy placeholder or
-        // generate one.
-        // c1.setBase64Image(imagePathToBase64("/home/user/sonar_logs/img1.png"));
-        // For demo purposes, I will leave image empty or use a tiny hardcoded base64
-        // dot
+
         c1.setBase64Image(
                 "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==");
 

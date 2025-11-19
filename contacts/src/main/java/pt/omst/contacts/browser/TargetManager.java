@@ -47,6 +47,7 @@ import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.browser.filtering.ContactFilterListener;
 import pt.omst.contacts.browser.filtering.ContactFilterPanel;
+import pt.omst.contacts.reports.GenerateReportDialog;
 import pt.omst.contacts.watcher.RecursiveFileWatcher;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.LoadingPanel;
@@ -472,6 +473,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // Save auto-refresh preference
         prefs.putBoolean("autoRefresh.enabled", autoRefreshEnabled);
         log.debug("Saved auto-refresh preference: {}", autoRefreshEnabled);
+        
+        // Save icon size preference
+        int iconSize = IconCache.getInstance().getIconSize();
+        prefs.putInt("iconSize", iconSize);
+        log.debug("Saved icon size preference: {}", iconSize);
 
         // Save time selection
         Instant startTime = timeSelector.getSelectedStartTime();
@@ -555,6 +561,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // Load auto-refresh preference (default to true)
         autoRefreshEnabled = prefs.getBoolean("autoRefresh.enabled", true);
         log.debug("Loaded auto-refresh preference: {}", autoRefreshEnabled);
+        
+        // Load icon size preference (default to 12)
+        int iconSize = prefs.getInt("iconSize", 12);
+        IconCache.getInstance().setIconSize(iconSize);
+        log.debug("Loaded icon size preference: {}", iconSize);
 
         // Load time selection
         long startTimeMillis = prefs.getLong("timeSelector.startTime", -1);
@@ -825,6 +836,38 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         preferencesMenu.add(autoRefreshItem);
         preferencesMenu.addSeparator();
         
+        // Icon Size submenu
+        JMenu iconSizeMenu = new JMenu("Icon Size");
+        int[] iconSizes = {8, 12, 16, 20, 24, 32};
+        int currentSize = IconCache.getInstance().getIconSize();
+        
+        for (int size : iconSizes) {
+            JMenuItem sizeItem = new JMenuItem(size + " px" + (size == currentSize ? " ✓" : ""));
+            final int selectedSize = size;
+            sizeItem.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    IconCache.getInstance().setIconSize(selectedSize);
+                    if (targetManager != null && targetManager.slippyMap != null) {
+                        targetManager.slippyMap.repaint();
+                    }
+                    // Update menu to show new selection
+                    for (int i = 0; i < iconSizeMenu.getItemCount(); i++) {
+                        JMenuItem item = iconSizeMenu.getItem(i);
+                        String text = item.getText().replaceAll(" ✓", "");
+                        if (text.equals(selectedSize + " px")) {
+                            item.setText(text + " ✓");
+                        } else {
+                            item.setText(text);
+                        }
+                    }
+                }
+            });
+            iconSizeMenu.add(sizeItem);
+        }
+        preferencesMenu.add(iconSizeMenu);
+        preferencesMenu.addSeparator();
+        
         // Contact Types menu item
         JMenuItem contactTypesItem = new JMenuItem("Contact Types");
         contactTypesItem.addActionListener(new ActionListener() {
@@ -848,6 +891,74 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         preferencesMenu.add(labelsItem);
         
         fileMenu.add(preferencesMenu);
+        fileMenu.addSeparator();
+
+        // Reports submenu
+        JMenu reportsMenu = new JMenu("Reports");
+        
+        // Generate Report menu item
+        JMenuItem generateReportItem = new JMenuItem("Generate Report...");
+        generateReportItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (targetManager != null && targetManager.contactCollection != null) {
+                    GenerateReportDialog dialog = new GenerateReportDialog(frame, targetManager.contactCollection);
+                    dialog.setVisible(true);
+                } else {
+                    GuiUtils.errorMessage(frame, "Error", "No contact collection available.");
+                }
+            }
+        });
+        reportsMenu.add(generateReportItem);
+        
+        // Edit Template menu item
+        JMenuItem editTemplateItem = new JMenuItem("Edit Template...");
+        editTemplateItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    // Extract template from resources to temp file
+                    java.io.InputStream templateStream = TargetManager.class.getResourceAsStream("/templates/report-template.html");
+                    if (templateStream == null) {
+                        GuiUtils.errorMessage(frame, "Error", "Template file not found in resources.");
+                        return;
+                    }
+                    
+                    java.io.File tempFile = java.io.File.createTempFile("contact-report-template-", ".html");
+                    java.nio.file.Files.copy(templateStream, tempFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    templateStream.close();
+                    
+                    GuiUtils.infoMessage(frame, "Template Editor", 
+                        "Opening template in system editor.\n\n" +
+                        "Note: Changes will NOT be saved to the application.\n" +
+                        "This is a temporary file for reference only.\n\n" +
+                        "File location: " + tempFile.getAbsolutePath());
+                    
+                    if (java.awt.Desktop.isDesktopSupported()) {
+                        java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                        if (desktop.isSupported(java.awt.Desktop.Action.EDIT)) {
+                            desktop.edit(tempFile);
+                        } else if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
+                            desktop.open(tempFile);
+                        } else {
+                            GuiUtils.errorMessage(frame, "Not Supported", 
+                                "Desktop edit operation not supported on this system.\n" +
+                                "Please open the file manually: " + tempFile.getAbsolutePath());
+                        }
+                    } else {
+                        GuiUtils.errorMessage(frame, "Not Supported", 
+                            "Desktop operations not supported on this system.\n" +
+                            "Please open the file manually: " + tempFile.getAbsolutePath());
+                    }
+                } catch (java.io.IOException ex) {
+                    log.error("Error editing template", ex);
+                    GuiUtils.errorMessage(frame, "Error", "Failed to open template: " + ex.getMessage());
+                }
+            }
+        });
+        reportsMenu.add(editTemplateItem);
+        
+        fileMenu.add(reportsMenu);
         fileMenu.addSeparator();
 
         // Exit menu item

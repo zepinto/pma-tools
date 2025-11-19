@@ -417,6 +417,8 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
              // ignore
         }
         Image icon = IconCache.getInstance().getIcon(category);
+        int iconSize = IconCache.getInstance().getIconSize();
+        int halfSize = iconSize / 2;
                 
         if (isSelected) {
             g.setColor(java.awt.Color.RED);
@@ -425,13 +427,13 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         }        
         g.drawImage(
             icon, 
-            (int)screenPos[0] - 8, 
-            (int)screenPos[1] - 8, 
+            (int)screenPos[0] - halfSize, 
+            (int)screenPos[1] - halfSize, 
             null);
         g.drawString(
             contact.getContact().getLabel(),
-            (int)screenPos[0] + 6, 
-            (int)screenPos[1] - 6);
+            (int)screenPos[0] + halfSize, 
+            (int)screenPos[1] - halfSize);
     }
 
     @Override
