@@ -228,6 +228,83 @@ Or publish individual modules:
 
 **Note:** Remote publishing is configured for the OMST Maven repository at `https://omst.direct.quickconnect.to/software/maven`
 
+## Distribution
+
+### Creating Native Installers
+
+#### Windows (MSI Installer)
+
+**Requirements:**
+- Windows OS (or WSL with appropriate setup)
+- JDK 21 or higher
+- [WiX Toolset 3.x](https://wixtoolset.org/releases/) installed and in PATH
+
+**Build installers:**
+
+```powershell
+.\dist-all.ps1
+```
+
+**Output:**
+- `dist/installers/windows/rasterfall-2025.11.00.msi`
+- `dist/installers/windows/target-manager-2025.11.00.msi`
+- `dist/portable/rasterfall-2025.11.00-portable.zip`
+- `dist/portable/target-manager-2025.11.00-portable.zip`
+
+The MSI installers bundle a custom JRE, so end users don't need Java installed. They include Start Menu shortcuts and integrate with Windows Add/Remove Programs.
+
+---
+
+#### Linux (DEB/RPM)
+
+**Requirements:**
+- Linux OS
+- JDK 21 or higher
+- For DEB: `dpkg-deb` (usually pre-installed on Debian/Ubuntu)
+- For RPM: `rpmbuild` (`sudo dnf install rpm-build`)
+
+**Build installers:**
+
+```bash
+./dist-all.sh
+```
+
+The script auto-detects your distribution and creates the appropriate package format (DEB for Debian/Ubuntu, RPM for Fedora/RHEL).
+
+**Output:**
+- `dist/installers/linux/rasterfall_2025.11.00_amd64.deb` (or `.rpm`)
+- `dist/installers/linux/target-manager_2025.11.00_amd64.deb` (or `.rpm`)
+- Portable TAR.GZ archives in `dist/portable/`
+
+---
+
+#### macOS (DMG)
+
+**Requirements:**
+- macOS
+- JDK 21 or higher
+
+**Build installers:**
+
+```bash
+./dist-all.sh
+```
+
+**Output:**
+- `dist/installers/macos/rasterfall-2025.11.00.dmg`
+- `dist/installers/macos/target-manager-2025.11.00.dmg`
+
+---
+
+### Portable Editions
+
+All distribution scripts automatically create portable editions that don't require installation:
+
+- **Windows**: ZIP archives with `.bat` launch scripts
+- **Linux/macOS**: TAR.GZ archives with `.sh` launch scripts
+
+Users only need Java 21 installed to run portable editions. Find them in `dist/portable/` after running the distribution script.
+
 ## Project Structure
 
 ```
