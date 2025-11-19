@@ -11,8 +11,15 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,6 +42,7 @@ import javax0.license3j.License;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.browser.filtering.ContactFilterListener;
 import pt.omst.contacts.browser.filtering.ContactFilterPanel;
@@ -126,6 +134,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         contactsMapOverlay = new ContactsMapOverlay(contactCollection);
         slippyMap.addMapOverlay(contactsMapOverlay);
+        contactsMapOverlay.setTargetManager(this);
         contactsMapOverlay.setContactSelectionListener(contact -> {
             log.info("Contact selected: {}", contact.getContact().getLabel());
             setContact(contact);
@@ -802,6 +811,340 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 break;
             }
         }
+    }
+
+    /**
+     * Groups multiple contacts into a main contact asynchronously.
+     * Merges observations, raster files, and annotations from merge contacts into main contact.
+     * Deletes merged contacts on success, rolls back on failure.
+     * 
+     * @param mainContact The contact to merge into
+     * @param mergeContacts The contacts to merge (will be deleted)
+     */
+    public void groupContactsAsync(CompressedContact mainContact, List<CompressedContact> mergeContacts) {
+        IndexedRasterUtils.background(() -> {
+            List<File> backupFiles = new ArrayList<>();
+            Path tempDir = null;
+            
+            try {
+                // Step 1: Extract main contact to temp directory
+                tempDir = Files.createTempDirectory("contact_group_");
+                log.info("Extracting main contact to temp directory: {}", tempDir);
+                
+                if (!ZipUtils.unZip(mainContact.getZctFile().getAbsolutePath(), tempDir.toString())) {
+                    throw new IOException("Failed to extract main contact ZIP");
+                }
+                
+                // Step 2: Load main contact data
+                pt.omst.rasterlib.Contact mainContactData = pt.omst.rasterlib.contacts.CompressedContact
+                    .extractCompressedContact(mainContact.getZctFile());
+                
+                if (mainContactData.getObservations() == null) {
+                    mainContactData.setObservations(new ArrayList<>());
+                }
+                
+                int initialObsCount = mainContactData.getObservations().size();
+                log.debug("Initial main contact has {} observations", initialObsCount);
+                
+                // Step 3: Collect all labels for deduplication
+                Set<String> labelSet = new HashSet<>();
+                for (pt.omst.rasterlib.Observation obs : mainContactData.getObservations()) {
+                    if (obs.getAnnotations() != null) {
+                        for (pt.omst.rasterlib.Annotation ann : obs.getAnnotations()) {
+                            if (ann.getAnnotationType() == pt.omst.rasterlib.AnnotationType.LABEL 
+                                && ann.getText() != null && !ann.getText().trim().isEmpty()) {
+                                labelSet.add(ann.getText().toLowerCase());
+                            }
+                        }
+                    }
+                }
+                
+                // Step 4: Process each merge contact
+                for (CompressedContact mergeContact : mergeContacts) {
+                    log.info("Processing merge contact: {}", mergeContact.getContact().getLabel());
+                    
+                    // Extract merge contact data
+                    pt.omst.rasterlib.Contact mergeContactData = pt.omst.rasterlib.contacts.CompressedContact
+                        .extractCompressedContact(mergeContact.getZctFile());
+                    
+                    if (mergeContactData.getObservations() == null) {
+                        log.debug("Merge contact has no observations, skipping");
+                        continue;
+                    }
+                    
+                    log.debug("Merge contact has {} observations", mergeContactData.getObservations().size());
+                    
+                    // Extract merge contact to temp location for raster file access
+                    Path mergeTempDir = Files.createTempDirectory("contact_merge_");
+                    try {
+                        if (!ZipUtils.unZip(mergeContact.getZctFile().getAbsolutePath(), mergeTempDir.toString())) {
+                            log.warn("Failed to extract merge contact ZIP: {}", mergeContact.getZctFile());
+                            continue;
+                        }
+                        
+                        // Process each observation
+                        for (pt.omst.rasterlib.Observation obs : mergeContactData.getObservations()) {
+                            log.debug("Processing observation {} with raster: {}", 
+                                obs.getUuid(), obs.getRasterFilename());
+                            
+                            // Create new observation copy (preserve UUID as per requirements)
+                            pt.omst.rasterlib.Observation newObs = new pt.omst.rasterlib.Observation();
+                            newObs.setUuid(obs.getUuid()); // Preserve original UUID
+                            newObs.setDepth(obs.getDepth());
+                            newObs.setLatitude(obs.getLatitude());
+                            newObs.setLongitude(obs.getLongitude());
+                            newObs.setSystemName(obs.getSystemName());
+                            newObs.setTimestamp(obs.getTimestamp());
+                            newObs.setUserName(obs.getUserName());
+                            
+                            // Copy raster file if exists
+                            if (obs.getRasterFilename() != null && !obs.getRasterFilename().isEmpty()) {
+                                File sourceRasterFile = mergeTempDir.resolve(obs.getRasterFilename()).toFile();
+                                if (sourceRasterFile.exists()) {
+                                    String targetFilename = obs.getRasterFilename();
+                                    File targetRasterFile = tempDir.resolve(targetFilename).toFile();
+                                    
+                                    // Handle filename conflict by postfixing observation UUID
+                                    if (targetRasterFile.exists()) {
+                                        String baseName = targetFilename;
+                                        String extension = "";
+                                        int lastDot = targetFilename.lastIndexOf('.');
+                                        if (lastDot > 0) {
+                                            baseName = targetFilename.substring(0, lastDot);
+                                            extension = targetFilename.substring(lastDot);
+                                        }
+                                        targetFilename = baseName + "_" + obs.getUuid().toString() + extension;
+                                        targetRasterFile = tempDir.resolve(targetFilename).toFile();
+                                        log.info("Raster filename conflict resolved: {} -> {}", 
+                                            obs.getRasterFilename(), targetFilename);
+                                    }
+                                    
+                                    Files.copy(sourceRasterFile.toPath(), targetRasterFile.toPath(), 
+                                        StandardCopyOption.REPLACE_EXISTING);
+                                    newObs.setRasterFilename(targetFilename);
+                                    log.debug("Copied raster file: {} -> {}", 
+                                        obs.getRasterFilename(), targetFilename);
+                                    
+                                    // Also copy the associated image file referenced in the raster JSON
+                                    try {
+                                        String rasterJson = Files.readString(sourceRasterFile.toPath());
+                                        pt.omst.rasterlib.IndexedRaster indexedRaster = 
+                                            pt.omst.rasterlib.Converter.IndexedRasterFromJsonString(rasterJson);
+                                        if (indexedRaster.getFilename() != null) {
+                                            File sourceImageFile = mergeTempDir.resolve(indexedRaster.getFilename()).toFile();
+                                            if (sourceImageFile.exists()) {
+                                                String imageFilename = indexedRaster.getFilename();
+                                                File targetImageFile = tempDir.resolve(imageFilename).toFile();
+                                                
+                                                // Handle image filename conflict
+                                                if (targetImageFile.exists()) {
+                                                    String imageBaseName = imageFilename;
+                                                    String imageExtension = "";
+                                                    int imageDot = imageFilename.lastIndexOf('.');
+                                                    if (imageDot > 0) {
+                                                        imageBaseName = imageFilename.substring(0, imageDot);
+                                                        imageExtension = imageFilename.substring(imageDot);
+                                                    }
+                                                    imageFilename = imageBaseName + "_" + obs.getUuid().toString() + imageExtension;
+                                                    targetImageFile = tempDir.resolve(imageFilename).toFile();
+                                                    
+                                                    // Update the raster JSON with new image filename
+                                                    indexedRaster.setFilename(imageFilename);
+                                                    String updatedRasterJson = pt.omst.rasterlib.Converter.IndexedRasterToJsonString(indexedRaster);
+                                                    Files.writeString(targetRasterFile.toPath(), updatedRasterJson);
+                                                    log.debug("Image filename conflict resolved: {} -> {}", 
+                                                        sourceImageFile.getName(), imageFilename);
+                                                }
+                                                
+                                                Files.copy(sourceImageFile.toPath(), targetImageFile.toPath(), 
+                                                    StandardCopyOption.REPLACE_EXISTING);
+                                                log.debug("Copied image file: {}", imageFilename);
+                                            } else {
+                                                log.warn("Image file not found: {}", sourceImageFile);
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        log.warn("Failed to copy associated image file for raster {}: {}", 
+                                            obs.getRasterFilename(), e.getMessage());
+                                    }
+                                } else {
+                                    log.warn("Raster file not found: {}", sourceRasterFile);
+                                    newObs.setRasterFilename(obs.getRasterFilename());
+                                }
+                            } else {
+                                log.debug("Observation has no raster filename");
+                            }
+                            
+                            // Filter and copy annotations (exclude CLASSIFICATION and CONFIDENCE, deduplicate labels)
+                            List<pt.omst.rasterlib.Annotation> newAnnotations = new ArrayList<>();
+                            if (obs.getAnnotations() != null) {
+                                for (pt.omst.rasterlib.Annotation ann : obs.getAnnotations()) {
+                                    // Skip CLASSIFICATION and CONFIDENCE types
+                                    if (ann.getAnnotationType() == pt.omst.rasterlib.AnnotationType.CLASSIFICATION) {
+                                        continue;
+                                    }
+                                    // Note: CONFIDENCE is not in the enum, so we only check CLASSIFICATION
+                                    
+                                    // For LABEL annotations, deduplicate case-insensitively
+                                    if (ann.getAnnotationType() == pt.omst.rasterlib.AnnotationType.LABEL) {
+                                        if (ann.getText() == null || ann.getText().trim().isEmpty()) {
+                                            continue; // Skip empty labels
+                                        }
+                                        String labelKey = ann.getText().toLowerCase();
+                                        if (labelSet.contains(labelKey)) {
+                                            continue; // Skip duplicate label
+                                        }
+                                        labelSet.add(labelKey);
+                                    }
+                                    
+                                    // Copy annotation
+                                    newAnnotations.add(ann);
+                                }
+                            }
+                            newObs.setAnnotations(newAnnotations);
+                            
+                            // Add observation to main contact
+                            mainContactData.getObservations().add(newObs);
+                            log.debug("Added observation {} to main contact, total now: {}", 
+                                newObs.getUuid(), mainContactData.getObservations().size());
+                        }
+                    } finally {
+                        // Clean up merge temp directory
+                        try {
+                            Files.walk(mergeTempDir)
+                                .sorted(java.util.Comparator.reverseOrder())
+                                .map(Path::toFile)
+                                .forEach(File::delete);
+                        } catch (Exception e) {
+                            log.warn("Failed to clean up merge temp directory: {}", mergeTempDir, e);
+                        }
+                    }
+                }
+                
+                // Step 5: Save updated contact.json
+                int finalObsCount = mainContactData.getObservations().size();
+                log.debug("Saving merged contact with {} observations (started with {}, added {})", 
+                    finalObsCount, initialObsCount, finalObsCount - initialObsCount);
+                String updatedJson = pt.omst.rasterlib.Converter.ContactToJsonString(mainContactData);
+                File contactJsonFile = tempDir.resolve("contact.json").toFile();
+                Files.writeString(contactJsonFile.toPath(), updatedJson);
+                log.debug("Wrote contact.json to temp directory");
+                
+                // Step 6: Repackage main contact ZIP
+                File mainZctFile = mainContact.getZctFile();
+                File backupMainZct = new File(mainZctFile.getParentFile(), 
+                    mainZctFile.getName() + ".backup");
+                Files.copy(mainZctFile.toPath(), backupMainZct.toPath(), 
+                    StandardCopyOption.REPLACE_EXISTING);
+                backupFiles.add(backupMainZct);
+                
+                if (!ZipUtils.zipDir(mainZctFile.getAbsolutePath(), tempDir.toString())) {
+                    throw new IOException("Failed to repackage main contact ZIP");
+                }
+                
+                log.info("Successfully saved merged contact: {}", mainZctFile);
+                
+                // Verify what was saved
+                pt.omst.rasterlib.Contact verifyContact = pt.omst.rasterlib.contacts.CompressedContact
+                    .extractCompressedContact(mainZctFile);
+                log.debug("Verification: Saved ZIP contains {} observations", 
+                    verifyContact.getObservations().size());
+                
+                // Step 7: Backup and delete merged contacts
+                for (CompressedContact mergeContact : mergeContacts) {
+                    File mergeZctFile = mergeContact.getZctFile();
+                    File backupMergeZct = new File(mergeZctFile.getParentFile(), 
+                        mergeZctFile.getName() + ".backup");
+                    Files.copy(mergeZctFile.toPath(), backupMergeZct.toPath(), 
+                        StandardCopyOption.REPLACE_EXISTING);
+                    backupFiles.add(backupMergeZct);
+                }
+                
+                // Delete merged contacts
+                for (CompressedContact mergeContact : mergeContacts) {
+                    Files.delete(mergeContact.getZctFile().toPath());
+                    log.info("Deleted merged contact: {}", mergeContact.getZctFile());
+                }
+                
+                // Step 8: Clean up backups on success
+                for (File backup : backupFiles) {
+                    try {
+                        Files.deleteIfExists(backup.toPath());
+                    } catch (Exception e) {
+                        log.warn("Failed to delete backup file: {}", backup, e);
+                    }
+                }
+                
+                // Step 9: Update UI on success
+                SwingUtilities.invokeLater(() -> {
+                    // Remove merged contacts from collection
+                    for (CompressedContact mergeContact : mergeContacts) {
+                        contactCollection.removeContact(mergeContact.getZctFile());
+                    }
+                    
+                    log.debug("Refreshing main contact in collection: {}", mainZctFile);
+                    // Refresh main contact in collection
+                    contactCollection.refreshContact(mainZctFile);
+                    
+                    // Reload the main contact in the editor if it's currently displayed
+                    try {
+                        log.debug("Reloading contact in editor from file: {}", mainZctFile);
+                        CompressedContact refreshedContact = new CompressedContact(mainZctFile);
+                        log.debug("CompressedContact created with {} observations", 
+                            refreshedContact.getContact().getObservations().size());
+                        contactEditor.loadZct(mainZctFile);
+                        log.info("Reloaded merged contact in editor with {} observations", 
+                            refreshedContact.getContact().getObservations().size());
+                    } catch (Exception e) {
+                        log.error("Failed to reload contact in editor after grouping", e);
+                    }
+                    
+                    // Repaint map
+                    slippyMap.repaint();
+                    
+                    // Update filter panel
+                    updateVisibleContacts(true);
+                    
+                    log.info("Contact grouping completed successfully");
+                });
+                
+            } catch (Exception e) {
+                log.error("Error grouping contacts, rolling back changes", e);
+                
+                // Rollback: restore from backups
+                for (File backup : backupFiles) {
+                    try {
+                        String originalPath = backup.getAbsolutePath().replace(".backup", "");
+                        Files.copy(backup.toPath(), Path.of(originalPath), 
+                            StandardCopyOption.REPLACE_EXISTING);
+                        Files.deleteIfExists(backup.toPath());
+                        log.info("Restored from backup: {}", originalPath);
+                    } catch (Exception rollbackEx) {
+                        log.error("Failed to restore from backup: {}", backup, rollbackEx);
+                    }
+                }
+                
+                SwingUtilities.invokeLater(() -> {
+                    pt.lsts.neptus.util.GuiUtils.errorMessage(
+                        slippyMap, 
+                        "Group Contacts Failed", 
+                        "Failed to group contacts: " + e.getMessage()
+                    );
+                });
+            } finally {
+                // Clean up temp directory
+                if (tempDir != null) {
+                    try {
+                        Files.walk(tempDir)
+                            .sorted(java.util.Comparator.reverseOrder())
+                            .map(Path::toFile)
+                            .forEach(File::delete);
+                    } catch (Exception e) {
+                        log.warn("Failed to clean up temp directory: {}", tempDir, e);
+                    }
+                }
+            }
+        });
     }
 
     private void createContact(PulvisConnection connection, CompressedContact contact) {

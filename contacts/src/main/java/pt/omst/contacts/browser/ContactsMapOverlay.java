@@ -32,6 +32,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     private ContactCollection collection;
     private ContactSelectionListener selectionListener = null;
+    private TargetManager targetManager = null;
     
     // Selection rectangle fields
     private Point selectionStart = null;
@@ -58,6 +59,10 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     public void setContactSelectionListener(ContactSelectionListener listener) {
         this.selectionListener = listener;
+    }
+    
+    public void setTargetManager(TargetManager targetManager) {
+        this.targetManager = targetManager;
     }
 
     public void refreshContact(File contactFile) {
@@ -358,8 +363,40 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             popup.add(item);
         }
         
+        // Add separator and group contacts option if 2+ contacts selected
+        if (contacts.size() >= 2 && targetManager != null) {
+            popup.addSeparator();
+            JMenuItem groupItem = new JMenuItem("Group Selected Contacts...");
+            groupItem.addActionListener(ev -> {
+                showGroupContactsDialog(contacts, map);
+            });
+            popup.add(groupItem);
+        }
+        
         SwingUtilities.invokeLater(() -> {
             popup.show(map, location.x, location.y);
+        });
+    }
+    
+    /**
+     * Show dialog to group selected contacts
+     */
+    private void showGroupContactsDialog(List<CompressedContact> contacts, SlippyMap map) {
+        SwingUtilities.invokeLater(() -> {
+            GroupContactsDialog dialog = new GroupContactsDialog(
+                SwingUtilities.getWindowAncestor(map), contacts);
+            dialog.setVisible(true);
+            
+            if (dialog.isConfirmed()) {
+                CompressedContact mainContact = dialog.getMainContact();
+                List<CompressedContact> mergeContacts = dialog.getContactsToMerge();
+                
+                if (mainContact != null && !mergeContacts.isEmpty()) {
+                    log.info("Grouping {} contacts into main contact: {}", 
+                        mergeContacts.size(), mainContact.getContact().getLabel());
+                    targetManager.groupContactsAsync(mainContact, mergeContacts);
+                }
+            }
         });
     }
     

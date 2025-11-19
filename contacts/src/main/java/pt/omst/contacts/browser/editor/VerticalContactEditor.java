@@ -116,11 +116,17 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
     }
 
     public void loadObservation(File folder, Observation observation) {
+        log.info("Loading observation UUID={}, hasRaster={}, annotationCount={}", 
+            observation.getUuid(), 
+            observation.getRasterFilename() != null && !observation.getRasterFilename().isEmpty(),
+            observation.getAnnotations() != null ? observation.getAnnotations().size() : 0);
+            
         if (observation.getAnnotations() == null || observation.getAnnotations().isEmpty()) {
             log.info("No annotations for observation {}", observation.getUuid());
             return;
         }
         for (Annotation annot : observation.getAnnotations()) {
+            log.info("Processing annotation type={}, text={}", annot.getAnnotationType(), annot.getText());
             if (annot.getAnnotationType().equals(AnnotationType.TEXT)) {
                 descriptionTextArea.setText(annot.getText());
             } else if (annot.getAnnotationType().equals(AnnotationType.CLASSIFICATION)) {
@@ -134,25 +140,31 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
                 log.info("Setting type to {} and confidence to {}", annot.getCategory(), annot.getConfidence());
             }
         }
-        if (observation.getRasterFilename() == null) {
-            log.info("No raster file for observation {}", observation.getUuid());
+        if (observation.getRasterFilename() == null || observation.getRasterFilename().isEmpty()) {
+            log.warn("No raster file for observation {}, skipping visual display", observation.getUuid());
         } else {
+            log.info("Adding observation {} with raster {} to panel", 
+                observation.getUuid(), observation.getRasterFilename());
             observationsPanel.addObservation(folder, observation);
         }
     }
 
     public void load(File folder, Contact contact) {
         log.info("Loading contact from folder {}", folder.getAbsolutePath());
+        log.debug("Contact has {} observations", contact.getObservations().size());
         this.contact = contact;
         nameTextField.setText(contact.getLabel());
         OffsetDateTime timestamp = OffsetDateTime.now();
         observationsPanel.clear();
+        log.debug("Cleared observations panel, now loading {} observations", contact.getObservations().size());
         for (Observation observation : contact.getObservations()) {
+            log.debug("Loading observation: {}", observation.getUuid());
             loadObservation(folder, observation);
             if (observation.getTimestamp().isBefore(timestamp)) {
                 timestamp = observation.getTimestamp();
             }
         }
+        log.debug("Finished loading all observations into panel");
 
         positionTextArea.setText("Latitude: " + contact.getLatitude() + "\nLongitude: " + contact.getLongitude()
                 + "\nDepth: " + contact.getDepth());
@@ -237,8 +249,12 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         File contactFile = new File(tempDir.toFile(), "contact.json");
         if (contactFile.exists()) {
             String json = Files.readString(contactFile.toPath());
+            log.debug("Read contact.json with {} bytes", json.length());
             Contact contact = Converter.ContactFromJsonString(json);
+            log.debug("Parsed contact with {} observations", contact.getObservations().size());
             load(tempDir.toFile(), contact);
+        } else {
+            log.error("contact.json not found in {}", tempDir);
         }
 
         saveButton.setEnabled(false);
