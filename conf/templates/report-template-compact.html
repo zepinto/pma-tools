@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>{{reportTitle}}</title>
     <style>
@@ -7,16 +8,16 @@
         @page {
             size: A4;
             /* Important: Make space for header/footer so content doesn't overlap */
-            margin-top: 3.5cm;   
+            margin-top: 3.5cm;
             margin-bottom: 2.5cm;
             margin-left: 2cm;
             margin-right: 2cm;
 
             /* 2. Place the HTML elements into the margins */
             @top-center {
-                content: element(pageHeader); 
+                content: element(pageHeader);
             }
-            
+
             @bottom-left {
                 content: element(pageFooter);
             }
@@ -30,11 +31,16 @@
             }
         }
 
-        body { font-family: Arial, sans-serif; color: #333; font-size: 12pt; }
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            font-size: 12pt;
+        }
 
         /* 4. Define the styles for the Header HTML Block */
         #header-container {
-            position: running(pageHeader); /* Matches element(pageHeader) above */
+            position: running(pageHeader);
+            /* Matches element(pageHeader) above */
             width: 100%;
             border-bottom: 2px solid #004488;
             padding-bottom: 10px;
@@ -51,13 +57,15 @@
             font-size: 10pt;
             color: #666;
             margin-top: 5px;
-            display: flex; /* Note: FS has limited Flexbox support, table often safer for layout */
-            justify-content: space-between; 
+            display: flex;
+            /* Note: FS has limited Flexbox support, table often safer for layout */
+            justify-content: space-between;
         }
 
         /* 5. Define the styles for the Footer HTML Block */
         #footer-container {
-            position: running(pageFooter); /* Matches element(pageFooter) above */
+            position: running(pageFooter);
+            /* Matches element(pageFooter) above */
             width: 100%;
             font-size: 9pt;
             color: #777;
@@ -71,9 +79,9 @@
             background-color: #f9f9f9;
             padding: 15px;
             margin-bottom: 20px;
-            page-break-inside: avoid; 
+            page-break-inside: avoid;
         }
-        
+
         .contact-header {
             background-color: #004488;
             color: white;
@@ -87,43 +95,110 @@
             border: 1px solid #555;
         }
 
-        table.meta { width: 100%; margin-top: 10px; border-collapse: collapse; }
-        table.meta td { border-bottom: 1px solid #eee; padding: 5px; }
-        
-        /* Compact observations grid layout */
-        .observations-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 10px;
+        table.meta {
+            width: 100%;
             margin-top: 10px;
+            border-collapse: collapse;
         }
-        
+
+        table.meta td {
+            border-bottom: 1px solid #eee;
+            padding: 5px;
+        }
+
+        /* Compact observations layout */
+        .observations-container {
+            width: 100%;
+            text-align: left;
+            /* Ensure container clears floats if any (though we use inline-block) */
+        }
+
         .observation-item {
-            background-color: #f5f5f5;
-            padding: 8px;
-            border-left: 3px solid #004488;
-            font-size: 9pt;
+            display: inline-block;
+            vertical-align: top;
+            width: 30%;
+            /* 3 items per row approx */
+            margin-right: 2%;
+            margin-bottom: 15px;
+            background-color: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            padding: 0;
+            /* Reset padding, inner elements have padding */
+            overflow: hidden;
+            /* For border radius */
+            page-break-inside: avoid;
         }
-        
-        .observation-item .obs-timestamp {
-            font-weight: bold;
-            font-size: 8pt;
-            margin-bottom: 5px;
+
+        /* Remove right margin for every 3rd item to fit perfectly? 
+           Hard to do with simple CSS selectors in some PDF renderers, 
+           so we keep it simple with slightly < 33% width */
+
+        .obs-timestamp {
+            background-color: #f0f4f8;
             color: #004488;
+            font-size: 8pt;
+            font-weight: bold;
+            padding: 5px 8px;
+            border-bottom: 1px solid #e0e0e0;
         }
-        
+
+        .obs-image-container {
+            text-align: center;
+            background-color: #000;
+            /* Dark background for sonar images looks pro */
+            padding: 0;
+        }
+
         .observation-item img {
             max-width: 100%;
-            border: 1px solid #555;
-            margin-bottom: 5px;
+            height: auto;
+            display: block;
+            /* Remove bottom space */
+            margin: 0 auto;
         }
-        
-        .observation-item .obs-annotations {
+
+        .obs-details {
+            padding: 8px;
             font-size: 8pt;
-            color: #555;
+            color: #444;
+        }
+
+        .obs-row {
+            margin-bottom: 2px;
+        }
+
+        .obs-annotation-block {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dotted #ccc;
+        }
+
+        .obs-type {
+            font-weight: bold;
+            color: #d32f2f;
+            /* Reddish for emphasis */
+        }
+
+        .obs-category {
+            color: #666;
+            font-style: italic;
+        }
+
+        .obs-measurements {
+            font-family: "Courier New", monospace;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            padding: 2px 4px;
+            margin-top: 3px;
+            border-radius: 2px;
+            color: #333;
+            display: inline-block;
         }
     </style>
 </head>
+
 <body>
 
     <!-- HEADER CONTENT -->
@@ -151,9 +226,9 @@
         <div class="contact-header">
             Target ID: {{id}} ({{classification}})
         </div>
-        
+
         <div style="text-align: center; margin: 10px 0;">
-             <img src="data:image/png;base64,{{base64Image}}" />
+            <img src="data:image/png;base64,{{base64Image}}" />
         </div>
 
         <table class="meta">
@@ -170,38 +245,56 @@
             </tr>
         </table>
 
-        <!-- Observations Section - COMPACT GRID LAYOUT -->
-        <div style="margin-top: 15px;">
-            <h3 style="color: #004488; font-size: 12pt; margin-bottom: 5px;">Observations</h3>
-            {{#observations}}
-            <div class="observations-grid">
+        <!-- Observations Section - COMPACT LAYOUT -->
+        <div style="margin-top: 20px;">
+            <h3
+                style="color: #004488; font-size: 12pt; border-bottom: 1px solid #004488; padding-bottom: 3px; margin-bottom: 10px;">
+                Observations</h3>
+
+            <div class="observations-container">
+                {{#observations}}
                 <div class="observation-item">
                     <div class="obs-timestamp">
                         {{formattedTimestamp}}
                     </div>
+
                     {{#base64Image}}
-                    <img src="data:image/png;base64,{{base64Image}}" />
-                    {{/base64Image}}
-                    {{#userName}}
-                    <div class="obs-annotations">User: {{userName}}</div>
-                    {{/userName}}
-                    {{#systemName}}
-                    <div class="obs-annotations">System: {{systemName}}</div>
-                    {{/systemName}}
-                    {{#annotations}}
-                    <div class="obs-annotations">
-                        {{type}}{{#category}}: {{category}}{{/category}}{{#measurements}} - {{measurements}}{{/measurements}}
+                    <div class="obs-image-container">
+                        <img src="data:image/png;base64,{{base64Image}}" />
                     </div>
-                    {{/annotations}}
+                    {{/base64Image}}
+
+                    <div class="obs-details">
+                        {{#userName}}
+                        <div class="obs-row"><strong>User:</strong> {{userName}}</div>
+                        {{/userName}}
+
+                        {{#systemName}}
+                        <div class="obs-row"><strong>System:</strong> {{systemName}}</div>
+                        {{/systemName}}
+
+                        {{#annotations}}
+                        <div class="obs-annotation-block">
+                            <span class="obs-type">{{type}}</span>
+                            {{#category}}<span class="obs-category">({{category}})</span>{{/category}}
+                            {{#measurements}}
+                            <div class="obs-measurements">{{measurements}}</div>
+                            {{/measurements}}
+                        </div>
+                        {{/annotations}}
+                    </div>
                 </div>
+                {{/observations}}
+
+                {{^observations}}
+                <p style="color: #777; font-style: italic; padding: 10px;">No observations recorded for this contact.
+                </p>
+                {{/observations}}
             </div>
-            {{/observations}}
-            {{^observations}}
-            <p style="color: #777; font-style: italic;">No observations recorded</p>
-            {{/observations}}
         </div>
     </div>
     {{/contacts}}
 
 </body>
+
 </html>

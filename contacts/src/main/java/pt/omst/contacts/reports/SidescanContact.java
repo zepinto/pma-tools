@@ -304,8 +304,7 @@ public class SidescanContact {
                         // Draw measurements if present
                         if (obs.getAnnotations() != null) {
                             for (Annotation ann : obs.getAnnotations()) {
-                                if (ann.getAnnotationType() == AnnotationType.MEASUREMENT && 
-                                    ann.getMeasurementType() != MeasurementType.BOX &&
+                                if (ann.getAnnotationType() == AnnotationType.MEASUREMENT &&
                                     ann.getNormalizedX() != null && ann.getNormalizedY() != null &&
                                     ann.getNormalizedX2() != null && ann.getNormalizedY2() != null) {
                                     
@@ -336,21 +335,41 @@ public class SidescanContact {
                                     }
                                     System.out.println("DEBUG: Final coords: (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
                                     
-                                    // Draw shadow
-                                    g2d.setColor(Color.BLACK);
-                                    g2d.setStroke(new BasicStroke(3));
-                                    g2d.drawLine(x1, y1, x2, y2);
-                                    
-                                    // Draw colored line
-                                    Color lineColor = switch (ann.getMeasurementType()) {
-                                        case WIDTH -> new Color(255, 0, 0, 200);
-                                        case LENGTH -> new Color(0, 255, 0, 200);
-                                        case HEIGHT -> new Color(0, 0, 255, 200);
-                                        default -> Color.WHITE;
-                                    };
-                                    g2d.setColor(lineColor);
-                                    g2d.setStroke(new BasicStroke(2));
-                                    g2d.drawLine(x1, y1, x2, y2);
+                                    // Draw based on measurement type
+                                    if (ann.getMeasurementType() == MeasurementType.BOX) {
+                                        // Draw BOX as a rectangle
+                                        int minX = Math.min(x1, x2);
+                                        int minY = Math.min(y1, y2);
+                                        int boxWidth = Math.abs(x2 - x1);
+                                        int boxHeight = Math.abs(y2 - y1);
+                                        
+                                        // Draw shadow
+                                        g2d.setColor(new Color(0, 0, 0, 128));
+                                        g2d.setStroke(new BasicStroke(4f));
+                                        g2d.drawRect(minX, minY, boxWidth, boxHeight);
+                                        
+                                        // Draw box
+                                        g2d.setColor(new Color(255, 255, 255, 200));
+                                        g2d.setStroke(new BasicStroke(2f));
+                                        g2d.drawRect(minX, minY, boxWidth, boxHeight);
+                                    } else {
+                                        // Draw line measurements
+                                        // Draw shadow
+                                        g2d.setColor(Color.BLACK);
+                                        g2d.setStroke(new BasicStroke(3));
+                                        g2d.drawLine(x1, y1, x2, y2);
+                                        
+                                        // Draw colored line
+                                        Color lineColor = switch (ann.getMeasurementType()) {
+                                            case WIDTH -> new Color(255, 0, 0, 200);
+                                            case LENGTH -> new Color(0, 255, 0, 200);
+                                            case HEIGHT -> new Color(0, 0, 255, 200);
+                                            default -> Color.WHITE;
+                                        };
+                                        g2d.setColor(lineColor);
+                                        g2d.setStroke(new BasicStroke(2));
+                                        g2d.drawLine(x1, y1, x2, y2);
+                                    }
                                 }
                             }
                         }

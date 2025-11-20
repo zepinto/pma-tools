@@ -337,13 +337,12 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
     public Image getThumbnailWithMeasurements() {
         Image baseThumbnail = getThumbnail();
         
-        // Check if there are any non-BOX measurement annotations
+        // Check if there are any measurement annotations
         boolean hasMeasurements = false;
         for (Observation obs : contact.getObservations()) {
             if (obs.getAnnotations() != null) {
                 for (Annotation annotation : obs.getAnnotations()) {
-                    if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT 
-                        && annotation.getMeasurementType() != MeasurementType.BOX) {
+                    if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT) {
                         hasMeasurements = true;
                         break;
                     }
@@ -370,17 +369,44 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         // Draw the base thumbnail
         g2d.drawImage(baseThumbnail, 0, 0, null);
         
-        // Draw measurements
-        for (Observation obs : contact.getObservations()) {
-            if (obs.getAnnotations() != null) {
-                for (Annotation annotation : obs.getAnnotations()) {
-                    if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT 
-                        && annotation.getMeasurementType() != MeasurementType.BOX) {
-                        drawMeasurementOnThumbnail(annotation, g2d, 
-                            baseThumbnail.getWidth(null), baseThumbnail.getHeight(null));
+        // Draw measurements ONLY from the observation that the thumbnail came from
+        // We MUST have a valid thumbnailObservationUuid to ensure we draw measurements
+        // on the correct image. If it's null, we can't safely draw measurements.
+        System.out.println("DEBUG [getThumbnailWithMeasurements]: Contact: " + contact.getLabel());
+        System.out.println("DEBUG [getThumbnailWithMeasurements]: thumbnailObservationUuid: " + thumbnailObservationUuid);
+        System.out.println("DEBUG [getThumbnailWithMeasurements]: Total observations: " + contact.getObservations().size());
+        
+        if (thumbnailObservationUuid != null) {
+            boolean foundMatch = false;
+            for (Observation obs : contact.getObservations()) {
+                System.out.println("DEBUG [getThumbnailWithMeasurements]:   Checking obs UUID: " + obs.getUuid());
+                if (obs.getUuid() != null && obs.getUuid().equals(thumbnailObservationUuid)) {
+                    foundMatch = true;
+                    System.out.println("DEBUG [getThumbnailWithMeasurements]:   MATCH! Processing annotations...");
+                    if (obs.getAnnotations() != null) {
+                        System.out.println("DEBUG [getThumbnailWithMeasurements]:   Found " + obs.getAnnotations().size() + " annotations");
+                        int measurementCount = 0;
+                        for (Annotation annotation : obs.getAnnotations()) {
+                            System.out.println("DEBUG [getThumbnailWithMeasurements]:     Annotation type: " + annotation.getAnnotationType());
+                            if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT) {
+                                measurementCount++;
+                                System.out.println("DEBUG [getThumbnailWithMeasurements]:     Drawing measurement #" + measurementCount + " type: " + annotation.getMeasurementType());
+                                drawMeasurementOnThumbnail(annotation, g2d, 
+                                    baseThumbnail.getWidth(null), baseThumbnail.getHeight(null));
+                            }
+                        }
+                        System.out.println("DEBUG [getThumbnailWithMeasurements]:   Drew " + measurementCount + " measurements");
+                    } else {
+                        System.out.println("DEBUG [getThumbnailWithMeasurements]:   No annotations found");
                     }
+                    break; // Found the correct observation
                 }
             }
+            if (!foundMatch) {
+                System.out.println("DEBUG [getThumbnailWithMeasurements]:   NO MATCHING OBSERVATION FOUND!");
+            }
+        } else {
+            System.out.println("DEBUG [getThumbnailWithMeasurements]: thumbnailObservationUuid is NULL - cannot draw measurements");
         }
         
         g2d.dispose();
@@ -426,31 +452,41 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         
         System.out.println("DEBUG [drawMeasurementOnThumbnail]: Final coords: (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
         
-        // Determine color based on measurement type
-        Color color;
-        switch (annotation.getMeasurementType()) {
-            case WIDTH:
-                color = new Color(255, 0, 0, 200); // Red
-                break;
-            case LENGTH:
-                color = new Color(0, 255, 0, 200); // Green
-                break;
-            case HEIGHT:
-                color = new Color(0, 0, 255, 200); // Blue
-                break;
-            default:
-                return; // Skip other types
+        // Draw based on measurement type
+        if (annotation.getMeasurementType() == MeasurementType.BOX) {
+            // Draw BOX as a rectangle
+            int minX = Math.min(x1, x2);
+            int minY = Math.min(y1, y2);
+            int boxWidth = Math.abs(x2 - x1);
+            int boxHeight = Math.abs(y2 - y1);
+            
+            // Draw shadow (4px black)
+            g2d.setColor(new Color(0, 0, 0, 128));
+            g2d.setStroke(new BasicStroke(4f));
+            g2d.drawRect(minX, minY, boxWidth, boxHeight);
+            
+            // Draw box (2px white)
+            g2d.setColor(new Color(255, 255, 255, 200));
+            g2d.setStroke(new BasicStroke(2f));
+            g2d.drawRect(minX, minY, boxWidth, boxHeight);
+        } else {
+            // Draw line measurements
+            // Draw shadow (3px black)
+            g2d.setColor(Color.BLACK);
+            g2d.setStroke(new BasicStroke(3));
+            g2d.drawLine(x1, y1, x2, y2);
+            
+            // Draw colored line (2px) based on measurement type
+            Color lineColor = switch (annotation.getMeasurementType()) {
+                case WIDTH -> new Color(255, 0, 0, 200);     // Red
+                case LENGTH -> new Color(0, 255, 0, 200);    // Green
+                case HEIGHT -> new Color(0, 0, 255, 200);    // Blue
+                default -> Color.WHITE;
+            };
+            g2d.setColor(lineColor);
+            g2d.setStroke(new BasicStroke(2));
+            g2d.drawLine(x1, y1, x2, y2);
         }
-        
-        // Draw shadow for visibility
-        g2d.setColor(new Color(0, 0, 0, 128));
-        g2d.setStroke(new BasicStroke(3f));
-        g2d.drawLine(x1, y1, x2, y2);
-        
-        // Draw the measurement line
-        g2d.setColor(color);
-        g2d.setStroke(new BasicStroke(2f));
-        g2d.drawLine(x1, y1, x2, y2);
     }
 
     /**
