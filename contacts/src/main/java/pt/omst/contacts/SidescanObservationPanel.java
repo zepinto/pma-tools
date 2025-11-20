@@ -39,6 +39,7 @@ import javax.swing.SwingUtilities;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterlib.Annotation;
@@ -51,6 +52,7 @@ import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.SampleDescription;
 import pt.omst.rasterlib.mapview.IndexedRasterViewer;
 
+@Slf4j
 public class SidescanObservationPanel extends JPanel implements Closeable {
 
     @Getter
@@ -170,8 +172,8 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
         try {
             raster = Converter.IndexedRasterFromJsonString(Files.readString(rasterFile.toPath()));
             image = ImageIO.read(new File(folder, raster.getFilename()));
-            widthMeters = raster.getSensorInfo().getMaxRange() * 2;
-
+            widthMeters = raster.getSensorInfo().getMaxRange() - raster.getSensorInfo().getMinRange();
+            log.info("Calculated widthMeters: " + widthMeters);
             double worldHeight = 0;
             double headingSum = 0;
             for (int i = 1; i < raster.getSamples().size(); i++) {
@@ -181,7 +183,8 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
                         - lastSample.getTimestamp().toInstant().toEpochMilli()));
                 headingSum += thisSample.getPose().getPsi();
             }
-            heightMeters = Math.abs(worldHeight * 2);
+            heightMeters = Math.abs(worldHeight);
+            log.info("Calculated heightMeters: " + heightMeters);
             headingDegrees = headingSum / raster.getSamples().size();
         }
         catch (Exception e) {
