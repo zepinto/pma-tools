@@ -4,11 +4,14 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -61,14 +64,50 @@ public class ContactReportGenerator {
     }
 
     public static void generateReport(List<CompressedContact> contacts) {
-        MustacheFactory mf = new DefaultMustacheFactory();
-        InputStream templateStream = ContactReportGenerator.class.getResourceAsStream("/templates/report-template.html");
-        if (templateStream == null) {
-            throw new IllegalArgumentException("Template not found in resources: " + "/templates/report-template.html");
-        }
-        Reader templateReader = new InputStreamReader(templateStream);
+        // Legacy method - kept for backwards compatibility
+        // Use generateReport(File, String, ReportData) or generateReport(String, String, ReportData) instead
+        throw new UnsupportedOperationException("This method is deprecated. Use the instance methods instead.");
     }
 
+    /**
+     * Generate report using a template file from filesystem.
+     */
+    public void generateReport(File templateFile, String outputPdfPath, ReportData data) throws Exception {
+        if (templateFile == null || !templateFile.exists()) {
+            throw new IllegalArgumentException("Template file does not exist: " + templateFile);
+        }
+        
+        // 1. Compile the Template
+        MustacheFactory mf = new DefaultMustacheFactory();
+        Reader templateReader = new FileReader(templateFile);
+        Mustache mustache = mf.compile(templateReader, templateFile.getName());
+
+        // 2. Execute Template (Render HTML)
+        StringWriter writer = new StringWriter();
+        mustache.execute(writer, data).flush();
+        String rawHtml = writer.toString();
+
+        // 3. Clean HTML with Jsoup (Crucial for PDF Renderer)
+        Document document = Jsoup.parse(rawHtml);
+        document.outputSettings().syntax(Document.OutputSettings.Syntax.xml); // Enforce XHTML
+        String xhtml = document.html();
+
+        // 4. Render PDF
+        try (OutputStream os = new FileOutputStream(outputPdfPath)) {
+            ITextRenderer renderer = new ITextRenderer();
+            // Adjust for High DPI images if necessary
+            renderer.setDocumentFromString(xhtml);
+            renderer.layout();
+            renderer.createPDF(os);
+        }
+
+        System.out.println("PDF Created: " + outputPdfPath);
+    }
+
+    /**
+     * Generate report using a template path from classpath resources.
+     * Kept for backwards compatibility.
+     */
     public void generateReport(String templatePath, String outputPdfPath, ReportData data) throws Exception {
 
         // 1. Compile the Template
@@ -101,6 +140,30 @@ public class ContactReportGenerator {
         }
 
         System.out.println("PDF Created: " + outputPdfPath);
+    }
+
+    /**
+     * Extract default templates from resources to conf/templates/ directory.
+     * Creates directory if it doesn't exist.
+     */
+    public static void extractDefaultTemplates() throws Exception {
+        File templatesDir = new File("conf/templates");
+        if (!templatesDir.exists()) {
+            templatesDir.mkdirs();
+        }
+        
+        String[] templates = {"report-template-standard.html", "report-template-compact.html"};
+        
+        for (String templateName : templates) {
+            File targetFile = new File(templatesDir, templateName);
+            if (!targetFile.exists()) {
+                InputStream is = ContactReportGenerator.class.getResourceAsStream("/templates/" + templateName);
+                if (is != null) {
+                    Files.copy(is, targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    System.out.println("Extracted template: " + templateName);
+                }
+            }
+        }
     }
 
     // Helper to convert file path to Base64 for the model

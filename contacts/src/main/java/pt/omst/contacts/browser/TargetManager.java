@@ -737,42 +737,49 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
-                    // Extract template from resources to temp file
-                    java.io.InputStream templateStream = TargetManager.class
-                            .getResourceAsStream("/templates/report-template.html");
-                    if (templateStream == null) {
-                        GuiUtils.errorMessage(frame, "Error", "Template file not found in resources.");
-                        return;
+                    // Ensure templates directory exists
+                    java.io.File templatesDir = new java.io.File("conf/templates");
+                    if (!templatesDir.exists() || templatesDir.listFiles() == null || templatesDir.listFiles().length == 0) {
+                        // Extract default templates
+                        pt.omst.contacts.reports.ContactReportGenerator.extractDefaultTemplates();
                     }
 
-                    java.io.File tempFile = java.io.File.createTempFile("contact-report-template-", ".html");
-                    java.nio.file.Files.copy(templateStream, tempFile.toPath(),
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    templateStream.close();
+                    // Show file chooser for template selection
+                    javax.swing.JFileChooser fileChooser = new javax.swing.JFileChooser(templatesDir);
+                    fileChooser.setDialogTitle("Select Template to Edit");
+                    fileChooser.setFileSelectionMode(javax.swing.JFileChooser.FILES_ONLY);
+                    javax.swing.filechooser.FileNameExtensionFilter filter = 
+                        new javax.swing.filechooser.FileNameExtensionFilter("HTML Templates", "html");
+                    fileChooser.setFileFilter(filter);
 
-                    GuiUtils.infoMessage(frame, "Template Editor",
-                            "Opening template in system editor.\n\n" +
-                                    "Note: Changes will NOT be saved to the application.\n" +
-                                    "This is a temporary file for reference only.\n\n" +
-                                    "File location: " + tempFile.getAbsolutePath());
+                    int result = fileChooser.showOpenDialog(frame);
+                    if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
+                        java.io.File selectedTemplate = fileChooser.getSelectedFile();
+                        
+                        GuiUtils.infoMessage(frame, "Template Editor",
+                                "Opening template in system editor.\n\n" +
+                                        "Note: Changes are saved directly to the template.\n" +
+                                        "The changes will take effect immediately.\n\n" +
+                                        "File location: " + selectedTemplate.getAbsolutePath());
 
-                    if (java.awt.Desktop.isDesktopSupported()) {
-                        java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
-                        if (desktop.isSupported(java.awt.Desktop.Action.EDIT)) {
-                            desktop.edit(tempFile);
-                        } else if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
-                            desktop.open(tempFile);
+                        if (java.awt.Desktop.isDesktopSupported()) {
+                            java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                            if (desktop.isSupported(java.awt.Desktop.Action.EDIT)) {
+                                desktop.edit(selectedTemplate);
+                            } else if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
+                                desktop.open(selectedTemplate);
+                            } else {
+                                GuiUtils.errorMessage(frame, "Not Supported",
+                                        "Desktop edit operation not supported on this system.\n" +
+                                                "Please open the file manually: " + selectedTemplate.getAbsolutePath());
+                            }
                         } else {
                             GuiUtils.errorMessage(frame, "Not Supported",
-                                    "Desktop edit operation not supported on this system.\n" +
-                                            "Please open the file manually: " + tempFile.getAbsolutePath());
+                                    "Desktop operations not supported on this system.\n" +
+                                            "Please open the file manually: " + selectedTemplate.getAbsolutePath());
                         }
-                    } else {
-                        GuiUtils.errorMessage(frame, "Not Supported",
-                                "Desktop operations not supported on this system.\n" +
-                                        "Please open the file manually: " + tempFile.getAbsolutePath());
                     }
-                } catch (java.io.IOException ex) {
+                } catch (Exception ex) {
                     log.error("Error editing template", ex);
                     GuiUtils.errorMessage(frame, "Error", "Failed to open template: " + ex.getMessage());
                 }

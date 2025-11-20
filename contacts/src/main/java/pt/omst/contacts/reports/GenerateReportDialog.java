@@ -19,14 +19,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.ListCellRenderer;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
@@ -45,6 +49,7 @@ public class GenerateReportDialog extends JDialog {
     private final JTextField reportTitleField;
     private final JTextField missionNameField;
     private final JTextField outputPathField;
+    private final JComboBox<File> templateComboBox;
     private final JTable contactTable;
     private final ContactTableModel tableModel;
     private final JButton generateButton;
@@ -67,9 +72,29 @@ public class GenerateReportDialog extends JDialog {
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // Report title
+        // Template selection
         gbc.gridx = 0;
         gbc.gridy = 0;
+        gbc.weightx = 0;
+        configPanel.add(new JLabel("Template:"), gbc);
+
+        JPanel templatePanel = new JPanel(new BorderLayout(5, 0));
+        templateComboBox = new JComboBox<>();
+        templateComboBox.setRenderer(new TemplateFileRenderer());
+        loadTemplates();
+        templatePanel.add(templateComboBox, BorderLayout.CENTER);
+        
+        JButton previewButton = new JButton("Preview");
+        previewButton.addActionListener(e -> showTemplatePreview());
+        templatePanel.add(previewButton, BorderLayout.EAST);
+        
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        configPanel.add(templatePanel, gbc);
+
+        // Report title
+        gbc.gridx = 0;
+        gbc.gridy = 1;
         gbc.weightx = 0;
         configPanel.add(new JLabel("Report Title:"), gbc);
 
@@ -80,7 +105,7 @@ public class GenerateReportDialog extends JDialog {
 
         // Mission name
         gbc.gridx = 0;
-        gbc.gridy = 1;
+        gbc.gridy = 2;
         gbc.weightx = 0;
         configPanel.add(new JLabel("Mission Name:"), gbc);
 
@@ -91,7 +116,7 @@ public class GenerateReportDialog extends JDialog {
 
         // Output path
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         gbc.weightx = 0;
         configPanel.add(new JLabel("Output PDF:"), gbc);
 
@@ -155,6 +180,80 @@ public class GenerateReportDialog extends JDialog {
         setContentPane(mainPanel);
         pack();
         setLocationRelativeTo(owner);
+    }
+
+    /**
+     * Load available templates from conf/templates/ directory.
+     * Auto-extract defaults if directory is empty.
+     */
+    private void loadTemplates() {
+        File templatesDir = new File("conf/templates");
+        
+        // Extract default templates if directory doesn't exist or is empty
+        if (!templatesDir.exists() || templatesDir.listFiles() == null || templatesDir.listFiles().length == 0) {
+            try {
+                ContactReportGenerator.extractDefaultTemplates();
+                log.info("Extracted default templates to conf/templates/");
+            } catch (Exception e) {
+                log.error("Error extracting default templates", e);
+            }
+        }
+        
+        // Scan for template files
+        List<File> templateFiles = new ArrayList<>();
+        if (templatesDir.exists()) {
+            File[] files = templatesDir.listFiles((dir, name) -> name.endsWith(".html"));
+            if (files != null) {
+                for (File file : files) {
+                    templateFiles.add(file);
+                }
+            }
+        }
+        
+        // Populate combobox
+        DefaultComboBoxModel<File> model = new DefaultComboBoxModel<>();
+        for (File file : templateFiles) {
+            model.addElement(file);
+        }
+        templateComboBox.setModel(model);
+        
+        // Select first template by default
+        if (templateFiles.size() > 0) {
+            templateComboBox.setSelectedIndex(0);
+        }
+        
+        log.info("Loaded {} template(s)", templateFiles.size());
+    }
+    
+    /**
+     * Show template preview dialog.
+     */
+    private void showTemplatePreview() {
+        File selectedTemplate = (File) templateComboBox.getSelectedItem();
+        if (selectedTemplate == null) {
+            GuiUtils.errorMessage(this, "No Template", "Please select a template first.");
+            return;
+        }
+        
+        JDialog previewDialog = new JDialog(this, "Template Preview - " + selectedTemplate.getName(), false);
+        previewDialog.setSize(900, 700);
+        previewDialog.setLocationRelativeTo(this);
+        
+        TemplatePreviewPanel previewPanel = new TemplatePreviewPanel();
+        previewPanel.updatePreview(selectedTemplate);
+        
+        // Update preview when template selection changes
+        templateComboBox.addItemListener(e -> {
+            if (previewDialog.isVisible()) {
+                File newTemplate = (File) templateComboBox.getSelectedItem();
+                if (newTemplate != null) {
+                    previewPanel.updatePreview(newTemplate);
+                }
+            }
+        });
+        
+        previewDialog.setContentPane(previewPanel);
+        previewDialog.setVisible(true);
     }
 
     private void browseOutputFile() {
@@ -244,9 +343,15 @@ public class GenerateReportDialog extends JDialog {
                     ContactReportGenerator.ReportData reportData = 
                         new ContactReportGenerator.ReportData(reportTitle, missionName, sidescanContacts);
 
-                    // Generate PDF
+                    // Generate PDF with selected template
                     ContactReportGenerator generator = new ContactReportGenerator();
-                    generator.generateReport("/templates/report-template.html", outputPath, reportData);
+                    File selectedTemplate = (File) templateComboBox.getSelectedItem();
+                    if (selectedTemplate != null && selectedTemplate.exists()) {
+                        generator.generateReport(selectedTemplate, outputPath, reportData);
+                    } else {
+                        // Fallback to default template from resources
+                        generator.generateReport("/templates/report-template.html", outputPath, reportData);
+                    }
                     
                     log.info("Report generated successfully: {}", outputPath);
                 } catch (Exception e) {
@@ -375,6 +480,58 @@ public class GenerateReportDialog extends JDialog {
                 selected[rowIndex] = (Boolean) value;
                 fireTableCellUpdated(rowIndex, columnIndex);
             }
+        }
+    }
+    
+    /**
+     * Custom renderer for template files in combobox.
+     * Shows filename without .html extension.
+     */
+    private static class TemplateFileRenderer extends JLabel implements ListCellRenderer<File> {
+        
+        public TemplateFileRenderer() {
+            setOpaque(true);
+        }
+        
+        @Override
+        public java.awt.Component getListCellRendererComponent(
+                JList<? extends File> list, File value, int index,
+                boolean isSelected, boolean cellHasFocus) {
+            
+            if (value != null) {
+                String name = value.getName();
+                if (name.endsWith(".html")) {
+                    name = name.substring(0, name.length() - 5);
+                }
+                // Make it more readable
+                name = name.replace("-", " ");
+                name = name.replace("_", " ");
+                // Capitalize first letter of each word
+                String[] words = name.split(" ");
+                StringBuilder display = new StringBuilder();
+                for (String word : words) {
+                    if (word.length() > 0) {
+                        display.append(Character.toUpperCase(word.charAt(0)));
+                        if (word.length() > 1) {
+                            display.append(word.substring(1));
+                        }
+                        display.append(" ");
+                    }
+                }
+                setText(display.toString().trim());
+            } else {
+                setText("");
+            }
+            
+            if (isSelected) {
+                setBackground(list.getSelectionBackground());
+                setForeground(list.getSelectionForeground());
+            } else {
+                setBackground(list.getBackground());
+                setForeground(list.getForeground());
+            }
+            
+            return this;
         }
     }
 }
