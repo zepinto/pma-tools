@@ -147,6 +147,11 @@
                     {{#userName}} - User: {{userName}}{{/userName}}
                     {{#systemName}} - System: {{systemName}}{{/systemName}}
                 </div>
+                {{#base64Image}}
+                <div style="text-align: center; margin: 8px 0;">
+                    <img src="data:image/png;base64,{{base64Image}}" style="max-width: 100%; border: 1px solid #555;" />
+                </div>
+                {{/base64Image}}
                 {{#annotations}}
                 <table style="width: 100%; font-size: 10pt; margin-top: 5px; border-collapse: collapse;">
                     <tr style="background-color: #e0e0e0;">

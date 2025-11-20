@@ -5,7 +5,12 @@
 //***************************************************************************
 package pt.omst.rasterlib.contacts;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.RenderingHints;
+import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -31,6 +36,7 @@ import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
+import pt.omst.rasterlib.MeasurementType;
 import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.SampleDescription;
 
@@ -60,6 +66,7 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
     private final long timestamp;
 
     private Image thumbnail = null;
+    private UUID thumbnailObservationUuid = null;
 
     /**
      * The category of the contact.
@@ -217,8 +224,7 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
                             thumbnail = cropped;
                         } else {
                             thumbnail = resized;
-                        }
-                    }
+                        }                        thumbnailObservationUuid = obs.getUuid();                    }
                     else {
                         log.warn("Raster file {} does not exist", rasterFile.getAbsolutePath());
                     }
@@ -232,6 +238,219 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
             thumbnail = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
         }
         return thumbnail;
+    }
+
+    /**
+     * Get the thumbnail image for a specific observation.
+     * 
+     * @param observationUuid The UUID of the observation to get the thumbnail for
+     * @return The thumbnail image, or null if not found
+     */
+    public Image getObservationThumbnail(UUID observationUuid) {
+        if (observationUuid == null)
+            return getThumbnail();
+            
+        try {
+            for (Observation obs : contact.getObservations()) {
+                if (obs.getUuid() != null && obs.getUuid().equals(observationUuid)) {
+                    if (obs.getRasterFilename() != null) {
+                        File rasterFile = new File(getTempDir(), obs.getRasterFilename());
+                        if (rasterFile.exists()) {
+                            IndexedRaster indexedRaster = Converter.IndexedRasterFromJsonString(Files.readString(rasterFile.toPath()));
+                            BufferedImage img = ImageIO.read(new File(getTempDir(), indexedRaster.getFilename()));
+                            SampleDescription firstSample = indexedRaster.getSamples().getFirst();
+                            SampleDescription lastSample = indexedRaster.getSamples().getLast();
+
+                            LocationType topLocation = new LocationType(
+                                    firstSample.getPose().getLatitude(),
+                                    firstSample.getPose().getLongitude());
+                            LocationType bottomLocation = new LocationType(
+                                    lastSample.getPose().getLatitude(),
+                                    lastSample.getPose().getLongitude());
+
+                            double distanceMeters = topLocation.getHorizontalDistanceInMeters(bottomLocation);
+                            double widthMeters = indexedRaster.getSensorInfo().getMaxRange() - indexedRaster.getSensorInfo().getMinRange();
+
+                            double heightWidthRatio = distanceMeters / widthMeters;
+                            int newImageHeight = (int)(224 * heightWidthRatio);
+                                 
+                            BufferedImage resized = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.FIT_EXACT, 224, newImageHeight);
+                            // If taller than 224, crop equally from top and bottom
+                            if (resized.getHeight() > 224) {
+                                int excess = resized.getHeight() - 224;
+                                int cropTop = excess / 2;
+                                return resized.getSubimage(0, cropTop, resized.getWidth(), 224);
+                            }
+                            return resized;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error loading observation thumbnail for {}: {}", observationUuid, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Get the height/width ratio for an observation's raster.
+     * This is needed to properly scale Y coordinates when drawing on thumbnails.
+     */
+    public Double getObservationHeightProportion(UUID observationUuid) {
+        try {
+            for (Observation obs : contact.getObservations()) {
+                if (obs.getUuid() != null && obs.getUuid().equals(observationUuid)) {
+                    if (obs.getRasterFilename() != null) {
+                        File rasterFile = new File(getTempDir(), obs.getRasterFilename());
+                        if (rasterFile.exists()) {
+                            IndexedRaster indexedRaster = Converter.IndexedRasterFromJsonString(Files.readString(rasterFile.toPath()));
+                            SampleDescription firstSample = indexedRaster.getSamples().getFirst();
+                            SampleDescription lastSample = indexedRaster.getSamples().getLast();
+
+                            LocationType topLocation = new LocationType(
+                                    firstSample.getPose().getLatitude(),
+                                    firstSample.getPose().getLongitude());
+                            LocationType bottomLocation = new LocationType(
+                                    lastSample.getPose().getLatitude(),
+                                    lastSample.getPose().getLongitude());
+
+                            double distanceMeters = topLocation.getHorizontalDistanceInMeters(bottomLocation);
+                            double widthMeters = indexedRaster.getSensorInfo().getMaxRange() - indexedRaster.getSensorInfo().getMinRange();
+
+                            return distanceMeters / widthMeters;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error getting observation height proportion for {}: {}", observationUuid, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Get a thumbnail image with measurement annotations (WIDTH, LENGTH, HEIGHT) drawn on it.
+     * If no measurement annotations are found (excluding BOX), returns the regular thumbnail.
+     * 
+     * @return the thumbnail image with measurements drawn
+     */
+    public Image getThumbnailWithMeasurements() {
+        Image baseThumbnail = getThumbnail();
+        
+        // Check if there are any non-BOX measurement annotations
+        boolean hasMeasurements = false;
+        for (Observation obs : contact.getObservations()) {
+            if (obs.getAnnotations() != null) {
+                for (Annotation annotation : obs.getAnnotations()) {
+                    if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT 
+                        && annotation.getMeasurementType() != MeasurementType.BOX) {
+                        hasMeasurements = true;
+                        break;
+                    }
+                }
+            }
+            if (hasMeasurements) break;
+        }
+        
+        // If no measurements found, return the regular thumbnail
+        if (!hasMeasurements) {
+            return baseThumbnail;
+        }
+        
+        // Create a copy of the thumbnail to draw on
+        BufferedImage thumbnailWithMeasurements = new BufferedImage(
+            baseThumbnail.getWidth(null), 
+            baseThumbnail.getHeight(null), 
+            BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = thumbnailWithMeasurements.createGraphics();
+        
+        // Enable antialiasing
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        
+        // Draw the base thumbnail
+        g2d.drawImage(baseThumbnail, 0, 0, null);
+        
+        // Draw measurements
+        for (Observation obs : contact.getObservations()) {
+            if (obs.getAnnotations() != null) {
+                for (Annotation annotation : obs.getAnnotations()) {
+                    if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT 
+                        && annotation.getMeasurementType() != MeasurementType.BOX) {
+                        drawMeasurementOnThumbnail(annotation, g2d, 
+                            baseThumbnail.getWidth(null), baseThumbnail.getHeight(null));
+                    }
+                }
+            }
+        }
+        
+        g2d.dispose();
+        return thumbnailWithMeasurements;
+    }
+    
+    /**
+     * Draw a measurement annotation on the thumbnail.
+     * The thumbnail has been scaled maintaining aspect ratio, so we need to account for that.
+     * Normalized coordinates are based on image width for both X and Y.
+     * Y is then scaled by heightProportion (distanceMeters / widthMeters).
+     */
+    private void drawMeasurementOnThumbnail(Annotation annotation, Graphics2D g2d, int width, int height) {
+        // Get the height proportion from the observation that was used to create the thumbnail
+        Double heightProportion = getObservationHeightProportion(thumbnailObservationUuid);
+        
+        if (heightProportion == null) {
+            heightProportion = 1.0; // fallback to square
+        }
+        
+        System.out.println("DEBUG [drawMeasurementOnThumbnail]: width=" + width + ", height=" + height + ", heightProportion=" + heightProportion);
+        System.out.println("DEBUG [drawMeasurementOnThumbnail]: Measurement " + annotation.getMeasurementType());
+        System.out.println("DEBUG [drawMeasurementOnThumbnail]: Normalized coords: (" + annotation.getNormalizedX() + "," + annotation.getNormalizedY() + ") to (" + annotation.getNormalizedX2() + "," + annotation.getNormalizedY2() + ")");
+        
+        // Normalized coordinates map to:
+        // X: normalizedX * width
+        // Y: normalizedY * width * heightProportion (note: width, not height!)
+        int x1 = (int) (annotation.getNormalizedX() * width);
+        int y1 = (int) (annotation.getNormalizedY() * width * heightProportion);
+        int x2 = (int) (annotation.getNormalizedX2() * width);
+        int y2 = (int) (annotation.getNormalizedY2() * width * heightProportion);
+        
+        System.out.println("DEBUG [drawMeasurementOnThumbnail]: Before crop offset: (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
+        
+        // If the image was cropped (expected height > actual height), offset Y
+        int expectedHeight = (int)(width * heightProportion);
+        if (expectedHeight > height) {
+            int cropOffset = (expectedHeight - height) / 2;
+            y1 -= cropOffset;
+            y2 -= cropOffset;
+            System.out.println("DEBUG [drawMeasurementOnThumbnail]: Applied crop offset: " + cropOffset);
+        }
+        
+        System.out.println("DEBUG [drawMeasurementOnThumbnail]: Final coords: (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
+        
+        // Determine color based on measurement type
+        Color color;
+        switch (annotation.getMeasurementType()) {
+            case WIDTH:
+                color = new Color(255, 0, 0, 200); // Red
+                break;
+            case LENGTH:
+                color = new Color(0, 255, 0, 200); // Green
+                break;
+            case HEIGHT:
+                color = new Color(0, 0, 255, 200); // Blue
+                break;
+            default:
+                return; // Skip other types
+        }
+        
+        // Draw shadow for visibility
+        g2d.setColor(new Color(0, 0, 0, 128));
+        g2d.setStroke(new BasicStroke(3f));
+        g2d.drawLine(x1, y1, x2, y2);
+        
+        // Draw the measurement line
+        g2d.setColor(color);
+        g2d.setStroke(new BasicStroke(2f));
+        g2d.drawLine(x1, y1, x2, y2);
     }
 
     /**

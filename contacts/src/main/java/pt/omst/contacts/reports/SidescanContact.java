@@ -5,7 +5,11 @@
 //***************************************************************************
 package pt.omst.contacts.reports;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
@@ -17,6 +21,7 @@ import javax.imageio.ImageIO;
 
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
+import pt.omst.rasterlib.MeasurementType;
 import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.contacts.CompressedContact;
 
@@ -125,12 +130,14 @@ public class SidescanContact {
         String userName;
         String systemName;
         List<AnnotationData> annotations;
+        String base64Image;
 
-        public ObservationData(String formattedTimestamp, String userName, String systemName, List<AnnotationData> annotations) {
+        public ObservationData(String formattedTimestamp, String userName, String systemName, List<AnnotationData> annotations, String base64Image) {
             this.formattedTimestamp = formattedTimestamp;
             this.userName = userName;
             this.systemName = systemName;
             this.annotations = annotations;
+            this.base64Image = base64Image;
         }
 
         public String getFormattedTimestamp() {
@@ -147,6 +154,10 @@ public class SidescanContact {
 
         public List<AnnotationData> getAnnotations() {
             return annotations != null ? annotations : new ArrayList<>();
+        }
+
+        public String getBase64Image() {
+            return base64Image != null ? base64Image : "";
         }
     }
 
@@ -222,9 +233,9 @@ public class SidescanContact {
         String description = cc.getDescription();
         contact.remarks = description != null ? description : "";
 
-        // Convert thumbnail to Base64
+        // Convert thumbnail to Base64 (using thumbnail with measurements)
         try {
-            Image thumbnail = cc.getThumbnail();
+            Image thumbnail = cc.getThumbnailWithMeasurements();
             if (thumbnail != null) {
                 BufferedImage bufferedImage;
                 if (thumbnail instanceof BufferedImage) {
@@ -273,7 +284,87 @@ public class SidescanContact {
                     }
                 }
                 
-                observationsList.add(new ObservationData(formattedTimestamp, userName, systemName, annotationsList));
+                // Get thumbnail for this observation with measurements
+                String obsBase64 = "";
+                try {
+                    Image obsImage = cc.getObservationThumbnail(obs.getUuid());
+                    Double heightProportion = cc.getObservationHeightProportion(obs.getUuid());
+                    
+                    System.out.println("DEBUG: Processing observation " + obs.getUuid());
+                    System.out.println("DEBUG: Image size: " + (obsImage != null ? obsImage.getWidth(null) + "x" + obsImage.getHeight(null) : "null"));
+                    System.out.println("DEBUG: heightProportion: " + heightProportion);
+                    
+                    if (obsImage != null && heightProportion != null) {
+                        // Draw measurements on the observation image
+                        BufferedImage imgWithMeasurements = new BufferedImage(
+                            obsImage.getWidth(null), obsImage.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+                        Graphics2D g2d = imgWithMeasurements.createGraphics();
+                        g2d.drawImage(obsImage, 0, 0, null);
+                        
+                        // Draw measurements if present
+                        if (obs.getAnnotations() != null) {
+                            for (Annotation ann : obs.getAnnotations()) {
+                                if (ann.getAnnotationType() == AnnotationType.MEASUREMENT && 
+                                    ann.getMeasurementType() != MeasurementType.BOX &&
+                                    ann.getNormalizedX() != null && ann.getNormalizedY() != null &&
+                                    ann.getNormalizedX2() != null && ann.getNormalizedY2() != null) {
+                                    
+                                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                                    
+                                    // Normalized coordinates are based on image width for both X and Y
+                                    // Y is then scaled by heightProportion (see SidescanObservationPanel.imageToScreenCoords)
+                                    int imgWidth = obsImage.getWidth(null);
+                                    int imgHeight = obsImage.getHeight(null);
+                                    
+                                    // Y = normalizedY * width * heightProportion
+                                    int x1 = (int)(ann.getNormalizedX() * imgWidth);
+                                    int y1 = (int)(ann.getNormalizedY() * imgWidth * heightProportion);
+                                    int x2 = (int)(ann.getNormalizedX2() * imgWidth);
+                                    int y2 = (int)(ann.getNormalizedY2() * imgWidth * heightProportion);
+                                    
+                                    System.out.println("DEBUG: Measurement " + ann.getMeasurementType());
+                                    System.out.println("DEBUG: Normalized coords: (" + ann.getNormalizedX() + "," + ann.getNormalizedY() + ") to (" + ann.getNormalizedX2() + "," + ann.getNormalizedY2() + ")");
+                                    System.out.println("DEBUG: Before crop offset: (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
+                                    
+                                    // If image was cropped, offset Y coordinates
+                                    int expectedHeight = (int)(imgWidth * heightProportion);
+                                    if (expectedHeight > imgHeight) {
+                                        int cropOffset = (expectedHeight - imgHeight) / 2;
+                                        y1 -= cropOffset;
+                                        y2 -= cropOffset;
+                                        System.out.println("DEBUG: Applied crop offset: " + cropOffset);
+                                    }
+                                    System.out.println("DEBUG: Final coords: (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
+                                    
+                                    // Draw shadow
+                                    g2d.setColor(Color.BLACK);
+                                    g2d.setStroke(new BasicStroke(3));
+                                    g2d.drawLine(x1, y1, x2, y2);
+                                    
+                                    // Draw colored line
+                                    Color lineColor = switch (ann.getMeasurementType()) {
+                                        case WIDTH -> new Color(255, 0, 0, 200);
+                                        case LENGTH -> new Color(0, 255, 0, 200);
+                                        case HEIGHT -> new Color(0, 0, 255, 200);
+                                        default -> Color.WHITE;
+                                    };
+                                    g2d.setColor(lineColor);
+                                    g2d.setStroke(new BasicStroke(2));
+                                    g2d.drawLine(x1, y1, x2, y2);
+                                }
+                            }
+                        }
+                        g2d.dispose();
+                        
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        ImageIO.write(imgWithMeasurements, "png", baos);
+                        obsBase64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                    }
+                } catch (Exception e) {
+                    // If image loading fails, continue without image
+                }
+                
+                observationsList.add(new ObservationData(formattedTimestamp, userName, systemName, annotationsList, obsBase64));
             }
         }
         contact.observations = observationsList;
