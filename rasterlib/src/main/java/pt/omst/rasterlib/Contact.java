@@ -24,6 +24,7 @@ public class Contact {
         if (this.uuid == null) {
             this.uuid = UUID.randomUUID();
         }
+        this.observations = new java.util.ArrayList<>();
     }
     
     @lombok.Getter(onMethod_ = {@JsonProperty("depth")})

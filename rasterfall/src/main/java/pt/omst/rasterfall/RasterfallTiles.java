@@ -41,9 +41,10 @@ import pt.omst.rasterlib.contacts.ContactCollection;
 @Log
 public class RasterfallTiles extends JPanel implements Closeable {
 
-    private final ArrayList<RasterfallTile> tiles = new ArrayList<>();
     @Getter
     private final ArrayList<IndexedRaster> rasters = new ArrayList<>();
+    @Getter
+    private final ArrayList<RasterfallTile> tiles = new ArrayList<>();
     @Getter
     private final ContactCollection contacts;
     @Getter
@@ -352,6 +353,26 @@ public class RasterfallTiles extends JPanel implements Closeable {
             
             g2.dispose();
         }
+    }
+
+    public double getRangeAtScreenX(int screenX) {
+        for (RasterfallTile tile : tiles) {
+            if (tile.getBounds().contains(screenX, 0)) {
+                int x = screenX - tile.getBounds().x;
+                return tile.getRange(x);
+            }
+        }
+        return Double.NaN;
+    }
+
+    public Instant getTimeAtScreenY(int screenY) {
+        for (RasterfallTile tile : tiles) {
+            if (tile.getBounds().contains(0, screenY)) {
+                int y = screenY - tile.getBounds().y;
+                return Instant.ofEpochMilli(tile.getTimestamp(0, y));
+            }
+        }
+        return null;
     }
 
     public static void main(String[] args) {

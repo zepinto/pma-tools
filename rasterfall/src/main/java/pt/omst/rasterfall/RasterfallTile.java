@@ -319,4 +319,23 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
             image.flush();
         image = null;
     }
+
+    public int getSampleIndex(Instant timestamp) {
+        if (timestamp.isBefore(getStartTime().toInstant()))
+            return 0;
+        if (timestamp.isAfter(getEndTime().toInstant()))
+            return getSamplesCount() - 1;
+        
+        int index = 0;
+        for (SampleDescription sample : raster.getSamples()) {
+            if (sample.getTimestamp().toInstant().isAfter(timestamp))
+                break;
+            index++;
+        }
+        return Math.min(index, getSamplesCount() - 1);
+    }
+
+    public IndexedRaster getRaster() {
+        return raster;
+    }
 }
