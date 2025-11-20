@@ -169,14 +169,54 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         OffsetDateTime timestamp = OffsetDateTime.now();
         observationsPanel.clear();
         log.debug("Cleared observations panel, now loading {} observations", contact.getObservations().size());
-        for (Observation observation : contact.getObservations()) {
-            log.debug("Loading observation: {}", observation.getUuid());
-            loadObservation(folder, observation);
-            if (observation.getTimestamp().isBefore(timestamp)) {
-                timestamp = observation.getTimestamp();
+        
+        // Load first observation immediately on EDT
+        if (!contact.getObservations().isEmpty()) {
+            Observation firstObs = contact.getObservations().get(0);
+            log.debug("Loading first observation immediately: {}", firstObs.getUuid());
+            loadObservation(folder, firstObs);
+            if (firstObs.getTimestamp().isBefore(timestamp)) {
+                timestamp = firstObs.getTimestamp();
+            }
+            
+            // Load remaining observations in background if there are more than 1
+            if (contact.getObservations().size() > 1) {
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    log.info("Loading {} remaining observations in background", 
+                        contact.getObservations().size() - 1);
+                    
+                    for (int i = 1; i < contact.getObservations().size(); i++) {
+                        final Observation obs = contact.getObservations().get(i);
+                        final int index = i;
+                        
+                        try {
+                            // Load on EDT
+                            javax.swing.SwingUtilities.invokeLater(() -> {
+                                try {
+                                    log.debug("Loading observation {} of {}: {}", 
+                                        index + 1, contact.getObservations().size(), obs.getUuid());
+                                    loadObservation(folder, obs);
+                                } catch (Exception e) {
+                                    log.error("Error loading observation {} in background", obs.getUuid(), e);
+                                }
+                            });
+                            
+                            // Small delay to avoid overwhelming EDT
+                            Thread.sleep(50);
+                        } catch (InterruptedException e) {
+                            log.warn("Background observation loading interrupted", e);
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                    
+                    log.info("Finished loading all {} observations", contact.getObservations().size());
+                }).exceptionally(throwable -> {
+                    log.error("Error in background observation loading", throwable);
+                    return null;
+                });
             }
         }
-        log.debug("Finished loading all observations into panel");
 
         positionTextArea.setText("Latitude: " + contact.getLatitude() + "\nLongitude: " + contact.getLongitude()
                 + "\nDepth: " + contact.getDepth());

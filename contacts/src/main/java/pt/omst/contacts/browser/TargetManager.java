@@ -6,7 +6,6 @@
 package pt.omst.contacts.browser;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -22,14 +21,10 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.prefs.Preferences;
 
 import javax.swing.JFileChooser;
 
@@ -46,9 +41,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
-import javax.swing.border.BevelBorder;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.LineBorder;
 
 import javax0.license3j.License;
 import lombok.Getter;
@@ -56,12 +49,14 @@ import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.ContactUtils;
-import pt.omst.contacts.PulvisContactSynchronizer;
+import pt.omst.contacts.services.ContactFileWatcherService;
+import pt.omst.contacts.services.PulvisConnectionManager;
+import pt.omst.contacts.services.TargetManagerPreferences;
+import pt.omst.contacts.services.TargetManagerPreferences.BooleanHolder;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.browser.filtering.ContactFilterListener;
 import pt.omst.contacts.browser.filtering.ContactFilterPanel;
 import pt.omst.contacts.reports.GenerateReportDialog;
-import pt.omst.contacts.watcher.RecursiveFileWatcher;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
@@ -77,7 +72,6 @@ import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.mapview.SlippyMap;
-import pt.omst.pulvis.PulvisConnection;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
@@ -107,28 +101,22 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final JSplitPane mainSplitPane;
     private final JPanel eastPanel;
     private final JButton toggleEastPanelButton;
-    private boolean eastPanelVisible = true;
+    private final BooleanHolder eastPanelVisible = new BooleanHolder(true);
     private final JPanel statusBar;
     private final JLabel totalContactsLabel;
     private final JLabel visibleContactsLabel;
     private final TaskStatusIndicator taskStatusIndicator;
     private boolean firstPaintDone = false;
-    private final Map<PulvisDataSource, PulvisConnection> pulvisConnections = new HashMap<>();
-    private final Map<PulvisDataSource, PulvisContactSynchronizer> pulvisSynchronizers = new HashMap<>();
-
-    // File watcher for auto-refresh
-    private RecursiveFileWatcher fileWatcher;
-    private final Map<File, Long> ignoreOwnWritesUntil = new ConcurrentHashMap<>();
-    private static final long IGNORE_WINDOW_MS = 500; // 500ms after save
-    private boolean autoRefreshEnabled = true; // User preference
-    private int activeConversionJobs = 0; // Track bulk conversion operations
+    private final PulvisConnectionManager pulvisConnectionManager;
+    private final ContactFileWatcherService fileWatcherService;
+    private final TargetManagerPreferences preferencesManager;
 
     // West panel (filter panel)
     private final ContactFilterPanel filterPanel;
     private final JPanel westPanel;
     private final JSplitPane outerSplitPane;
     private final JButton toggleWestPanelButton;
-    private boolean westPanelVisible = false;
+    private final BooleanHolder westPanelVisible = new BooleanHolder(false);
 
     // Debouncing for zoom events
     private javax.swing.Timer updateContactsTimer;
@@ -151,6 +139,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         setLayout(new BorderLayout(5, 0));
         
         contactCollection = new ContactCollection();
+        pulvisConnectionManager = new PulvisConnectionManager(contactCollection);
+        fileWatcherService = new ContactFileWatcherService(contactCollection);
 
         // Initialize components
         dataSourceManager = new DataSourceManagerPanel();
@@ -184,22 +174,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         contactEditor = new VerticalContactEditor();
 
-        // Initialize file watcher
-        try {
-            fileWatcher = new RecursiveFileWatcher(this::handleFileChange);
-            fileWatcher.addExtension("zct");
-            fileWatcher.start();
-            log.info("File watcher initialized and started");
-        } catch (IOException e) {
-            log.error("Failed to initialize file watcher", e);
-        }
-
         // Listen for contact saves to refresh the map overlay
         contactEditor.addSaveListener((contactId, zctFile) -> {
             log.info("Contact saved: {}, refreshing map overlay", contactId);
 
             // Register this as our own write to ignore file watcher event
-            ignoreOwnWritesUntil.put(zctFile, System.currentTimeMillis() + IGNORE_WINDOW_MS);
+            fileWatcherService.ignoreFileTemporarily(zctFile);
 
             try {
                 contactCollection.refreshContact(zctFile);
@@ -278,8 +258,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         toggleWestPanelButton.setOpaque(false);
         toggleWestPanelButton.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         toggleWestPanelButton.addActionListener(e -> {
-            westPanelVisible = !westPanelVisible;
-            if (westPanelVisible) {
+            westPanelVisible.set(!westPanelVisible.get());
+            if (westPanelVisible.get()) {
                 showFilters();
             } else {
                 hideFilters();
@@ -302,8 +282,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         toggleEastPanelButton.setOpaque(false);
         toggleEastPanelButton.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
         toggleEastPanelButton.addActionListener(e -> {
-            eastPanelVisible = !eastPanelVisible;
-            if (eastPanelVisible) {
+            eastPanelVisible.set(!eastPanelVisible.get());
+            if (eastPanelVisible.get()) {
                 showContactDetails();
             } else {
                 hideContactDetails();
@@ -318,6 +298,22 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         add(topPanel, BorderLayout.NORTH);
         add(outerSplitPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
+
+        // Initialize preferences manager (must be done after all UI components are created)
+        preferencesManager = new TargetManagerPreferences(
+            mainSplitPane,
+            outerSplitPane,
+            filterPanel,
+            timeSelector,
+            dataSourceManager,
+            fileWatcherService,
+            eastPanelVisible,
+            westPanelVisible,
+            () -> updateVisibleContacts(true),
+            this::showContactDetails,
+            this::hideContactDetails,
+            this::showFilters
+        );
 
         loadPreferences();
 
@@ -369,7 +365,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     public void showContactDetails() {
-        eastPanelVisible = true;
+        eastPanelVisible.set(true);
         mainSplitPane.setRightComponent(eastPanel);
         mainSplitPane.setDividerLocation(0.7);
         toggleEastPanelButton.setText("▸");
@@ -378,7 +374,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     public void hideContactDetails() {
-        eastPanelVisible = false;
+        eastPanelVisible.set(false);
         mainSplitPane.setRightComponent(null);
         toggleEastPanelButton.setText("◂");
         mainSplitPane.revalidate();
@@ -386,7 +382,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     public void showFilters() {
-        westPanelVisible = true;
+        westPanelVisible.set(true);
         outerSplitPane.setLeftComponent(westPanel);
         outerSplitPane.setDividerLocation(300); // Default width for filter panel
         toggleWestPanelButton.setText("◂");
@@ -395,355 +391,19 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     public void hideFilters() {
-        westPanelVisible = false;
+        westPanelVisible.set(false);
         outerSplitPane.setLeftComponent(null);
         toggleWestPanelButton.setText("▸");
         outerSplitPane.revalidate();
         outerSplitPane.repaint();
     }
 
-    /**
-     * Handles file system changes detected by the file watcher.
-     * Processes CREATE, MODIFY, and DELETE events for .zct files.
-     */
-    private void handleFileChange(String eventType, File file) {
-        if (!autoRefreshEnabled) {
-            log.debug("Auto-refresh disabled, ignoring file change: {}", file.getName());
-            return;
-        }
-        
-        // Skip auto-refresh during bulk conversion operations
-        if (activeConversionJobs > 0) {
-            log.debug("Skipping file watcher event during conversion: {}", file.getName());
-            return;
-        }
-
-        // Must run on EDT for UI updates
-        SwingUtilities.invokeLater(() -> {
-            try {
-                switch (eventType) {
-                    case "CREATE":
-                        log.info("New contact detected: {}", file.getName());
-                        // Delay to allow file to be fully written, then retry if needed
-                        addContactWithRetry(file, 3, 200);
-                        break;
-
-                    case "MODIFY":
-                        if (!shouldIgnoreOwnWrite(file)) {
-                            log.info("Contact modified externally: {}", file.getName());
-                            // Delay to allow file to be fully written, then retry if needed
-                            refreshContactWithRetry(file, 3, 200);
-                        }
-                        break;
-
-                    case "DELETE":
-                        log.info("Contact deleted: {}", file.getName());
-                        contactCollection.removeContact(file);
-
-                        // Clear editor if displaying deleted contact
-                        if (contactEditor.getZctFile() != null &&
-                                contactEditor.getZctFile().equals(file)) {
-                            contactEditor.clearObservations();
-                        }
-
-                        updateVisibleContacts(true);
-                        updateStatusBar();
-                        slippyMap.repaint();
-                        break;
-                }
-            } catch (Exception e) {
-                log.error("Error handling file change event", e);
-            }
-        });
-    }
-
-    /**
-     * Checks if a file modification should be ignored because it was caused by this
-     * application.
-     */
-    private boolean shouldIgnoreOwnWrite(File file) {
-        Long ignoreUntil = ignoreOwnWritesUntil.get(file);
-        if (ignoreUntil != null) {
-            if (System.currentTimeMillis() < ignoreUntil) {
-                log.debug("Ignoring own write for file: {}", file.getName());
-                return true;
-            }
-            ignoreOwnWritesUntil.remove(file); // Expired
-        }
-        return false;
-    }
-
-    /**
-     * Adds a contact with retry logic to handle files still being written.
-     * Uses a background thread with delays to avoid blocking the EDT.
-     * 
-     * @param file The .zct file to add
-     * @param maxRetries Maximum number of retry attempts
-     * @param delayMs Initial delay in milliseconds before first attempt
-     */
-    private void addContactWithRetry(File file, int maxRetries, int delayMs) {
-        IndexedRasterUtils.background(() -> {
-            int attempt = 0;
-            Exception lastException = null;
-            
-            while (attempt < maxRetries) {
-                try {
-                    // Wait before attempting to read (file may still be writing)
-                    Thread.sleep(delayMs * (attempt + 1)); // Increasing delay
-                    
-                    // Try to add the contact
-                    contactCollection.addContact(file);
-                    
-                    // Success - update UI on EDT
-                    SwingUtilities.invokeLater(() -> {
-                        try {
-                            updateVisibleContacts(true);
-                            updateStatusBar();
-                            slippyMap.repaint();
-                        } catch (Exception e) {
-                            log.error("Error updating UI after adding contact {}", file.getName(), e);
-                        }
-                    });
-                    
-                    log.debug("Successfully added contact {} after {} attempt(s)", 
-                        file.getName(), attempt + 1);
-                    return; // Success
-                    
-                } catch (Exception e) {
-                    lastException = e;
-                    attempt++;
-                    if (attempt < maxRetries) {
-                        log.debug("Failed to add contact {} (attempt {}/{}): {}", 
-                            file.getName(), attempt, maxRetries, e.getMessage());
-                    }
-                }
-            }
-            
-            // All retries failed
-            log.warn("Failed to add contact {} after {} attempts", 
-                file.getName(), maxRetries, lastException);
-        });
-    }
-
-    /**
-     * Refreshes a contact with retry logic to handle files still being written.
-     * Uses a background thread with delays to avoid blocking the EDT.
-     * 
-     * @param file The .zct file to refresh
-     * @param maxRetries Maximum number of retry attempts
-     * @param delayMs Initial delay in milliseconds before first attempt
-     */
-    private void refreshContactWithRetry(File file, int maxRetries, int delayMs) {
-        IndexedRasterUtils.background(() -> {
-            int attempt = 0;
-            Exception lastException = null;
-            
-            while (attempt < maxRetries) {
-                try {
-                    // Wait before attempting to read (file may still be writing)
-                    Thread.sleep(delayMs * (attempt + 1)); // Increasing delay
-                    
-                    // Try to refresh the contact (throws IOException if file is incomplete/corrupt)
-                    contactCollection.refreshContact(file);
-                    
-                    // Success - update UI on EDT
-                    SwingUtilities.invokeLater(() -> {
-                        try {
-                            contactsMapOverlay.refreshContact(file);
-                            
-                            // Auto-reload if this is the currently displayed contact
-                            if (contactEditor.getZctFile() != null &&
-                                    contactEditor.getZctFile().equals(file)) {
-                                try {
-                                    log.info("Reloading modified contact in editor: {}", file.getName());
-                                    contactEditor.loadZct(file);
-                                } catch (IOException e) {
-                                    log.error("Failed to reload contact in editor", e);
-                                }
-                            }
-                            
-                            updateVisibleContacts(true);
-                            updateStatusBar();
-                            slippyMap.repaint();
-                        } catch (Exception e) {
-                            log.error("Error updating UI after contact refresh for {}", file.getName(), e);
-                        }
-                    });
-                    
-                    log.debug("Successfully refreshed contact {} after {} attempt(s)", 
-                        file.getName(), attempt + 1);
-                    return; // Success
-                    
-                } catch (Exception e) {
-                    lastException = e;
-                    attempt++;
-                    if (attempt < maxRetries) {
-                        log.debug("Failed to refresh contact {} (attempt {}/{}): {}", 
-                            file.getName(), attempt, maxRetries, e.getMessage());
-                    }
-                }
-            }
-            
-            // All retries failed
-            log.warn("Failed to refresh contact {} after {} attempts", 
-                file.getName(), maxRetries, lastException);
-        });
-    }
-
     public void savePreferences() {
-        // store divider location and data sources
-        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
-
-        // Save main divider location
-        int dividerLocation = mainSplitPane.getDividerLocation();
-        prefs.putInt("mainSplitPane.dividerLocation", dividerLocation);
-        log.debug("Saved divider location: {}", dividerLocation);
-
-        // Save east panel visibility
-        prefs.putBoolean("eastPanel.visible", eastPanelVisible);
-        log.debug("Saved east panel visibility: {}", eastPanelVisible);
-
-        // Save west panel state
-        prefs.putBoolean("westPanel.visible", westPanelVisible);
-        if (westPanelVisible) {
-            int westDivider = outerSplitPane.getDividerLocation();
-            prefs.putInt("westPanel.dividerLocation", westDivider);
-            log.debug("Saved west panel divider location: {}", westDivider);
-        }
-        log.debug("Saved west panel visibility: {}", westPanelVisible);
-
-        // Save filter selections
-        Set<String> classifications = filterPanel.getSelectedClassifications();
-        Set<String> confidences = filterPanel.getSelectedConfidences();
-        Set<String> labels = filterPanel.getSelectedLabels();
-        prefs.put("filters.classifications", String.join(",", classifications));
-        prefs.put("filters.confidence", String.join(",", confidences));
-        prefs.put("filters.labels", String.join(",", labels));
-        log.debug("Saved filter selections");
-
-        // Save auto-refresh preference
-        prefs.putBoolean("autoRefresh.enabled", autoRefreshEnabled);
-        log.debug("Saved auto-refresh preference: {}", autoRefreshEnabled);
-
-        // Save icon size preference
-        int iconSize = IconCache.getInstance().getIconSize();
-        prefs.putInt("iconSize", iconSize);
-        log.debug("Saved icon size preference: {}", iconSize);
-
-        // Save time selection
-        Instant startTime = timeSelector.getSelectedStartTime();
-        Instant endTime = timeSelector.getSelectedEndTime();
-        if (startTime != null && endTime != null) {
-            prefs.putLong("timeSelector.startTime", startTime.toEpochMilli());
-            prefs.putLong("timeSelector.endTime", endTime.toEpochMilli());
-            log.debug("Saved time selection: {} to {}", startTime, endTime);
-        }
-
-        try {
-            dataSourceManager.saveToPreferences();
-            // Force flush to ensure preferences are written to disk
-            prefs.flush();
-        } catch (Exception e) {
-            log.error("Error saving preferences", e);
-        }
+        preferencesManager.savePreferences();
     }
 
     public void loadPreferences() {
-        // load divider location and data sources
-        Preferences prefs = Preferences.userNodeForPackage(TargetManager.class);
-
-        // Load main divider location (default to -1 which means use default)
-        int dividerLocation = prefs.getInt("mainSplitPane.dividerLocation", -1);
-        if (dividerLocation > 0) {
-            // Defer setting divider location until after component is visible
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                mainSplitPane.setDividerLocation(dividerLocation);
-                log.debug("Loaded main divider location: {}", dividerLocation);
-            });
-        }
-
-        // Load east panel visibility (default to true)
-        boolean eastVisible = prefs.getBoolean("eastPanel.visible", true);
-        log.debug("Loaded east panel visibility: {}", eastVisible);
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            if (eastVisible && !eastPanelVisible) {
-                showContactDetails();
-            } else if (!eastVisible && eastPanelVisible) {
-                hideContactDetails();
-            }
-        });
-
-        // Load west panel visibility (default to false - collapsed)
-        boolean westVisible = prefs.getBoolean("westPanel.visible", false);
-        int westDivider = prefs.getInt("westPanel.dividerLocation", 300);
-        log.debug("Loaded west panel visibility: {}, divider: {}", westVisible, westDivider);
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            if (westVisible) {
-                showFilters();
-                if (westDivider > 0) {
-                    outerSplitPane.setDividerLocation(westDivider);
-                }
-            }
-        });
-
-        // Load filter selections
-        String classificationsStr = prefs.get("filters.classifications", "");
-        String confidencesStr = prefs.get("filters.confidence", "");
-        String labelsStr = prefs.get("filters.labels", "");
-
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            if (!classificationsStr.isEmpty()) {
-                Set<String> classifications = Set.of(classificationsStr.split(","));
-                filterPanel.setSelectedClassifications(classifications);
-                log.debug("Loaded classification filters: {}", classifications);
-            }
-            if (!confidencesStr.isEmpty()) {
-                Set<String> confidences = Set.of(confidencesStr.split(","));
-                filterPanel.setSelectedConfidences(confidences);
-                log.debug("Loaded confidence filters: {}", confidences);
-            }
-            if (!labelsStr.isEmpty()) {
-                Set<String> labels = Set.of(labelsStr.split(","));
-                filterPanel.setSelectedLabels(labels);
-                log.debug("Loaded label filters: {}", labels);
-            }
-        });
-
-        // Load auto-refresh preference (default to true)
-        autoRefreshEnabled = prefs.getBoolean("autoRefresh.enabled", true);
-        log.debug("Loaded auto-refresh preference: {}", autoRefreshEnabled);
-
-        // Load icon size preference (default to 12)
-        int iconSize = prefs.getInt("iconSize", 12);
-        IconCache.getInstance().setIconSize(iconSize);
-        log.debug("Loaded icon size preference: {}", iconSize);
-
-        // Load time selection
-        long startTimeMillis = prefs.getLong("timeSelector.startTime", -1);
-        long endTimeMillis = prefs.getLong("timeSelector.endTime", -1);
-
-        if (startTimeMillis > 0 && endTimeMillis > 0) {
-            Instant startTime = Instant.ofEpochMilli(startTimeMillis);
-            Instant endTime = Instant.ofEpochMilli(endTimeMillis);
-            log.debug("Loaded time selection: {} to {}", startTime, endTime);
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                timeSelector.setSelectedInterval(startTime, endTime);
-                updateVisibleContacts(true);
-            });
-        }
-
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            updateVisibleContacts(true);
-            log.info("Applied contact filters on load");
-        });
-
-        try {
-            log.info("Loading data sources from preferences...");
-            dataSourceManager.loadFromPreferences();
-            log.info("Data sources loaded. Current count: {}", dataSourceManager.getDataSources().size());
-        } catch (Exception e) {
-            log.error("Error loading data sources from preferences", e);
-        }
+        preferencesManager.loadPreferences();
     }
 
     /**
@@ -846,90 +506,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * @param pcs the Pulvis connection configuration
      */
     private void connectToPulvis(PulvisDataSource pcs) {
-        // Don't connect if already connected
-        if (pulvisConnections.containsKey(pcs)) {
-            log.warn("Already connected to Pulvis at {}", pcs.getBaseUrl());
-            return;
-        }
-
-        // Create connection
-        PulvisConnection connection = new PulvisConnection(pcs.getHost(), pcs.getPort());
-        pulvisConnections.put(pcs, connection);
-
-        // Create sync folder for this Pulvis instance
-        String syncFolderName = String.format("pulvis-%s-%d", pcs.getHost(), pcs.getPort());
-        File syncFolder = new File("contacts", syncFolderName);
-
-        // Create synchronizer
-        PulvisContactSynchronizer synchronizer = new PulvisContactSynchronizer(
-                connection,
-                syncFolder,
-                contactCollection,
-                progress -> {
-                    // Progress callback - could update UI here if needed
-                    log.debug("Sync progress: {} contacts", progress.get());
-                });
-        pulvisSynchronizers.put(pcs, synchronizer);
-
-        connection.connect().thenRun(() -> {
-            log.info("Connected to Pulvis WS for contacts at {}", pcs.getBaseUrl());
-
-            // Start initial download in background job
-            BackgroundJob downloadJob = new BackgroundJob("Download from " + pcs.getHost()) {
-                private int totalContacts = 0;
-
-                @Override
-                protected Void doInBackground() throws Exception {
-                    updateStatus("Starting download...");
-
-                    // Start download and track progress
-                    synchronizer.downloadAllContacts().whenComplete((count, throwable) -> {
-                        if (throwable != null) {
-                            log.error("Download failed", throwable);
-                            updateStatus("Failed: " + throwable.getMessage());
-                        } else {
-                            totalContacts = count;
-                            updateStatus("Completed: " + count + " contacts");
-                            setProgress(100);
-
-                            // Add sync folder to file watcher
-                            if (fileWatcher != null) {
-                                try {
-                                    fileWatcher.addRoot(syncFolder);
-                                } catch (IOException e) {
-                                    log.error("Failed to add sync folder to file watcher", e);
-                                }
-                            }
-                        }
-                    });
-
-                    // Poll for progress updates
-                    while (!synchronizer.isInitialSyncComplete() && !isCancelled()) {
-                        Thread.sleep(500);
-                        int current = synchronizer.getStatistics().get("downloaded");
-                        if (totalContacts > 0) {
-                            setProgress((current * 100) / totalContacts);
-                        }
-                        updateStatus(String.format("Downloaded %d contacts...", current));
-                    }
-
-                    return null;
-                }
-            };
-
-            JobManager.getInstance().submit(downloadJob);
-
-        }).exceptionally(ex -> {
-            log.error("Error connecting to Pulvis WS at {}", pcs.getBaseUrl(), ex);
-            pulvisConnections.remove(pcs);
-            pulvisSynchronizers.remove(pcs);
-            return null;
-        });
-
-        connection.addEventListener(ce -> {
-            log.info("Received contact event from Pulvis: {}", ce.getEventType());
-            synchronizer.handleContactEvent(ce);
-        });
+        pulvisConnectionManager.connectToServer(pcs);
     }
 
     /**
@@ -938,15 +515,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * @param pcs the Pulvis connection to disconnect
      */
     private void disconnectFromPulvis(PulvisDataSource pcs) {
-        PulvisConnection connection = pulvisConnections.remove(pcs);
-        if (connection != null) {
-            try {
-                connection.disconnect();
-                log.info("Disconnected from Pulvis at {}", pcs.getBaseUrl());
-            } catch (Exception e) {
-                log.error("Error disconnecting from Pulvis at {}", pcs.getBaseUrl(), e);
-            }
-        }
+        pulvisConnectionManager.disconnectFromServer(pcs);
     }
 
     /**
@@ -1075,13 +644,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // Auto-Refresh toggle
         JCheckBoxMenuItem autoRefreshItem = new JCheckBoxMenuItem("Auto-Refresh Contacts");
-        autoRefreshItem.setSelected(targetManager != null && targetManager.autoRefreshEnabled);
+        autoRefreshItem.setSelected(targetManager != null && targetManager.fileWatcherService.isAutoRefreshEnabled());
         autoRefreshItem.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 if (targetManager != null) {
-                    targetManager.autoRefreshEnabled = autoRefreshItem.isSelected();
-                    log.info("Auto-refresh contacts: {}", targetManager.autoRefreshEnabled);
+                    targetManager.fileWatcherService.setAutoRefreshEnabled(autoRefreshItem.isSelected());
                 }
             }
         });
@@ -1268,25 +836,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     @Override
     public void close() throws Exception {
         // Close file watcher
-        if (fileWatcher != null) {
-            try {
-                fileWatcher.close();
-                log.info("File watcher closed");
-            } catch (Exception e) {
-                log.error("Error closing file watcher", e);
-            }
-        }
+        fileWatcherService.stopWatching();
 
         // Close all Pulvis connections
-        for (Map.Entry<PulvisDataSource, PulvisConnection> entry : pulvisConnections.entrySet()) {
-            try {
-                entry.getValue().disconnect();
-                log.info("Closed Pulvis connection to {}", entry.getKey().getBaseUrl());
-            } catch (Exception e) {
-                log.error("Error closing Pulvis connection to {}", entry.getKey().getBaseUrl(), e);
-            }
-        }
-        pulvisConnections.clear();
+        pulvisConnectionManager.closeAll();
 
         if (slippyMap != null) {
             slippyMap.close();
@@ -1303,13 +856,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 updateStatusBar();
 
                 // Add folder to file watcher
-                if (fileWatcher != null && autoRefreshEnabled) {
-                    try {
-                        fileWatcher.addRoot(cds.getFolder());
-                        log.info("Added folder to file watcher: {}", cds.getFolder());
-                    } catch (IOException e) {
-                        log.error("Failed to add folder to file watcher", e);
-                    }
+                try {
+                    fileWatcherService.addFolder(cds.getFolder());
+                } catch (IOException e) {
+                    log.error("Failed to add folder to file watcher", e);
                 }
             }
             case PulvisDataSource pcs -> {
@@ -1331,10 +881,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 updateStatusBar();
 
                 // Remove folder from file watcher
-                if (fileWatcher != null) {
-                    fileWatcher.removeRoot(cds.getFolder());
-                    log.info("Removed folder from file watcher: {}", cds.getFolder());
-                }
+                fileWatcherService.removeFolder(cds.getFolder());
                 break;
             }
             case PulvisDataSource pcs -> {
@@ -1607,9 +1154,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 }
 
                 // Register all modified/deleted files to ignore watcher events
-                ignoreOwnWritesUntil.put(mainZctFile, System.currentTimeMillis() + 2000); // 2 second window for batch
+                fileWatcherService.ignoreFileTemporarily(mainZctFile, 2000); // 2 second window for batch
                 for (CompressedContact mergeContact : mergeContacts) {
-                    ignoreOwnWritesUntil.put(mergeContact.getZctFile(), System.currentTimeMillis() + 2000);
+                    fileWatcherService.ignoreFileTemporarily(mergeContact.getZctFile(), 2000);
                 }
 
                 // Delete merged contacts
@@ -1825,26 +1372,22 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 @Override
                 protected void done() {
                     super.done();
-                    synchronized (TargetManager.this) {
-                        activeConversionJobs--;
-                        if (activeConversionJobs == 0) {
-                            // All conversion jobs complete - reload contacts
-                            log.info("All conversion jobs complete, reloading contacts from disk");
-                            SwingUtilities.invokeLater(() -> {
-                                try {
-                                    reloadContactsFromDisk();
-                                } catch (Exception e) {
-                                    log.error("Failed to reload contacts after conversion", e);
-                                }
-                            });
-                        }
+                    fileWatcherService.decrementConversionJobs();
+                    if (fileWatcherService.getActiveConversionJobs() == 0) {
+                        // All conversion jobs complete - reload contacts
+                        log.info("All conversion jobs complete, reloading contacts from disk");
+                        SwingUtilities.invokeLater(() -> {
+                            try {
+                                reloadContactsFromDisk();
+                            } catch (Exception e) {
+                                log.error("Failed to reload contacts after conversion", e);
+                            }
+                        });
                     }
                 }
             };
             
-            synchronized (this) {
-                activeConversionJobs++;
-            }
+            fileWatcherService.incrementConversionJobs();
             JobManager.getInstance().submit(conversionJob);
             jobsSubmitted++;
         }
@@ -1865,165 +1408,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      * Creates a BackgroundJob that uploads all contacts with error handling.
      */
     public void sendAllContactsToPulvis() {
-        // Check if any Pulvis connections exist
-        if (pulvisSynchronizers.isEmpty()) {
-            Window window = SwingUtilities.getWindowAncestor(this);
-            GuiUtils.infoMessage(window, "No Data Manager Connected", 
-                "No Pulvis Data Manager connections found.\n\n" +
-                "Please add a Pulvis connection in the data sources panel first.");
-            return;
-        }
-        
-        // Get all contact files
-        List<CompressedContact> allContacts = contactCollection.getAllContacts();
-        
-        if (allContacts.isEmpty()) {
-            Window window = SwingUtilities.getWindowAncestor(this);
-            GuiUtils.infoMessage(window, "No Contacts", 
-                "No contacts found to send.");
-            return;
-        }
-        
-        // Confirm with user
         Window window = SwingUtilities.getWindowAncestor(this);
-        int result = javax.swing.JOptionPane.showConfirmDialog(
-            window,
-            String.format("Send %d contact(s) to %d Pulvis Data Manager server(s)?\n\n" +
-                "This may take some time. Existing contacts will be updated.",
-                allContacts.size(), pulvisSynchronizers.size()),
-            "Confirm Send All",
-            javax.swing.JOptionPane.OK_CANCEL_OPTION,
-            javax.swing.JOptionPane.QUESTION_MESSAGE
-        );
-        
-        if (result != javax.swing.JOptionPane.OK_OPTION) {
-            return;
-        }
-        
-        // Create background job
-        BackgroundJob uploadJob = new BackgroundJob("Send All to Data Manager") {
-            @Override
-            protected Void doInBackground() throws Exception {
-                int totalContacts = allContacts.size();
-                int totalServers = pulvisSynchronizers.size();
-                int totalUploads = totalContacts * totalServers;
-                int completed = 0;
-                
-                updateStatus(String.format("Uploading %d contacts to %d server(s)...", 
-                    totalContacts, totalServers));
-                
-                // Track failures per server
-                Map<String, List<String>> serverFailures = new java.util.concurrent.ConcurrentHashMap<>();
-                
-                // Upload to each server
-                for (Map.Entry<PulvisDataSource, PulvisContactSynchronizer> entry : 
-                        pulvisSynchronizers.entrySet()) {
-                    
-                    if (isCancelled()) {
-                        updateStatus("Cancelled by user");
-                        return null;
-                    }
-                    
-                    PulvisDataSource dataSource = entry.getKey();
-                    PulvisContactSynchronizer synchronizer = entry.getValue();
-                    String serverName = dataSource.getHost() + ":" + dataSource.getPort();
-                    List<String> failures = new ArrayList<>();
-                    serverFailures.put(serverName, failures);
-                    
-                    updateStatus(String.format("Uploading to %s...", serverName));
-                    
-                    // Upload each contact
-                    for (int i = 0; i < allContacts.size(); i++) {
-                        if (isCancelled()) {
-                            updateStatus("Cancelled by user");
-                            return null;
-                        }
-                        
-                        CompressedContact contact = allContacts.get(i);
-                        File zctFile = contact.getZctFile();
-                        
-                        try {
-                            // Upload synchronously and wait for completion
-                            synchronizer.uploadContact(zctFile).get(30, java.util.concurrent.TimeUnit.SECONDS);
-                            
-                        } catch (java.util.concurrent.TimeoutException e) {
-                            String msg = "Upload timeout after 30 seconds";
-                            failures.add(contact.getContact().getLabel() + ": " + msg);
-                            log.warn("Timeout uploading {} to {}", 
-                                contact.getContact().getLabel(), serverName);
-                                
-                        } catch (Exception e) {
-                            String errorMsg = e.getCause() != null ? 
-                                e.getCause().getMessage() : e.getMessage();
-                            
-                            // Ignore "already exists" type errors
-                            if (errorMsg != null && 
-                                (errorMsg.contains("409") || 
-                                 errorMsg.toLowerCase().contains("conflict") ||
-                                 errorMsg.toLowerCase().contains("already exists"))) {
-                                log.debug("Contact {} already exists on {}, skipping", 
-                                    contact.getContact().getLabel(), serverName);
-                            } else {
-                                failures.add(contact.getContact().getLabel() + ": " + errorMsg);
-                                log.error("Error uploading {} to {}: {}", 
-                                    contact.getContact().getLabel(), serverName, errorMsg);
-                            }
-                        }
-                        
-                        completed++;
-                        setProgress((completed * 100) / totalUploads);
-                        updateStatus(String.format("Uploaded %d/%d contacts...", 
-                            completed, totalUploads));
-                    }
-                }
-                
-                // Report results
-                SwingUtilities.invokeLater(() -> {
-                    int totalFailures = serverFailures.values().stream()
-                        .mapToInt(List::size).sum();
-                    
-                    if (totalFailures == 0) {
-                        GuiUtils.infoMessage(window, "Upload Complete", 
-                            String.format("Successfully uploaded %d contact(s) to %d server(s).",
-                                totalContacts, totalServers));
-                    } else {
-                        // Show detailed failure report
-                        StringBuilder report = new StringBuilder();
-                        report.append(String.format("Uploaded with %d failure(s):\n\n", totalFailures));
-                        
-                        for (Map.Entry<String, List<String>> entry : serverFailures.entrySet()) {
-                            if (!entry.getValue().isEmpty()) {
-                                report.append(String.format("%s (%d failures):\n", 
-                                    entry.getKey(), entry.getValue().size()));
-                                for (String failure : entry.getValue()) {
-                                    report.append("  • ").append(failure).append("\n");
-                                }
-                                report.append("\n");
-                            }
-                        }
-                        
-                        GuiUtils.errorMessage(window, "Upload Completed with Errors", 
-                            report.toString());
-                    }
-                });
-                
-                setProgress(100);
-                updateStatus("Completed");
-                return null;
-            }
-        };
-        
-        JobManager.getInstance().submit(uploadJob);
+        pulvisConnectionManager.sendAllContactsToPulvis(window);
     }
 
     public void saveContact(final UUID contactId, final File zctFile) {
-        log.info("Saving contact {} to Pulvis...", contactId);
-        // Upload to all connected Pulvis servers
-        IndexedRasterUtils.background(() -> {
-            for (PulvisContactSynchronizer synchronizer : pulvisSynchronizers.values()) {
-                synchronizer.uploadContact(zctFile);
-            }
-        });
+        pulvisConnectionManager.saveContact(contactId, zctFile);
     }
 
     /**

@@ -27,3 +27,6 @@ Thumbs.db
 
 #licenses
 conf/licenses
+
+# Hidden files in conf directory
+conf/.*
