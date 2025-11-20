@@ -5,19 +5,26 @@
 //***************************************************************************
 package pt.omst.rasterfall.overlays;
 
-import javax.imageio.ImageIO;
-import javax.swing.*;
-
-import pt.omst.rasterlib.Pose;
-import pt.omst.rasterlib.SensorInfo;
-
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Line2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
+
+import javax.imageio.ImageIO;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+
+import pt.omst.rasterlib.Pose;
+import pt.omst.rasterlib.SensorInfo;
 
 /**
  * A Swing widget that visualizes the vehicle's roll, altitude, and sidescan
