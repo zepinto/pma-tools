@@ -11,6 +11,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Insets;
 import java.awt.Point;
+import java.awt.event.KeyEvent;
 import java.io.Closeable;
 import java.io.IOException;
 import java.time.Instant;
@@ -27,6 +28,7 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.border.BevelBorder;
 import javax.swing.plaf.LayerUI;
 
+import pt.omst.rasterfall.RasterfallDebug;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.replay.LogReplay;
 
@@ -36,7 +38,8 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     private final RasterfallTiles tiles;
 
     private JButton playButton;
-    private JToggleButton measureButton, heightButton, markButton, infoButton, gridButton, rulerButton, hudButton;
+    private JToggleButton measureButton, heightButton, markButton, infoButton, gridButton, rulerButton, hudButton,
+            coverageButton;
     private JSpinner speedSpinner;
 
     private final RulerOverlay rulerOverlay = new RulerOverlay();
@@ -48,6 +51,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     private final HeightOverlay heightOverlay = new HeightOverlay();
     private final ReplayOverlay replayOverlay = new ReplayOverlay();
     private final ContactsOverlay contactsOverlay = new ContactsOverlay();
+    private final SonarCoverageOverlay sonarCoverageOverlay = new SonarCoverageOverlay();
     private final ButtonGroup group = new ButtonGroup();
     private final JPanel controlsPanel = new JPanel(new BorderLayout());
     private final JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -64,6 +68,18 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         contactsOverlay.install(tiles);
     }
 
+    @Override
+    public void installUI(javax.swing.JComponent c) {
+        super.installUI(c);
+        // Enable key event processing
+        ((javax.swing.JLayer<?>) c).setLayerEventMask(
+                java.awt.AWTEvent.MOUSE_EVENT_MASK |
+                        java.awt.AWTEvent.MOUSE_MOTION_EVENT_MASK |
+                        java.awt.AWTEvent.MOUSE_WHEEL_EVENT_MASK |
+                        java.awt.AWTEvent.COMPONENT_EVENT_MASK |
+                        java.awt.AWTEvent.KEY_EVENT_MASK);
+    }
+
     public double getSpeed() {
         if (replaying)
             return Double.parseDouble(speedSpinner.getValue().toString());
@@ -74,7 +90,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     public void addOverlay(AbstractOverlay overlay, AbstractButton button, boolean exclusive) {
         activeOverlays.add(overlay);
         overlay.install(tiles);
-        button.setMargin(new Insets(0,0,0,0));
+        button.setMargin(new Insets(0, 0, 0, 0));
         if (exclusive)
             group.add(button);
         leftPanel.add(button);
@@ -125,13 +141,19 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         hudButton.setMargin(new Insets(0, 0, 0, 0));
         hudButton.setSelected(true);
 
+        coverageButton = new JToggleButton("<html><h3>&#x1F4E1; &nbsp; coverage</h3></html>");
+        coverageButton.setPreferredSize(new Dimension(100, 33));
+        coverageButton.addChangeListener(e -> overlayAction(sonarCoverageOverlay, coverageButton.isSelected()));
+        coverageButton.setMargin(new Insets(0, 0, 0, 0));
+
         speedSpinner = new JSpinner(new SpinnerNumberModel(25, 1, 250, 1));
         speedSpinner.setPreferredSize(new Dimension(75, 33));
         speedSpinner.setFont(new Font("Arial", Font.PLAIN, 16));
         speedSpinner.addChangeListener(e -> {
             long timestamp = tiles.getTimestamp();
             if (replaying)
-                LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp), Double.parseDouble(speedSpinner.getValue().toString()));
+                LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp),
+                        Double.parseDouble(speedSpinner.getValue().toString()));
             else
                 LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp), 0);
         });
@@ -143,6 +165,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         leftPanel.add(markButton);
         leftPanel.add(measureButton);
         leftPanel.add(heightButton);
+        leftPanel.add(coverageButton);
 
         rightPanel.add(speedSpinner);
         rightPanel.add(playButton);
@@ -159,11 +182,14 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         replaying = !replaying;
         if (replaying) {
             playButton.setText("<html><h2>&#x25A0;</h2></html>");
-            long timestamp = tiles.getTimestamp(new Point(0, tiles.getVisibleRect().y + tiles.getVisibleRect().height / 2));
-            LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp), Double.parseDouble(speedSpinner.getValue().toString()));
+            long timestamp = tiles
+                    .getTimestamp(new Point(0, tiles.getVisibleRect().y + tiles.getVisibleRect().height / 2));
+            LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp),
+                    Double.parseDouble(speedSpinner.getValue().toString()));
         } else {
             playButton.setText("<html><h2>&#x25B6;</h2></html>");
-            long timestamp = tiles.getTimestamp(new Point(0, tiles.getVisibleRect().y + tiles.getVisibleRect().height / 2));
+            long timestamp = tiles
+                    .getTimestamp(new Point(0, tiles.getVisibleRect().y + tiles.getVisibleRect().height / 2));
             LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp), 0);
         }
     }
@@ -177,29 +203,27 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         replaying = (speed != 0);
 
         if (replaying) {
-            speedSpinner.setValue((int)speed);
+            speedSpinner.setValue((int) speed);
             replayOverlay.cleanup(tiles);
             replayOverlay.install(tiles);
             activeOverlays.add(replayOverlay);
             playButton.setText("<html><h2>&#x25A0;</h2></html>");
-        }
-        else {
+        } else {
             playButton.setText("<html><h2>&#x25B6;</h2></html>");
             replayOverlay.cleanup(tiles);
             activeOverlays.remove(replayOverlay);
         }
     }
 
-
     void overlayAction(AbstractOverlay overlay, boolean selected) {
         if (selected && !activeOverlays.contains(overlay)) {
             activeOverlays.add(overlay);
             overlay.install(tiles);
-            //System.out.println(overlay.getToolbarName()+": "+selected);
+            // System.out.println(overlay.getToolbarName()+": "+selected);
         } else if (!selected && activeOverlays.contains(overlay)) {
             overlay.cleanup(tiles);
             activeOverlays.remove(overlay);
-            //System.out.println(overlay.getToolbarName()+": "+selected);
+            // System.out.println(overlay.getToolbarName()+": "+selected);
         }
 
         tiles.repaint();
@@ -208,11 +232,11 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     @Override
     public void paint(java.awt.Graphics g, javax.swing.JComponent c) {
         super.paint(g, c);
-        
+
         for (AbstractOverlay overlay : activeOverlays) {
             overlay.paint(g, c);
         }
-       
+
         contactsOverlay.paint(g, c);
     }
 
@@ -223,21 +247,35 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     }
 
     @Override
-    protected void processMouseMotionEvent(java.awt.event.MouseEvent e, javax.swing.JLayer<? extends RasterfallTiles> l) {
+    protected void processMouseMotionEvent(java.awt.event.MouseEvent e,
+            javax.swing.JLayer<? extends RasterfallTiles> l) {
         for (AbstractOverlay overlay : activeOverlays)
             overlay.processMouseMotionEvent(e, l);
     }
 
     @Override
-    protected void processMouseWheelEvent(java.awt.event.MouseWheelEvent e, javax.swing.JLayer<? extends RasterfallTiles> l) {
+    protected void processMouseWheelEvent(java.awt.event.MouseWheelEvent e,
+            javax.swing.JLayer<? extends RasterfallTiles> l) {
         for (AbstractOverlay overlay : activeOverlays)
             overlay.processMouseWheelEvent(e, l);
     }
 
     @Override
-    protected void processComponentEvent(java.awt.event.ComponentEvent e, javax.swing.JLayer<? extends RasterfallTiles> l) {
+    protected void processComponentEvent(java.awt.event.ComponentEvent e,
+            javax.swing.JLayer<? extends RasterfallTiles> l) {
         for (AbstractOverlay overlay : activeOverlays)
             overlay.processComponentEvent(e, l);
+    }
+
+    @Override
+    protected void processKeyEvent(KeyEvent e, javax.swing.JLayer<? extends RasterfallTiles> l) {
+        super.processKeyEvent(e, l);
+        if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_D
+                && e.isControlDown()) {
+            // Ctrl+D to toggle debug mode
+            RasterfallDebug.toggle();
+            tiles.repaint();
+        }
     }
 
     @Override

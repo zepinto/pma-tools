@@ -144,9 +144,13 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
 
     @Override
     public Dimension getPreferredSize() {
-        if (getParent() == null || getParent().getParent() == null || getParent().getParent().getParent() == null)
-            return new Dimension(100, 100);
-        int width = (int) (getParent().getParent().getParent().getWidth() * zoom);
+        // During construction, parent hierarchy may not be complete yet
+        if (getParent() == null || getParent().getParent() == null || getParent().getParent().getParent() == null) {
+            // Return a reasonable default size based on image dimensions
+            return getFullResolutionSize();
+        }
+        int viewportWidth = getParent().getParent().getParent().getWidth();
+        int width = (int) (viewportWidth * zoom);
         int height = (int) (width * heightProportition);
         return new Dimension(width, height);
     }

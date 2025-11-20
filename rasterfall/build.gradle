@@ -22,6 +22,8 @@ application {
 // Set working directory for run task
 run {
     workingDir = rootProject.projectDir
+    // Pass system properties to the application
+    systemProperties System.properties
 }
 
 repositories {

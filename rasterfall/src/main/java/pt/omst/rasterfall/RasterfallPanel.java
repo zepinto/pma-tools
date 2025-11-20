@@ -7,8 +7,6 @@ package pt.omst.rasterfall;
 
 import java.awt.AWTEvent;
 import java.awt.BorderLayout;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -18,7 +16,6 @@ import javax.swing.JFrame;
 import javax.swing.JLayer;
 import javax.swing.JPanel;
 import javax.swing.JViewport;
-import javax.swing.SwingUtilities;
 
 import lombok.extern.java.Log;
 import pt.lsts.neptus.util.GuiUtils;
@@ -31,7 +28,17 @@ public class RasterfallPanel extends JPanel implements Closeable {
     private final RasterfallTiles waterfall;
     private final RasterfallOverlays overlays;
     private final RasterfallReplay replay;
-    private final JViewport viewport = new JViewport();
+    private final JViewport viewport = new JViewport() {
+        @Override
+        public void doLayout() {
+            super.doLayout();
+            // Force waterfall to recalculate tile sizes after viewport layout
+            if (waterfall != null) {
+                waterfall.invalidate();
+                waterfall.revalidate();
+            }
+        }
+    };
 
     public RasterfallPanel(File rastersFolder, Consumer<String> progressCallback) {
         setLayout(new BorderLayout());
@@ -46,18 +53,6 @@ public class RasterfallPanel extends JPanel implements Closeable {
         add(scrollbar, BorderLayout.EAST);
         add(overlays.getToolsPanel(), BorderLayout.NORTH);
         this.replay = new RasterfallReplay(scrollbar);
-
-        addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                SwingUtilities.invokeLater(() -> {
-                    doLayout();
-                    revalidate();
-                    waterfall.revalidate();
-                    waterfall.repaint();
-                });
-            }
-        });
     }
 
     @Override

@@ -7,6 +7,8 @@ package pt.omst.rasterfall;
 
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Point2D;
@@ -227,12 +229,21 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     @Override
     public void doLayout() {
+        if (tiles.isEmpty())
+            return;
+        
+        // Invalidate all tiles first so they recalculate their preferred sizes
+        // based on the new parent width after resize
+        for (RasterfallTile tile : tiles) {
+            tile.invalidate();
+        }
+        
         double verticalSize = 0;
         for (RasterfallTile tile : tiles) {
-            add(tile);
             verticalSize += tile.getPreferredSize().getHeight();
         }
-        setPreferredSize(new Dimension(tiles.getFirst().getPreferredSize().width, (int) verticalSize));
+        Dimension newSize = new Dimension(tiles.getFirst().getPreferredSize().width, (int) verticalSize);
+        setPreferredSize(newSize);
         super.doLayout();
     }
 
@@ -295,6 +306,52 @@ public class RasterfallTiles extends JPanel implements Closeable {
             tile.close();
         tiles.clear();
         rasters.clear();
+    }
+    
+    @Override
+    protected void paintChildren(Graphics g) {
+        super.paintChildren(g);
+        
+        if (RasterfallDebug.debug) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            
+            // Draw tile boundaries
+            Color[] tileColors = {
+                new Color(255, 0, 0),
+                new Color(0, 255, 0),
+                new Color(0, 0, 255),
+                new Color(255, 255, 0),
+                new Color(255, 0, 255),
+                new Color(0, 255, 255)
+            };
+            
+            int tileIndex = 0;
+            for (RasterfallTile tile : tiles) {
+                Color color = tileColors[tileIndex % tileColors.length];
+                
+                // Draw tile boundary
+                g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 150));
+                g2.drawRect(tile.getBounds().x, tile.getBounds().y, 
+                           tile.getBounds().width - 1, tile.getBounds().height - 1);
+                
+                // Draw tile info label
+                g2.setColor(color);
+                g2.setFont(new Font("Monospaced", Font.BOLD, 11));
+                String label = String.format("Tile #%d [%d x %d]", 
+                    tileIndex, tile.getWidth(), tile.getHeight());
+                g2.drawString(label, tile.getBounds().x + 5, tile.getBounds().y + 15);
+                
+                String timeRange = String.format("%s - %s",
+                    RasterfallDebug.formatTimestamp(tile.getStartTime().toInstant().toEpochMilli()),
+                    RasterfallDebug.formatTimestamp(tile.getEndTime().toInstant().toEpochMilli()));
+                g2.drawString(timeRange, tile.getBounds().x + 5, tile.getBounds().y + 30);
+                
+                tileIndex++;
+            }
+            
+            g2.dispose();
+        }
     }
 
     public static void main(String[] args) {

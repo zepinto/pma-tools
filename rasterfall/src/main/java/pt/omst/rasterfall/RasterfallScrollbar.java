@@ -9,6 +9,7 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
@@ -83,9 +84,11 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
 
 
         scrollImage = waterfall.getScrollImage(scrollWidth, (Void) -> {
-            repaint();
+            repaint();            
         });
+        
         setPreferredSize(new Dimension(scrollWidth, height));
+        log.info("scroll image updated, size is " + scrollImage.getWidth() + "x" + scrollImage.getHeight()+" preferred size: " + getPreferredSize());
     }
 
     public void addGuiHooks() {
@@ -146,7 +149,6 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
                     position = Math.min(getHeight() - scrollHeight, position);
                     position = Math.max(0, position);
                     scrollDragStart.setLocation(e.getX(), e.getY());
-                    //ReplayListener.publishState(Instant.now(), getTime(), 0);
                     updateViewPort(position);
                     repaint();
                 }
@@ -247,7 +249,7 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
         y += startPixel;
         long startTime = getStartTime();
         long endTime = getEndTime();
-        long time = (long) ((y / getHeight()) * (endTime - startTime) + startTime);
+        long time = (long) ((y / scrollImage.getHeight()) * (endTime - startTime) + startTime);
         return new Date(time);
     }
 
@@ -323,6 +325,51 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
         g2d.draw(new RoundRectangle2D.Double(3, position+1, getWidth() - 7, scrollHeight-2, 10, 10));
         g2d.setColor(new Color(28,28,28, 255));
         g2d.draw(new RoundRectangle2D.Double(2, position, getWidth() - 4, scrollHeight, 10, 10));
+        
+        if (RasterfallDebug.debug) {
+            // Draw debug information on scrollbar
+            g2d.setFont(new Font("Monospaced", Font.PLAIN, 9));
+            
+            // Draw time markers at regular intervals
+            long timeSpan = getEndTime() - getStartTime();
+            int numMarkers = 10;
+            long markerInterval = timeSpan / numMarkers;
+            
+            for (int i = 0; i <= numMarkers; i++) {
+                long markerTime = getStartTime() + (i * markerInterval);
+                // Invert Y position: top = newest (end time), bottom = oldest (start time)
+                double markerY = getHeight() - ((double) i * getHeight() / numMarkers);
+                
+                g2d.setColor(new Color(255, 255, 0, 150));
+                g2d.drawLine(0, (int)markerY, getWidth(), (int)markerY);
+                
+                // Draw time label (vertical text would be better but complex)
+                g2d.setColor(new Color(255, 255, 0));
+                String timeLabel = RasterfallDebug.formatTimestamp(markerTime);
+                // Draw on alternating sides to avoid overlap
+                if (i % 2 == 0) {
+                    g2d.drawString(timeLabel.substring(0, Math.min(5, timeLabel.length())), 
+                                  2, (int)markerY - 2);
+                }
+            }
+            
+            // Draw current position indicator
+            g2d.setColor(new Color(255, 0, 0, 200));
+            g2d.setStroke(new BasicStroke(2));
+            g2d.drawLine(0, (int)(position + scrollHeight/2), getWidth(), (int)(position + scrollHeight/2));
+            
+            // Draw position value
+            g2d.setColor(Color.RED);
+            g2d.setFont(new Font("Monospaced", Font.BOLD, 10));
+            String posLabel = String.format("%.0f", position);
+            g2d.drawString(posLabel, getWidth() - 25, (int)(position + scrollHeight/2) - 5);
+            
+            // Draw current time at center
+            Instant currentTime = getTime();
+            String timeStr = RasterfallDebug.formatTimestamp(currentTime.toEpochMilli());
+            g2d.setColor(new Color(0, 255, 0));
+            g2d.drawString(timeStr, 2, (int)(position + scrollHeight/2) + 12);
+        }
     }
 
     @Override
