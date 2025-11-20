@@ -77,20 +77,26 @@ public class MouseZoomAndDrag extends AbstractInteraction<SidescanObservationPan
             Point2D.Double imgCoords = component.screenToImageCoords(new Point2D.Double(component.getMousePosition().x, component.getMousePosition().y));
             Point2D.Double worldCoords = component.imageToWorldCoords(imgCoords);
             
-            // Draw text with translucent background for visibility
-            String coordText = (float)worldCoords.x + ", " + (float)worldCoords.y;
+            // Format both coordinate types
+            String imageText = String.format("Image: (%.4f, %.4f)", imgCoords.x, imgCoords.y);
+            String worldText = String.format("Lat/Lon: (%.6f, %.6f)", worldCoords.x, worldCoords.y);
+            
             FontMetrics metrics = g2d.getFontMetrics();
-            Rectangle2D bounds = metrics.getStringBounds(coordText, g2d);
+            Rectangle2D imageBounds = metrics.getStringBounds(imageText, g2d);
+            Rectangle2D worldBounds = metrics.getStringBounds(worldText, g2d);
+            int maxWidth = (int) Math.max(imageBounds.getWidth(), worldBounds.getWidth());
+            int lineHeight = (int) imageBounds.getHeight();
             int padding = 3;
             
-            // Draw semi-transparent background
+            // Draw semi-transparent background for both lines
             g2d.setColor(new Color(0, 0, 0, 180));
-            g2d.fillRect(10 - padding, 20 - (int)bounds.getHeight() - padding, 
-                        (int)bounds.getWidth() + padding * 2, (int)bounds.getHeight() + padding * 2);
+            g2d.fillRect(10 - padding, 20 - lineHeight - padding, 
+                        maxWidth + padding * 2, lineHeight * 2 + padding * 2);
             
             // Draw white text on top
             g2d.setColor(Color.white);
-            g2d.drawString(coordText, 10, 20);
+            g2d.drawString(imageText, 10, 20);
+            g2d.drawString(worldText, 10, 20 + lineHeight);
         }
     }
 }

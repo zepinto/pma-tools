@@ -72,6 +72,10 @@ public class PulvisContactSynchronizer {
     // Track which UUIDs are managed by this synchronizer
     private final Map<UUID, File> uuidToFileMap = new ConcurrentHashMap<>();
     
+    // Track recently uploaded contacts to avoid downloading our own uploads
+    private final Map<UUID, Long> recentlyUploadedUuids = new ConcurrentHashMap<>();
+    private static final long UPLOAD_DEBOUNCE_MS = 5000; // Ignore ADDED events for 5 seconds after upload
+    
     // Track sync status
     private volatile boolean initialSyncComplete = false;
     private final AtomicInteger downloadedCount = new AtomicInteger(0);
@@ -482,6 +486,26 @@ public class PulvisContactSynchronizer {
      * Handles a contact being added or created on the remote server.
      */
     private void handleContactAdded(ContactResponse contact) throws IOException {
+        UUID uuid = contact.getUuid();
+        if (uuid == null) {
+            log.warn("Received ADDED event for contact without UUID: {}", contact.getLabel());
+            return;
+        }
+        
+        // Check if this is a contact we just uploaded (ignore echo from our own upload)
+        Long uploadTime = recentlyUploadedUuids.get(uuid);
+        if (uploadTime != null) {
+            long elapsed = System.currentTimeMillis() - uploadTime;
+            if (elapsed < UPLOAD_DEBOUNCE_MS) {
+                log.info("Ignoring ADDED event for recently uploaded contact: {} ({}ms ago)", 
+                    contact.getLabel(), elapsed);
+                return;
+            } else {
+                // Clean up old entry
+                recentlyUploadedUuids.remove(uuid);
+            }
+        }
+        
         if (downloadContactResponse(contact)) {
             log.info("Added new contact from remote: {}", contact.getLabel());
         }
@@ -544,12 +568,25 @@ public class PulvisContactSynchronizer {
                         api.updateContact(uuid, updateRequest);
                         uploadedCount.incrementAndGet();
                         
+                        // Track this upload to avoid downloading our own changes
+                        recentlyUploadedUuids.put(uuid, System.currentTimeMillis());
+                        
                     } catch (ApiException e) {
                         if (e.getCode() == 404) {
                             // Contact doesn't exist, create it
                             log.info("Creating new contact {} on Pulvis", contact.getLabel());
-                            api.createContact(zctFile);
+                            ContactResponse response = api.createContact(zctFile);
                             uploadedCount.incrementAndGet();
+                            
+                            // Track the server-assigned UUID to avoid downloading our own upload
+                            if (response != null && response.getUuid() != null) {
+                                recentlyUploadedUuids.put(response.getUuid(), System.currentTimeMillis());
+                                log.info("Server assigned UUID {} to contact {}", response.getUuid(), contact.getLabel());
+                                
+                                // Also update our local file to use the server-assigned UUID
+                                // This prevents duplicate contacts in the future
+                                updateLocalContactUuid(zctFile, contact, response.getUuid());
+                            }
                         } else {
                             throw e;
                         }
@@ -599,6 +636,62 @@ public class PulvisContactSynchronizer {
         }
         
         return request;
+    }
+    
+    /**
+     * Updates a local contact file to use the server-assigned UUID.
+     * This prevents duplicate contacts when the server assigns a new UUID.
+     * 
+     * @param zctFile The local contact file
+     * @param contact The contact object
+     * @param serverUuid The UUID assigned by the server
+     */
+    private void updateLocalContactUuid(File zctFile, pt.omst.rasterlib.Contact contact, UUID serverUuid) {
+        try {
+            log.info("Updating local contact {} UUID from {} to server-assigned {}", 
+                contact.getLabel(), contact.getUuid(), serverUuid);
+            
+            // Update the UUID in the contact object
+            UUID oldUuid = contact.getUuid();
+            contact.setUuid(serverUuid);
+            
+            // Create a temporary directory
+            File tempDir = Files.createTempDirectory("contact_uuid_update_").toFile();
+            
+            try {
+                // Unzip the existing contact file
+                ZipUtils.unzip(zctFile.getAbsolutePath(), tempDir.toPath());
+                
+                // Update contact.json with new UUID
+                File contactJsonFile = new File(tempDir, "contact.json");
+                String contactJson = pt.omst.rasterlib.Converter.ContactToJsonString(contact);
+                Files.writeString(contactJsonFile.toPath(), contactJson);
+                
+                // Re-zip to the same file
+                if (!ZipUtils.zipDir(zctFile.getAbsolutePath(), tempDir.getAbsolutePath())) {
+                    throw new IOException("Failed to re-zip contact file");
+                }
+                
+                log.info("Successfully updated local contact UUID");
+                
+                // Update UUID maps
+                if (oldUuid != null) {
+                    uuidToFileMap.remove(oldUuid);
+                }
+                uuidToFileMap.put(serverUuid, zctFile);
+                
+                // Reload contact in collection
+                contactCollection.removeContact(zctFile);
+                contactCollection.addContact(zctFile);
+                
+            } finally {
+                // Clean up temp directory
+                deleteDirectory(tempDir);
+            }
+            
+        } catch (Exception e) {
+            log.error("Failed to update local contact UUID: {}", e.getMessage(), e);
+        }
     }
     
     /**

@@ -271,9 +271,13 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     }
 
     Point2D.Double imageToScreenCoords(Point2D.Double imageCoords) {
+        double imageScale = image.getWidth() / widthMeters;
+        log.info("imageScale: " + imageScale);
         double heightProportion = heightMeters / widthMeters;
+        log.info("heightProportion: " + heightProportion);
         double zoom = zoomFactorX;
         double zoomY = zoomFactorY * heightProportion;
+        log.info("zoom: " + zoom + ", zoomY: " + zoomY);
         int newWidth = (int) (image.getWidth() * zoom);
         int newHeight = (int) (image.getWidth() * zoomY);
         int x = (getWidth() - newWidth) / 2 + offsetX;
@@ -284,6 +288,7 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     }
 
     Point2D.Double imageToWorldCoords(Point2D.Double imageCoords) {
+        
         int index = (int) (raster.getSamples().size() * imageCoords.x);
         index = Math.min(index, raster.getSamples().size() - 1);
         index = Math.max(index, 0);
