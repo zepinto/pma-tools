@@ -1467,6 +1467,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         JFrame frame = new JFrame("Target Manager");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1400, 900);
+        
+        // Set window icon
+        GuiUtils.setWindowIcon(frame, "/icons/tgtmanager.png");
+        
         frame.setJMenuBar(createMenuBar(frame, layout));
         frame.add(layout);
 

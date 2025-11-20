@@ -41,6 +41,9 @@ public class RasterFallApp extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
         
+        // Set window icon
+        GuiUtils.setWindowIcon(this, "/images/rasterfall.png");
+        
         setupMenubar();
     }
 

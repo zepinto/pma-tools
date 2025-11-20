@@ -317,4 +317,26 @@ public class GuiUtils {
     public static void testFrame(Component component, String title) {
         testFrame(component, title, 800, 600);
     }
+
+    /**
+     * Sets the icon for a window from a resource path.
+     * Loads the icon image and sets it as the window icon.
+     * This works across platforms (Windows, Linux, macOS).
+     * 
+     * @param window The window to set the icon for
+     * @param resourcePath Path to the icon resource (e.g., "/images/app-icon.png")
+     */
+    public static void setWindowIcon(Window window, String resourcePath) {
+        try {
+            BufferedImage icon = getImage(resourcePath);
+            if (icon != null) {
+                window.setIconImage(icon);
+                log.info("Window icon set from resource: {}", resourcePath);
+            } else {
+                log.warn("Failed to load window icon from resource: {}", resourcePath);
+            }
+        } catch (Exception e) {
+            log.error("Error setting window icon from resource: {}", resourcePath, e);
+        }
+    }
 }
