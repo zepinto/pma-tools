@@ -116,6 +116,12 @@ public class SdfParser {
 
         try {
             while (true) {
+                // Check if we have enough data left for a header
+                if (curPosition + 512 > channel.size()) {
+                    LOG.debug("Reached end of file at position {}, file size: {}", curPosition, channel.size());
+                    break;
+                }
+                
                 // Read the header
                 ByteBuffer buf = channel.map(MapMode.READ_ONLY, curPosition, 512); // header size 512bytes
                 buf.order(ByteOrder.LITTLE_ENDIAN);

@@ -194,13 +194,8 @@ public class ContactCollection implements MapPainter {
         return contacts;
     }
 
-    public void refreshContact(File zctFile) {
-        try {
-            quadTree.update(zctFile, new CompressedContact(zctFile));
-        }
-        catch (IOException e) {
-            log.error("Error refreshing contact from {}", zctFile.getAbsolutePath(), e);
-        }        
+    public void refreshContact(File zctFile) throws IOException {
+        quadTree.update(zctFile, new CompressedContact(zctFile));       
     }
 
     public static ContactCollection fromFolder(File folder) {        

@@ -67,7 +67,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     public void refreshContact(File contactFile) {
         log.info("Refreshing "+contactFile);
-        if (selectedContact.getZctFile().equals(contactFile)) {
+        if (selectedContact != null && selectedContact.getZctFile().equals(contactFile)) {
             try {
                 selectedContact = new CompressedContact(contactFile);
             }

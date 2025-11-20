@@ -9,7 +9,9 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.Insets;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
@@ -19,6 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -27,6 +30,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.prefs.Preferences;
+
+import javax.swing.JFileChooser;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -50,6 +55,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.lsts.neptus.util.ZipUtils;
+import pt.omst.contacts.ContactUtils;
 import pt.omst.contacts.PulvisContactSynchronizer;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.browser.filtering.ContactFilterListener;
@@ -61,6 +67,7 @@ import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.ZoomableTimeIntervalSelector;
 import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
+import pt.omst.gui.datasource.DataSource;
 import pt.omst.gui.datasource.FolderDataSource;
 import pt.omst.gui.datasource.PulvisDataSource;
 import pt.omst.gui.jobs.BackgroundJob;
@@ -114,6 +121,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final Map<File, Long> ignoreOwnWritesUntil = new ConcurrentHashMap<>();
     private static final long IGNORE_WINDOW_MS = 500; // 500ms after save
     private boolean autoRefreshEnabled = true; // User preference
+    private int activeConversionJobs = 0; // Track bulk conversion operations
 
     // West panel (filter panel)
     private final ContactFilterPanel filterPanel;
@@ -193,7 +201,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             // Register this as our own write to ignore file watcher event
             ignoreOwnWritesUntil.put(zctFile, System.currentTimeMillis() + IGNORE_WINDOW_MS);
 
-            contactCollection.refreshContact(zctFile);
+            try {
+                contactCollection.refreshContact(zctFile);
+            } catch (IOException e) {
+                log.error("Failed to refresh contact {} in collection after save", zctFile.getName(), e);
+            }
             contactsMapOverlay.refreshContact(zctFile);
             slippyMap.repaint();
             saveContact(contactId, zctFile);
@@ -206,9 +218,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // Initialize status bar labels
         totalContactsLabel = new JLabel("Total: 0");
+        totalContactsLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
+        totalContactsLabel.setPreferredSize(new Dimension(100, 24));
         visibleContactsLabel = new JLabel("Visible: 0");
-        totalContactsLabel.setPreferredSize(new Dimension(100, 8));
-        visibleContactsLabel.setPreferredSize(new Dimension(100, 8));
+        visibleContactsLabel.setFont(new Font("Dialog", Font.PLAIN, 10));        
+        visibleContactsLabel.setPreferredSize(new Dimension(100, 24));
         taskStatusIndicator = new TaskStatusIndicator(null); // Will set proper parent later
         taskStatusIndicator.setBorder(new EmptyBorder(0,0,0,0));
 
@@ -397,6 +411,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             log.debug("Auto-refresh disabled, ignoring file change: {}", file.getName());
             return;
         }
+        
+        // Skip auto-refresh during bulk conversion operations
+        if (activeConversionJobs > 0) {
+            log.debug("Skipping file watcher event during conversion: {}", file.getName());
+            return;
+        }
 
         // Must run on EDT for UI updates
         SwingUtilities.invokeLater(() -> {
@@ -404,32 +424,15 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 switch (eventType) {
                     case "CREATE":
                         log.info("New contact detected: {}", file.getName());
-                        contactCollection.addContact(file);
-                        updateVisibleContacts(true);
-                        updateStatusBar();
-                        slippyMap.repaint();
+                        // Delay to allow file to be fully written, then retry if needed
+                        addContactWithRetry(file, 3, 200);
                         break;
 
                     case "MODIFY":
                         if (!shouldIgnoreOwnWrite(file)) {
                             log.info("Contact modified externally: {}", file.getName());
-                            contactCollection.refreshContact(file);
-                            contactsMapOverlay.refreshContact(file);
-
-                            // Auto-reload if this is the currently displayed contact
-                            if (contactEditor.getZctFile() != null &&
-                                    contactEditor.getZctFile().equals(file)) {
-                                try {
-                                    log.info("Reloading modified contact in editor: {}", file.getName());
-                                    contactEditor.loadZct(file);
-                                } catch (IOException e) {
-                                    log.error("Failed to reload contact in editor", e);
-                                }
-                            }
-
-                            updateVisibleContacts(true);
-                            updateStatusBar();
-                            slippyMap.repaint();
+                            // Delay to allow file to be fully written, then retry if needed
+                            refreshContactWithRetry(file, 3, 200);
                         }
                         break;
 
@@ -468,6 +471,123 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             ignoreOwnWritesUntil.remove(file); // Expired
         }
         return false;
+    }
+
+    /**
+     * Adds a contact with retry logic to handle files still being written.
+     * Uses a background thread with delays to avoid blocking the EDT.
+     * 
+     * @param file The .zct file to add
+     * @param maxRetries Maximum number of retry attempts
+     * @param delayMs Initial delay in milliseconds before first attempt
+     */
+    private void addContactWithRetry(File file, int maxRetries, int delayMs) {
+        IndexedRasterUtils.background(() -> {
+            int attempt = 0;
+            Exception lastException = null;
+            
+            while (attempt < maxRetries) {
+                try {
+                    // Wait before attempting to read (file may still be writing)
+                    Thread.sleep(delayMs * (attempt + 1)); // Increasing delay
+                    
+                    // Try to add the contact
+                    contactCollection.addContact(file);
+                    
+                    // Success - update UI on EDT
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            updateVisibleContacts(true);
+                            updateStatusBar();
+                            slippyMap.repaint();
+                        } catch (Exception e) {
+                            log.error("Error updating UI after adding contact {}", file.getName(), e);
+                        }
+                    });
+                    
+                    log.debug("Successfully added contact {} after {} attempt(s)", 
+                        file.getName(), attempt + 1);
+                    return; // Success
+                    
+                } catch (Exception e) {
+                    lastException = e;
+                    attempt++;
+                    if (attempt < maxRetries) {
+                        log.debug("Failed to add contact {} (attempt {}/{}): {}", 
+                            file.getName(), attempt, maxRetries, e.getMessage());
+                    }
+                }
+            }
+            
+            // All retries failed
+            log.warn("Failed to add contact {} after {} attempts", 
+                file.getName(), maxRetries, lastException);
+        });
+    }
+
+    /**
+     * Refreshes a contact with retry logic to handle files still being written.
+     * Uses a background thread with delays to avoid blocking the EDT.
+     * 
+     * @param file The .zct file to refresh
+     * @param maxRetries Maximum number of retry attempts
+     * @param delayMs Initial delay in milliseconds before first attempt
+     */
+    private void refreshContactWithRetry(File file, int maxRetries, int delayMs) {
+        IndexedRasterUtils.background(() -> {
+            int attempt = 0;
+            Exception lastException = null;
+            
+            while (attempt < maxRetries) {
+                try {
+                    // Wait before attempting to read (file may still be writing)
+                    Thread.sleep(delayMs * (attempt + 1)); // Increasing delay
+                    
+                    // Try to refresh the contact (throws IOException if file is incomplete/corrupt)
+                    contactCollection.refreshContact(file);
+                    
+                    // Success - update UI on EDT
+                    SwingUtilities.invokeLater(() -> {
+                        try {
+                            contactsMapOverlay.refreshContact(file);
+                            
+                            // Auto-reload if this is the currently displayed contact
+                            if (contactEditor.getZctFile() != null &&
+                                    contactEditor.getZctFile().equals(file)) {
+                                try {
+                                    log.info("Reloading modified contact in editor: {}", file.getName());
+                                    contactEditor.loadZct(file);
+                                } catch (IOException e) {
+                                    log.error("Failed to reload contact in editor", e);
+                                }
+                            }
+                            
+                            updateVisibleContacts(true);
+                            updateStatusBar();
+                            slippyMap.repaint();
+                        } catch (Exception e) {
+                            log.error("Error updating UI after contact refresh for {}", file.getName(), e);
+                        }
+                    });
+                    
+                    log.debug("Successfully refreshed contact {} after {} attempt(s)", 
+                        file.getName(), attempt + 1);
+                    return; // Success
+                    
+                } catch (Exception e) {
+                    lastException = e;
+                    attempt++;
+                    if (attempt < maxRetries) {
+                        log.debug("Failed to refresh contact {} (attempt {}/{}): {}", 
+                            file.getName(), attempt, maxRetries, e.getMessage());
+                    }
+                }
+            }
+            
+            // All retries failed
+            log.warn("Failed to refresh contact {} after {} attempts", 
+                file.getName(), maxRetries, lastException);
+        });
     }
 
     public void savePreferences() {
@@ -674,9 +794,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         
         // Left side: Contact counts
         JPanel countsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        // countsPanel.add(totalContactsLabel);
-        // countsPanel.add(new JLabel("|"));
-        // countsPanel.add(visibleContactsLabel);
+        countsPanel.add(totalContactsLabel);
+        countsPanel.add(visibleContactsLabel);
 
         // Right side: Background job indicator
         JPanel jobPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
@@ -1109,6 +1228,25 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         fileMenu.add(exitItem);
         menuBar.add(fileMenu);
 
+        // Tools menu
+        JMenu toolsMenu = new JMenu("Tools");
+        JMenuItem convertMarksItem = new JMenuItem("Convert Legacy Marks...");
+        convertMarksItem.addActionListener(e -> {
+            if (targetManager != null) {
+                targetManager.convertLegacyMarks();
+            }
+        });
+        toolsMenu.add(convertMarksItem);
+        
+        JMenuItem sendAllItem = new JMenuItem("Send All to Data Manager...");
+        sendAllItem.addActionListener(e -> {
+            if (targetManager != null) {
+                targetManager.sendAllContactsToPulvis();
+            }
+        });
+        toolsMenu.add(sendAllItem);
+        menuBar.add(toolsMenu);
+
         // Help menu
         JMenu helpMenu = new JMenu("Help");
 
@@ -1498,7 +1636,11 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
                     log.debug("Refreshing main contact in collection: {}", mainZctFile);
                     // Refresh main contact in collection
-                    contactCollection.refreshContact(mainZctFile);
+                    try {
+                        contactCollection.refreshContact(mainZctFile);
+                    } catch (IOException e) {
+                        log.error("Failed to refresh contact {} in collection after grouping", mainZctFile.getName(), e);
+                    }
 
                     // Reload the main contact in the editor if it's currently displayed
                     try {
@@ -1558,6 +1700,320 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 }
             }
         });
+    }
+    
+    /**
+     * Reloads all contacts from disk by rescanning the data source directories.
+     * Called after bulk operations like legacy marker conversion.
+     */
+    private void reloadContactsFromDisk() {
+        log.info("Reloading contacts from all data sources");
+        
+        // Clear existing contacts
+        for (CompressedContact contact : new ArrayList<>(contactCollection.getAllContacts())) {
+            contactCollection.removeContact(contact.getZctFile());
+        }
+        
+        // Reload from all data sources
+        for (DataSource dataSource : dataSourceManager.getDataSources()) {
+            if (dataSource instanceof FolderDataSource) {
+                File folder = ((FolderDataSource) dataSource).getFolder();
+                if (folder.exists()) {
+                    log.debug("Scanning folder: {}", folder.getAbsolutePath());
+                    try {
+                        ContactCollection folderContacts = ContactCollection.fromFolder(folder);
+                        for (CompressedContact contact : folderContacts.getAllContacts()) {
+                            try {
+                                contactCollection.addContact(contact.getZctFile());
+                            } catch (IOException e) {
+                                log.warn("Failed to add contact during reload: {}", contact.getZctFile(), e);
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Failed to load contacts from folder: {}", folder, e);
+                    }
+                }
+            }
+        }
+        
+        updateVisibleContacts(true);
+        updateStatusBar();
+        slippyMap.repaint();
+        log.info("Contact reload complete: {} total contacts", contactCollection.getAllContacts().size());
+    }
+
+    /**
+     * Recursively finds all folders containing marks.dat files.
+     * 
+     * @param parentFolder The root folder to search from
+     * @return List of folders containing marks.dat files
+     */
+    private static List<File> findFoldersWithMarks(File parentFolder) {
+        List<File> folders = new ArrayList<>();
+        if (parentFolder == null || !parentFolder.exists() || !parentFolder.isDirectory()) {
+            return folders;
+        }
+        
+        File marksFile = new File(parentFolder, "marks.dat");
+        if (marksFile.exists()) {
+            folders.add(parentFolder);
+        }
+        
+        File[] children = parentFolder.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    folders.addAll(findFoldersWithMarks(child));
+                }
+            }
+        }
+        return folders;
+    }
+
+    /**
+     * Converts legacy marks.dat files to compressed contacts.
+     * Shows a folder selection dialog, recursively searches for folders with marks.dat,
+     * and converts each one using a separate BackgroundJob.
+     * Skips folders that already have .zct files in their contacts/ subfolder.
+     */
+    public void convertLegacyMarks() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setDialogTitle("Select Folder to Convert Legacy Marks");
+        
+        Window window = SwingUtilities.getWindowAncestor(this);
+        int result = fileChooser.showOpenDialog(window);
+        
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        
+        File rootFolder = fileChooser.getSelectedFile();
+        List<File> foldersWithMarks = findFoldersWithMarks(rootFolder);
+       
+        int jobsSubmitted = 0;
+        
+        // Submit jobs for each folder
+        for (File folder : foldersWithMarks) {
+            // Check if already converted
+            File contactsFolder = new File(folder, "contacts");
+            if (!contactsFolder.exists()) {
+                contactsFolder.mkdirs();
+            }
+            
+            final File folderToConvert = folder;
+            BackgroundJob conversionJob = new BackgroundJob("Convert " + folder.getName()) {
+                @Override
+                protected Void doInBackground() throws Exception {
+                    updateStatus("Converting markers from " + folderToConvert.getName() + "...");
+                    
+                    try {
+                        Collection<pt.omst.rasterlib.Contact> contacts = 
+                            ContactUtils.convertContacts(folderToConvert);
+                        setProgress(100);
+                        updateStatus("Completed: " + contacts.size() + " contacts");
+                        log.info("Converted {} markers from {}", contacts.size(), folderToConvert);
+                    } catch (Exception e) {
+                        updateStatus("Failed: " + e.getMessage());
+                        log.error("Conversion failed for {}", folderToConvert, e);
+                        throw e;
+                    }
+                    
+                    return null;
+                }
+                
+                @Override
+                protected void done() {
+                    super.done();
+                    synchronized (TargetManager.this) {
+                        activeConversionJobs--;
+                        if (activeConversionJobs == 0) {
+                            // All conversion jobs complete - reload contacts
+                            log.info("All conversion jobs complete, reloading contacts from disk");
+                            SwingUtilities.invokeLater(() -> {
+                                try {
+                                    reloadContactsFromDisk();
+                                } catch (Exception e) {
+                                    log.error("Failed to reload contacts after conversion", e);
+                                }
+                            });
+                        }
+                    }
+                }
+            };
+            
+            synchronized (this) {
+                activeConversionJobs++;
+            }
+            JobManager.getInstance().submit(conversionJob);
+            jobsSubmitted++;
+        }
+        
+        if (jobsSubmitted > 0) {
+            GuiUtils.infoMessage(window, "Conversion Started", 
+                String.format("Converting %d folder(s).\n\nCheck status bar for progress.", 
+                    jobsSubmitted));
+        } else {
+            GuiUtils.infoMessage(window, "No Conversion Needed", 
+                String.format("Found %d folder(s) with marks.dat, but all have already been converted.", 
+                    foldersWithMarks.size()));
+        }
+    }
+
+    /**
+     * Sends all contacts to connected Pulvis Data Manager servers.
+     * Creates a BackgroundJob that uploads all contacts with error handling.
+     */
+    public void sendAllContactsToPulvis() {
+        // Check if any Pulvis connections exist
+        if (pulvisSynchronizers.isEmpty()) {
+            Window window = SwingUtilities.getWindowAncestor(this);
+            GuiUtils.infoMessage(window, "No Data Manager Connected", 
+                "No Pulvis Data Manager connections found.\n\n" +
+                "Please add a Pulvis connection in the data sources panel first.");
+            return;
+        }
+        
+        // Get all contact files
+        List<CompressedContact> allContacts = contactCollection.getAllContacts();
+        
+        if (allContacts.isEmpty()) {
+            Window window = SwingUtilities.getWindowAncestor(this);
+            GuiUtils.infoMessage(window, "No Contacts", 
+                "No contacts found to send.");
+            return;
+        }
+        
+        // Confirm with user
+        Window window = SwingUtilities.getWindowAncestor(this);
+        int result = javax.swing.JOptionPane.showConfirmDialog(
+            window,
+            String.format("Send %d contact(s) to %d Pulvis Data Manager server(s)?\n\n" +
+                "This may take some time. Existing contacts will be updated.",
+                allContacts.size(), pulvisSynchronizers.size()),
+            "Confirm Send All",
+            javax.swing.JOptionPane.OK_CANCEL_OPTION,
+            javax.swing.JOptionPane.QUESTION_MESSAGE
+        );
+        
+        if (result != javax.swing.JOptionPane.OK_OPTION) {
+            return;
+        }
+        
+        // Create background job
+        BackgroundJob uploadJob = new BackgroundJob("Send All to Data Manager") {
+            @Override
+            protected Void doInBackground() throws Exception {
+                int totalContacts = allContacts.size();
+                int totalServers = pulvisSynchronizers.size();
+                int totalUploads = totalContacts * totalServers;
+                int completed = 0;
+                
+                updateStatus(String.format("Uploading %d contacts to %d server(s)...", 
+                    totalContacts, totalServers));
+                
+                // Track failures per server
+                Map<String, List<String>> serverFailures = new java.util.concurrent.ConcurrentHashMap<>();
+                
+                // Upload to each server
+                for (Map.Entry<PulvisDataSource, PulvisContactSynchronizer> entry : 
+                        pulvisSynchronizers.entrySet()) {
+                    
+                    if (isCancelled()) {
+                        updateStatus("Cancelled by user");
+                        return null;
+                    }
+                    
+                    PulvisDataSource dataSource = entry.getKey();
+                    PulvisContactSynchronizer synchronizer = entry.getValue();
+                    String serverName = dataSource.getHost() + ":" + dataSource.getPort();
+                    List<String> failures = new ArrayList<>();
+                    serverFailures.put(serverName, failures);
+                    
+                    updateStatus(String.format("Uploading to %s...", serverName));
+                    
+                    // Upload each contact
+                    for (int i = 0; i < allContacts.size(); i++) {
+                        if (isCancelled()) {
+                            updateStatus("Cancelled by user");
+                            return null;
+                        }
+                        
+                        CompressedContact contact = allContacts.get(i);
+                        File zctFile = contact.getZctFile();
+                        
+                        try {
+                            // Upload synchronously and wait for completion
+                            synchronizer.uploadContact(zctFile).get(30, java.util.concurrent.TimeUnit.SECONDS);
+                            
+                        } catch (java.util.concurrent.TimeoutException e) {
+                            String msg = "Upload timeout after 30 seconds";
+                            failures.add(contact.getContact().getLabel() + ": " + msg);
+                            log.warn("Timeout uploading {} to {}", 
+                                contact.getContact().getLabel(), serverName);
+                                
+                        } catch (Exception e) {
+                            String errorMsg = e.getCause() != null ? 
+                                e.getCause().getMessage() : e.getMessage();
+                            
+                            // Ignore "already exists" type errors
+                            if (errorMsg != null && 
+                                (errorMsg.contains("409") || 
+                                 errorMsg.toLowerCase().contains("conflict") ||
+                                 errorMsg.toLowerCase().contains("already exists"))) {
+                                log.debug("Contact {} already exists on {}, skipping", 
+                                    contact.getContact().getLabel(), serverName);
+                            } else {
+                                failures.add(contact.getContact().getLabel() + ": " + errorMsg);
+                                log.error("Error uploading {} to {}: {}", 
+                                    contact.getContact().getLabel(), serverName, errorMsg);
+                            }
+                        }
+                        
+                        completed++;
+                        setProgress((completed * 100) / totalUploads);
+                        updateStatus(String.format("Uploaded %d/%d contacts...", 
+                            completed, totalUploads));
+                    }
+                }
+                
+                // Report results
+                SwingUtilities.invokeLater(() -> {
+                    int totalFailures = serverFailures.values().stream()
+                        .mapToInt(List::size).sum();
+                    
+                    if (totalFailures == 0) {
+                        GuiUtils.infoMessage(window, "Upload Complete", 
+                            String.format("Successfully uploaded %d contact(s) to %d server(s).",
+                                totalContacts, totalServers));
+                    } else {
+                        // Show detailed failure report
+                        StringBuilder report = new StringBuilder();
+                        report.append(String.format("Uploaded with %d failure(s):\n\n", totalFailures));
+                        
+                        for (Map.Entry<String, List<String>> entry : serverFailures.entrySet()) {
+                            if (!entry.getValue().isEmpty()) {
+                                report.append(String.format("%s (%d failures):\n", 
+                                    entry.getKey(), entry.getValue().size()));
+                                for (String failure : entry.getValue()) {
+                                    report.append("  • ").append(failure).append("\n");
+                                }
+                                report.append("\n");
+                            }
+                        }
+                        
+                        GuiUtils.errorMessage(window, "Upload Completed with Errors", 
+                            report.toString());
+                    }
+                });
+                
+                setProgress(100);
+                updateStatus("Completed");
+                return null;
+            }
+        };
+        
+        JobManager.getInstance().submit(uploadJob);
     }
 
     public void saveContact(final UUID contactId, final File zctFile) {
