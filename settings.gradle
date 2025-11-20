@@ -7,6 +7,7 @@ include 'contacts'
 include 'pulvis-api'
 include 'omst-licences'
 include 'yolov8-classifier'
+include 'yolov8-detector'
 
 project(':neptus-utils').projectDir = file('neptus-utils')
 project(':rasterlib').projectDir = file('rasterlib')
@@ -15,3 +16,4 @@ project(':contacts').projectDir = file('contacts')
 project(':pulvis-api').projectDir = file('pulvis-api')
 project(':omst-licences').projectDir = file('omst-licences')
 project(':yolov8-classifier').projectDir = file('yolov8-classifier')
+project(':yolov8-detector').projectDir = file('yolov8-detector')
