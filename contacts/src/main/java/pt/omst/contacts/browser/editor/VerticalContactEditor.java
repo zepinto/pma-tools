@@ -120,9 +120,6 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
             observation.getUuid(), 
             observation.getRasterFilename() != null && !observation.getRasterFilename().isEmpty(),
             observation.getAnnotations() != null ? observation.getAnnotations().size() : 0);
-            
-        // Reset classification fields to default values
-        boolean hasClassification = false;
         
         if (observation.getAnnotations() == null || observation.getAnnotations().isEmpty()) {
             log.info("No annotations for observation {}", observation.getUuid());
@@ -130,9 +127,11 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
             for (Annotation annot : observation.getAnnotations()) {
                 log.info("Processing annotation type={}, text={}", annot.getAnnotationType(), annot.getText());
                 if (annot.getAnnotationType().equals(AnnotationType.TEXT)) {
-                    descriptionTextArea.setText(annot.getText());
+                    // Only set description if not empty
+                    if (annot.getText() != null && !annot.getText().trim().isEmpty()) {
+                        descriptionTextArea.setText(annot.getText());
+                    }
                 } else if (annot.getAnnotationType().equals(AnnotationType.CLASSIFICATION)) {
-                    hasClassification = true;
                     typeComboBox.setSelectedItem(annot.getCategory());
                     for (int i = 0; i < confidenceComboBox.getItemCount(); i++) {
                         if (sameThing(confidenceComboBox.getItemAt(i), annot.getConfidence())) {
@@ -143,13 +142,6 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
                     log.info("Setting type to {} and confidence to {}", annot.getCategory(), annot.getConfidence());
                 }
             }
-        }
-        
-        // If no classification found, set to UNKNOWN/0
-        if (!hasClassification) {
-            typeComboBox.setSelectedItem("UNKNOWN");
-            confidenceComboBox.setSelectedItem("0");
-            log.info("No classification found, setting to UNKNOWN/0");
         }
         
         if (observation.getRasterFilename() == null || observation.getRasterFilename().isEmpty()) {
@@ -166,6 +158,12 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         log.debug("Contact has {} observations", contact.getObservations().size());
         this.contact = contact;
         nameTextField.setText(contact.getLabel());
+        
+        // Initialize classification fields to UNKNOWN/0 (will be overwritten if any observation has classification)
+        typeComboBox.setSelectedItem("UNKNOWN");
+        confidenceComboBox.setSelectedItem("0");
+        descriptionTextArea.setText("");
+        
         OffsetDateTime timestamp = OffsetDateTime.now();
         observationsPanel.clear();
         log.debug("Cleared observations panel, now loading {} observations", contact.getObservations().size());

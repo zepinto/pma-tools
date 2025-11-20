@@ -121,12 +121,12 @@ public class ItemList {
         }
 
         while (reader.readRecord()) {
-            String label = reader.get("label");
-            String description = reader.get("description");
+            String label = reader.get("label").trim();
+            String description = reader.get("description").trim();
             if (reader.getColumnCount() > 2) {
                 ArrayList<String> subLabels = new ArrayList<>();
                 for (int i = 2; i < reader.getColumnCount(); i++) {
-                    subLabels.add(reader.get(i));
+                    subLabels.add(reader.get(i).trim());
                 }
                 this.subLabels.put(label, subLabels);
             }

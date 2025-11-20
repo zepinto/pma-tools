@@ -271,13 +271,9 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     }
 
     Point2D.Double imageToScreenCoords(Point2D.Double imageCoords) {
-        double imageScale = image.getWidth() / widthMeters;
-        log.info("imageScale: " + imageScale);
         double heightProportion = heightMeters / widthMeters;
-        log.info("heightProportion: " + heightProportion);
         double zoom = zoomFactorX;
         double zoomY = zoomFactorY * heightProportion;
-        log.info("zoom: " + zoom + ", zoomY: " + zoomY);
         int newWidth = (int) (image.getWidth() * zoom);
         int newHeight = (int) (image.getWidth() * zoomY);
         int x = (getWidth() - newWidth) / 2 + offsetX;
@@ -288,8 +284,7 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     }
 
     Point2D.Double imageToWorldCoords(Point2D.Double imageCoords) {
-        
-        int index = (int) (raster.getSamples().size() * imageCoords.x);
+        int index = (int) (raster.getSamples().size() * imageCoords.y);
         index = Math.min(index, raster.getSamples().size() - 1);
         index = Math.max(index, 0);
         SampleDescription sample = raster.getSamples().get(index);
@@ -312,28 +307,20 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     private Double getSlantRange(Point2D.Double imageCoords) {
         double minX = raster.getSensorInfo().getMinRange();
         double maxX = raster.getSensorInfo().getMaxRange();
-        System.out.println("MinX: " + minX);
-        System.out.println("MaxX: " + maxX);
         return minX + (maxX - minX) * imageCoords.x;
     }
 
     public Double getShadowHeight(Point2D.Double imageCoords1, Point2D.Double imageCoords2) {
         Double slantRangeShadowStart = getSlantRange(imageCoords1);
         Double slantRangeShadowEnd = getSlantRange(imageCoords2);
-        System.out.println(imageCoords1+" -> "+imageCoords2);
-        System.out.println("SlantRangeShadowStart: " + slantRangeShadowStart);
-        System.out.println("SlantRangeShadowEnd: " + slantRangeShadowEnd);
         int sampleIndex = (int) (raster.getSamples().size() * imageCoords1.y);
         sampleIndex = Math.min(sampleIndex, raster.getSamples().size() - 1);
         sampleIndex = Math.max(sampleIndex, 0);
         double altitude = raster.getSamples().get(sampleIndex).getPose().getAltitude();
-        System.out.println("Altitude: " + altitude);
         double S = Math.sqrt(slantRangeShadowStart * slantRangeShadowStart - altitude * altitude) -
                 Math.sqrt(slantRangeShadowEnd * slantRangeShadowEnd - altitude * altitude);
         S = Math.abs(S);
-        System.out.println("S: " + S);
         double result = (altitude * S) / Math.sqrt(slantRangeShadowStart * slantRangeShadowStart - altitude * altitude);
-        System.out.println("Result: " + result);
         return result;
     }
 
@@ -367,6 +354,7 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
                 if (a.getAnnotationType() == AnnotationType.MEASUREMENT)
                     drawMeasurement(a, g2d);
 
+            // Draw north arrow
             g2d.setColor(Color.WHITE);
             g2d.translate(getWidth()-25, 25);
             g2d.rotate(-Math.toRadians(headingDegrees));
@@ -385,11 +373,82 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
             Rectangle2D nBounds = g.getFontMetrics().getStringBounds("N", g);
             g2d.setColor(Color.BLACK);
             g2d.drawString("N", -(int) nBounds.getWidth() / 2+1, 5);
+            
+            // Reset transform for scale bar
+            g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            
+            // Draw scale bar below north arrow
+            drawScaleBar(g2d);
         }
 
         if (interaction != null)
             interaction.paint((Graphics2D)g.create());
         super.paintComponent(g);
+    }
+    
+    private void drawScaleBar(Graphics2D g2d) {
+        // Determine appropriate scale bar length in meters
+        double[] scaleOptions = {0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500};
+        double targetWidthPixels = 80; // Target scale bar width in pixels
+        double metersPerPixel = widthMeters / (image.getWidth() * zoomFactorX);
+        double targetMeters = targetWidthPixels * metersPerPixel;
+        
+        // Find the closest nice number
+        double scaleMeters = scaleOptions[0];
+        for (double option : scaleOptions) {
+            if (option <= targetMeters * 1.5) {
+                scaleMeters = option;
+            }
+        }
+        
+        // Calculate actual pixel width for this scale
+        int scaleBarWidth = (int) (scaleMeters / metersPerPixel);
+        
+        // Format scale text
+        String scaleText = scaleMeters < 1 ? 
+            String.format("%.1f m", scaleMeters) : 
+            String.format("%d m", (int) scaleMeters);
+        
+        // Set font and measure text
+        g2d.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        Rectangle2D textBounds = g2d.getFontMetrics().getStringBounds(scaleText, g2d);
+        
+        // Calculate total width needed (text + padding + bar)
+        int totalWidth = Math.max(scaleBarWidth, (int) textBounds.getWidth()) + 10;
+        
+        // Position scale bar in bottom right, ensuring it stays within bounds
+        int margin = 10;
+        int scaleBarX = Math.max(margin, getWidth() - totalWidth - margin);
+        int scaleBarY = getHeight() - 35;
+        
+        // Adjust bar width and position if still too wide
+        if (scaleBarX < margin) {
+            scaleBarX = margin;
+            scaleBarWidth = Math.min(scaleBarWidth, getWidth() - 2 * margin - 10);
+        }
+        
+        int textX = scaleBarX + (scaleBarWidth - (int) textBounds.getWidth()) / 2;
+        
+        // Draw translucent dark shadow for visibility
+        g2d.setColor(new Color(0, 0, 0, 128));
+        g2d.setStroke(new BasicStroke(4f));
+        g2d.drawLine(scaleBarX, scaleBarY + 10, scaleBarX + scaleBarWidth, scaleBarY + 10);
+        g2d.drawLine(scaleBarX, scaleBarY + 5, scaleBarX, scaleBarY + 15);
+        g2d.drawLine(scaleBarX + scaleBarWidth, scaleBarY + 5, scaleBarX + scaleBarWidth, scaleBarY + 15);
+        g2d.drawString(scaleText, textX + 1, scaleBarY + 4);
+        
+        // Draw scale bar line (same color as coordinates)
+        g2d.setColor(Color.WHITE);
+        g2d.setStroke(new BasicStroke(2f));
+        g2d.drawLine(scaleBarX, scaleBarY + 10, scaleBarX + scaleBarWidth, scaleBarY + 10);
+        
+        // Draw tick marks
+        g2d.drawLine(scaleBarX, scaleBarY + 5, scaleBarX, scaleBarY + 15);
+        g2d.drawLine(scaleBarX + scaleBarWidth, scaleBarY + 5, scaleBarX + scaleBarWidth, scaleBarY + 15);
+        
+        // Draw scale label centered above the bar
+        g2d.drawString(scaleText, textX, scaleBarY + 3);
     }
 
     void drawMeasurement(Annotation annotation, Graphics2D graphics2D) {

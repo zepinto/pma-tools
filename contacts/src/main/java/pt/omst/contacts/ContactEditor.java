@@ -119,7 +119,10 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         }
         for (Annotation annot : observation.getAnnotations()) {
             if (annot.getAnnotationType().equals(AnnotationType.TEXT)) {
-                descriptionTextArea.setText(annot.getText());
+                // Only set description if not empty
+                if (annot.getText() != null && !annot.getText().trim().isEmpty()) {
+                    descriptionTextArea.setText(annot.getText());
+                }
             } else if (annot.getAnnotationType().equals(AnnotationType.CLASSIFICATION)) {
                 typeComboBox.setSelectedItem(annot.getCategory());
                 for (int i = 0; i < confidenceComboBox.getItemCount(); i++) {
@@ -142,6 +145,12 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         log.info("Loading contact from folder {}", folder.getAbsolutePath());
         this.contact = contact;
         nameTextField.setText(contact.getLabel());
+        
+        // Initialize classification fields to UNKNOWN/0 (will be overwritten if any observation has classification)
+        typeComboBox.setSelectedItem("UNKNOWN");
+        confidenceComboBox.setSelectedItem("0");
+        descriptionTextArea.setText("");
+        
         OffsetDateTime timestamp = OffsetDateTime.now();
         observationsPanel.clear();
         for (Observation observation : contact.getObservations()) {
