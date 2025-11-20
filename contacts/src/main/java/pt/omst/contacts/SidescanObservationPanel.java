@@ -463,23 +463,49 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
                 int minY = (int) Math.min(screen1.y, screen2.y);
                 int width = (int) Math.abs(screen1.x - screen2.x);
                 int height = (int) Math.abs(screen1.y - screen2.y);
-                graphics2D.setColor(new Color(255,255,255,128));
+                
+                // Draw shadow
+                graphics2D.setColor(new Color(0, 0, 0, 128));
+                graphics2D.setStroke(new BasicStroke(4f));
+                graphics2D.drawRect(minX, minY, width, height);
+                
+                // Draw box
+                graphics2D.setColor(new Color(255, 255, 255, 200));
+                graphics2D.setStroke(new BasicStroke(2f));
                 graphics2D.drawRect(minX, minY, width, height);
                 break;
                 
             case WIDTH:
-                graphics2D.setColor(new Color(255,0,0,128));
-                graphics2D.setStroke(new BasicStroke(2f));
+                // Draw shadow
+                graphics2D.setColor(new Color(0, 0, 0, 128));
+                graphics2D.setStroke(new BasicStroke(5f));
+                graphics2D.drawLine((int) screen1.x, (int) screen1.y, (int) screen2.x, (int) screen2.y);
+                
+                // Draw line
+                graphics2D.setColor(new Color(255, 0, 0, 200));
+                graphics2D.setStroke(new BasicStroke(3f));
                 graphics2D.drawLine((int) screen1.x, (int) screen1.y, (int) screen2.x, (int) screen2.y);
                 break;
             case LENGTH:
-                graphics2D.setColor(new Color(0,255,0,128));
-                graphics2D.setStroke(new BasicStroke(2f));
+                // Draw shadow
+                graphics2D.setColor(new Color(0, 0, 0, 128));
+                graphics2D.setStroke(new BasicStroke(5f));
+                graphics2D.drawLine((int) screen1.x, (int) screen1.y, (int) screen2.x, (int) screen2.y);
+                
+                // Draw line
+                graphics2D.setColor(new Color(0, 255, 0, 200));
+                graphics2D.setStroke(new BasicStroke(3f));
                 graphics2D.drawLine((int) screen1.x, (int) screen1.y, (int) screen2.x, (int) screen2.y);
                 break;
             case HEIGHT:
-                graphics2D.setColor(new Color(0,0,255,128));
-                graphics2D.setStroke(new BasicStroke(2f));
+                // Draw shadow
+                graphics2D.setColor(new Color(0, 0, 0, 128));
+                graphics2D.setStroke(new BasicStroke(5f));
+                graphics2D.drawLine((int) screen1.x, (int) screen1.y, (int) screen2.x, (int) screen2.y);
+                
+                // Draw line
+                graphics2D.setColor(new Color(0, 0, 255, 200));
+                graphics2D.setStroke(new BasicStroke(3f));
                 graphics2D.drawLine((int) screen1.x, (int) screen1.y, (int) screen2.x, (int) screen2.y);
                 break;
             case SIZE:
