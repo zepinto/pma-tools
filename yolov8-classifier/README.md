@@ -144,24 +144,201 @@ dependencies {
 }
 ```
 
-Example integration with contacts:
+### Example 1: Basic Integration with Contacts
 
 ```java
-// In your contact analysis code
 import pt.omst.yolov8classifier.ContactClassifier;
 import pt.omst.yolov8classifier.Classification;
+import pt.omst.yolov8classifier.ClassificationAnnotationConverter;
 import pt.omst.rasterlib.Contact;
+import pt.omst.rasterlib.Observation;
+import pt.omst.rasterlib.Annotation;
 
-// Initialize classifier once
-ContactClassifier classifier = new ContactClassifier(modelPath, labels);
+import java.awt.image.BufferedImage;
+import java.nio.file.Path;
+import java.util.List;
 
+public class ContactAnalyzer {
+    
+    private final ContactClassifier classifier;
+    
+    public ContactAnalyzer(Path modelPath, String[] labels) throws Exception {
+        this.classifier = new ContactClassifier(modelPath, labels);
+    }
+    
+    /**
+     * Classifies a contact and adds classification annotations to it.
+     */
+    public void classifyContact(Contact contact, BufferedImage snippet) throws Exception {
+        // Run classification
+        List<Classification> results = classifier.classify(snippet, 3);
+        
+        // Convert to annotations
+        List<Annotation> annotations = ClassificationAnnotationConverter
+            .toAnnotations(results, "automated-classifier");
+        
+        // Add to contact's first observation (or create new observation)
+        if (contact.getObservations() != null && !contact.getObservations().isEmpty()) {
+            Observation obs = contact.getObservations().get(0);
+            if (obs.getAnnotations() == null) {
+                obs.setAnnotations(new ArrayList<>());
+            }
+            obs.getAnnotations().addAll(annotations);
+        }
+        
+        // Set contact label to top classification
+        Classification topResult = results.get(0);
+        if (topResult.getConfidence() > 0.5) {
+            contact.setLabel(topResult.getLabel());
+        }
+    }
+    
+    public void close() {
+        classifier.close();
+    }
+}
+```
+
+### Example 2: Batch Processing with Confidence Filtering
+
+```java
+import pt.omst.yolov8classifier.ContactClassifier;
+import pt.omst.yolov8classifier.Classification;
+import pt.omst.yolov8classifier.ClassificationAnnotationConverter;
+
+import java.awt.image.BufferedImage;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+
+public class BatchContactClassifier {
+    
+    private final ContactClassifier classifier;
+    private final double confidenceThreshold;
+    
+    public BatchContactClassifier(ContactClassifier classifier, double confidenceThreshold) {
+        this.classifier = classifier;
+        this.confidenceThreshold = confidenceThreshold;
+    }
+    
+    /**
+     * Classifies multiple contacts and returns high-confidence results.
+     */
+    public Map<String, Classification> classifyBatch(Map<String, BufferedImage> contacts) 
+            throws Exception {
+        Map<String, Classification> results = new HashMap<>();
+        
+        for (Map.Entry<String, BufferedImage> entry : contacts.entrySet()) {
+            List<Classification> classifications = classifier.classify(entry.getValue());
+            
+            // Only keep high-confidence results
+            Classification topResult = classifications.get(0);
+            if (topResult.getConfidence() >= confidenceThreshold) {
+                results.put(entry.getKey(), topResult);
+            }
+        }
+        
+        return results;
+    }
+}
+```
+
+### Example 3: Real-time Classification UI Integration
+
+```java
+import pt.omst.yolov8classifier.ContactClassifier;
+import pt.omst.yolov8classifier.Classification;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.util.List;
+
+public class ClassificationPanel extends JPanel {
+    
+    private final ContactClassifier classifier;
+    private JLabel resultLabel;
+    private JProgressBar confidenceBar;
+    
+    public ClassificationPanel(ContactClassifier classifier) {
+        this.classifier = classifier;
+        initUI();
+    }
+    
+    private void initUI() {
+        setLayout(new BorderLayout());
+        
+        resultLabel = new JLabel("No classification");
+        resultLabel.setFont(new Font("Arial", Font.BOLD, 16));
+        add(resultLabel, BorderLayout.NORTH);
+        
+        confidenceBar = new JProgressBar(0, 100);
+        confidenceBar.setStringPainted(true);
+        add(confidenceBar, BorderLayout.CENTER);
+    }
+    
+    /**
+     * Classifies an image and updates the UI with results.
+     */
+    public void classifyAndDisplay(BufferedImage image) {
+        SwingWorker<List<Classification>, Void> worker = new SwingWorker<>() {
+            @Override
+            protected List<Classification> doInBackground() throws Exception {
+                return classifier.classify(image, 1);
+            }
+            
+            @Override
+            protected void done() {
+                try {
+                    List<Classification> results = get();
+                    if (!results.isEmpty()) {
+                        Classification top = results.get(0);
+                        resultLabel.setText(top.getLabel());
+                        confidenceBar.setValue((int)(top.getConfidence() * 100));
+                        
+                        // Color code by confidence
+                        if (top.getConfidence() > 0.8) {
+                            confidenceBar.setForeground(Color.GREEN);
+                        } else if (top.getConfidence() > 0.5) {
+                            confidenceBar.setForeground(Color.YELLOW);
+                        } else {
+                            confidenceBar.setForeground(Color.ORANGE);
+                        }
+                    }
+                } catch (Exception e) {
+                    resultLabel.setText("Classification failed");
+                    e.printStackTrace();
+                }
+            }
+        };
+        worker.execute();
+    }
+}
+```
+
+### Example 4: Integration with Annotation System
+
+```java
 // For each contact
 BufferedImage snippet = loadContactSnippet(contact);
 List<Classification> predictions = classifier.classify(snippet, 3);
 
-// Use predictions to tag or filter contacts
+// Convert to annotations using the helper
+List<Annotation> annotations = ClassificationAnnotationConverter
+    .toAnnotationsWithMinConfidence(predictions, 0.3);
+
+// Add to observation
+if (!observations.isEmpty()) {
+    Observation obs = observations.get(0);
+    obs.getAnnotations().addAll(annotations);
+}
+
+// Use top prediction for labeling
 String bestGuess = predictions.get(0).getLabel();
 double confidence = predictions.get(0).getConfidence();
+if (confidence > 0.6) {
+    contact.setLabel(bestGuess);
+}
 ```
 
 ## Performance Notes

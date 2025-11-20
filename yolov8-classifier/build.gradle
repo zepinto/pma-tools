@@ -35,6 +35,7 @@ dependencies {
     
     // Local project dependencies
     implementation project(':neptus-utils')
+    api project(':rasterlib')
     
     // ONNX Runtime for cross-platform deep learning inference
     implementation 'com.microsoft.onnxruntime:onnxruntime:1.19.2'

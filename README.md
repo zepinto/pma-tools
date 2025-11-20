@@ -84,9 +84,26 @@ OpenAPI-generated client for the Pulvis data management API.
 
 ---
 
+#### 5. **yolov8-classifier**
+Cross-platform library for classifying sonar contact snippets using YoloV8-cls models.
+
+**Features:**
+- YoloV8 classification model inference
+- Cross-platform support (Linux, macOS, Windows)
+- ONNX Runtime for efficient inference
+- Simple API: BufferedImage in, classifications out
+- Integration with Contact/Observation data structures
+- Annotation conversion utilities
+
+**Dependencies:** `neptus-utils`, `rasterlib`, ONNX Runtime
+
+**See:** [yolov8-classifier/README.md](yolov8-classifier/README.md) for detailed usage
+
+---
+
 ### Applications
 
-#### 5. **rasterfall**
+#### 6. **rasterfall**
 Standalone GUI application for viewing and analyzing sidescan sonar data.
 
 **Features:**
@@ -333,6 +350,12 @@ pma-tools/
 │
 ├── pulvis-api/                 # OpenAPI-generated client
 │   ├── src/main/resources/api/
+│   └── build.gradle
+│
+├── yolov8-classifier/          # YoloV8 classification library
+│   ├── src/main/java/
+│   ├── src/test/java/
+│   ├── README.md
 │   └── build.gradle
 │
 └── rasterfall/                 # Sidescan viewer application
