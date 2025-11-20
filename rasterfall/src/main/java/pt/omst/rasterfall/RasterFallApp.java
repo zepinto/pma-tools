@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
+import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -33,6 +34,7 @@ public class RasterFallApp extends JFrame {
 
     private static final long serialVersionUID = 1L;
     private RasterfallPanel rasterfallPanel;
+    private WelcomePanel welcomePanel;
 
     public RasterFallApp() {
         setTitle("Sidescan RasterFall");
@@ -40,6 +42,10 @@ public class RasterFallApp extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
+        
+        // Show welcome panel initially
+        welcomePanel = new WelcomePanel();
+        add(welcomePanel, BorderLayout.CENTER);
         
         setupMenubar();
     }
@@ -60,6 +66,25 @@ public class RasterFallApp extends JFrame {
         });
         
         fileMenu.add(openFolderItem);
+        fileMenu.addSeparator();
+        
+        // Preferences submenu
+        JMenu preferencesMenu = new JMenu("Preferences");
+        
+        // Dark Mode toggle
+        JCheckBoxMenuItem darkModeItem = new JCheckBoxMenuItem("Dark Mode");
+        darkModeItem.setSelected(GuiUtils.isDarkTheme());
+        darkModeItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                boolean isDark = darkModeItem.isSelected();
+                GuiUtils.setTheme(isDark ? "dark" : "light");
+            }
+        });
+        preferencesMenu.add(darkModeItem);
+        
+        fileMenu.add(preferencesMenu);
+        fileMenu.addSeparator();
         
         // Exit menu item
         JMenuItem exitItem = new JMenuItem("Exit");
@@ -70,7 +95,6 @@ public class RasterFallApp extends JFrame {
             }
         });
         
-        fileMenu.addSeparator();
         fileMenu.add(exitItem);
         
         menuBar.add(fileMenu);        
@@ -166,6 +190,11 @@ public class RasterFallApp extends JFrame {
                         }
                     });
                     Thread.sleep(100);
+                }
+                
+                // Remove welcome panel if it's showing
+                if (welcomePanel != null) {
+                    SwingUtilities.invokeLater(() -> remove(welcomePanel));
                 }
                 
                 // Create progress callback that updates splash screen
