@@ -206,14 +206,14 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
                         double widthMeters = indexedRaster.getSensorInfo().getMaxRange() - indexedRaster.getSensorInfo().getMinRange();
 
                         double heightWidthRatio = distanceMeters / widthMeters;
-                        int newImageHeight = (int)(200 * heightWidthRatio);
+                        int newImageHeight = (int)(224 * heightWidthRatio);
                              
-                        BufferedImage resized = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.FIT_EXACT, 200, newImageHeight);
-                        // If taller than 300px, crop equally from top and bottom
-                        if (resized.getHeight() > 200) {
-                            int excess = resized.getHeight() - 200;
+                        BufferedImage resized = Scalr.resize(img, Scalr.Method.QUALITY, Scalr.Mode.FIT_EXACT, 224, newImageHeight);
+                        // If taller than 224, crop equally from top and bottom
+                        if (resized.getHeight() > 224) {
+                            int excess = resized.getHeight() - 224;
                             int cropTop = excess / 2;
-                            BufferedImage cropped = resized.getSubimage(0, cropTop, resized.getWidth(), 200);
+                            BufferedImage cropped = resized.getSubimage(0, cropTop, resized.getWidth(), 224);
                             thumbnail = cropped;
                         } else {
                             thumbnail = resized;
