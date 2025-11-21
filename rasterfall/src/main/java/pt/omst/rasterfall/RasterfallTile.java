@@ -259,7 +259,15 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
     public void setZoom(double zoom) {
         this.zoom = zoom;
         revalidate();
-        repaint();
+    }
+
+    /**
+     * Sets zoom without triggering revalidation - for batch updates.
+     * Parent container will handle layout after all tiles are updated.
+     */
+    public void setZoomQuiet(double zoom) {
+        this.zoom = zoom;
+        invalidate();
     }
 
     @Override
@@ -309,6 +317,9 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
             g2d.drawImage(image, (int)leftMargin, 0, getWidth(), getHeight(), null);
         }
+        // paint index of the tile
+        //g2d.setColor(Color.YELLOW);
+        //g2d.drawString("Tile: " + raster.getFilename(), 10, 20);
     }
 
     @Override

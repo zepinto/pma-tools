@@ -173,9 +173,15 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     public void setZoom(double zoom) {
         this.zoom = zoom;
-        for (RasterfallTile tile : tiles)
-            tile.setZoom(zoom);
+        
+        // Batch update all tiles without triggering individual revalidations
+        for (RasterfallTile tile : tiles) {
+            tile.setZoomQuiet(zoom);
+        }
+        
+        // Single layout update
         revalidate();
+        repaint();
     }
 
     public long getTimestamp() {
@@ -244,19 +250,18 @@ public class RasterfallTiles extends JPanel implements Closeable {
         if (tiles.isEmpty())
             return;
         
-        // Invalidate all tiles first so they recalculate their preferred sizes
-        // based on the new parent width after resize
+        // Calculate all tile positions in one pass
+        int yPosition = 0;
+        
         for (RasterfallTile tile : tiles) {
-            tile.invalidate();
+            Dimension tileSize = tile.getPreferredSize();
+            tile.setBounds(0, yPosition, tileSize.width, tileSize.height);
+            yPosition += tileSize.height;
         }
         
-        double verticalSize = 0;
-        for (RasterfallTile tile : tiles) {
-            verticalSize += tile.getPreferredSize().getHeight();
-        }
-        Dimension newSize = new Dimension(tiles.getFirst().getPreferredSize().width, (int) verticalSize);
-        setPreferredSize(newSize);
-        super.doLayout();
+        // Update container size
+        int width = tiles.getFirst().getPreferredSize().width;
+        setPreferredSize(new Dimension(width, yPosition));
     }
 
     public long getStartTime() {

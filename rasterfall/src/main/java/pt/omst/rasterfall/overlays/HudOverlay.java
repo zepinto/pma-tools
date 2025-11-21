@@ -29,6 +29,7 @@ public class HudOverlay extends AbstractOverlay {
     @Override
     public void install(RasterfallTiles waterfall) {
         this.waterfall = waterfall;
+        //createHud();
         Thread.ofVirtual().start(this::createHud);
     }
 
