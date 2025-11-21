@@ -7,14 +7,13 @@ package pt.omst.rasterlib;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
-import pt.lsts.neptus.mra.LogMarker;
-import pt.lsts.neptus.mra.SidescanLogMarker;
-import pt.lsts.neptus.mra.SidescanPotentialMarker;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.lsts.neptus.util.I18n;
 
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Utility class for finding potential markers in IndexedRaster data using gradient descent algorithms.
@@ -195,20 +194,28 @@ public class IndexedRasterTiles {
     }
 
     /**
-     * Generate potential markers for a given original marker.
-     * Finds all locations in the raster that match the marker's latitude/longitude,
+     * Generate potential observations for a given target contact.
+     * Finds all locations in the raster that match the contact's latitude/longitude,
      * separated by at least 5 seconds.
      * 
-     * @param originalMark The original sidescan log marker
+     * @param targetContact The target contact to find matches for
      * @param imageWidth The width of the raster image
-     * @param markerConsumer Consumer to receive generated potential markers
-     * @return Number of potential markers found
+     * @param observationConsumer Consumer to receive generated observations
+     * @return Number of observations found
      */
-    public int generatePotentialMarkers(SidescanLogMarker originalMark, int imageWidth, 
-                                        java.util.function.Consumer<SidescanPotentialMarker> markerConsumer) {
-        LocationType targetPoint = new LocationType(originalMark.getLatRads(), originalMark.getLonRads());
-        long nextMarkTimeMs = (long) originalMark.getTimestamp();
-        int potentialMarkerIdx = 0;
+    public int generatePotentialObservations(Contact targetContact, int imageWidth, 
+                                            java.util.function.Consumer<Observation> observationConsumer) {
+        LocationType targetPoint = new LocationType(
+            Math.toRadians(targetContact.getLatitude()), 
+            Math.toRadians(targetContact.getLongitude())
+        );
+        
+        // Get the earliest observation timestamp from the target contact to use as exclusion reference
+        long nextMarkTimeMs = targetContact.getObservations().isEmpty() 
+            ? System.currentTimeMillis()
+            : targetContact.getObservations().get(0).getTimestamp().toInstant().toEpochMilli();
+        
+        int potentialObservationIdx = 0;
         int timeOffsetMs = 5000;
         
         long firstTimestamp = raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
@@ -261,44 +268,49 @@ public class IndexedRasterTiles {
                 log.info("Min Distance improved from " + minDistance + " to " + 
                          targetPoint.getHorizontalDistanceInMeters(minP));
                 
-                SidescanPotentialMarker potentialMarker = new SidescanPotentialMarker(
-                    originalMark,
-                    originalMark.getLabel() + "-p" + potentialMarkerIdx,
-                    bestTs,
-                    targetPoint.getLatitudeRads(),
-                    targetPoint.getLongitudeRads(),
-                    distNadir
-                );
+                // Create an observation for this potential match
+                Observation observation = new Observation();
+                observation.setUuid(UUID.randomUUID());
+                observation.setLatitude(targetPoint.getLatitudeRads());
+                observation.setLongitude(targetPoint.getLongitudeRads());
+                observation.setDepth(bestSample.getPose().getDepth() != null ? bestSample.getPose().getDepth() : 0.0);
+                observation.setTimestamp(bestSample.getTimestamp());
+                observation.setRasterFilename(raster.getFilename());
+                observation.setSystemName(raster.getSensorInfo() != null && raster.getSensorInfo().getSystemName() != null 
+                    ? raster.getSensorInfo().getSystemName() 
+                    : "unknown");
                 
-                potentialMarkerIdx++;
+                potentialObservationIdx++;
                 sampleIndex += 4; // Skip ahead a bit
                 
-                originalMark.addChild(potentialMarker);
-                if (markerConsumer != null) {
-                    markerConsumer.accept(potentialMarker);
+                // Add the observation to the target contact
+                targetContact.getObservations().add(observation);
+                
+                if (observationConsumer != null) {
+                    observationConsumer.accept(observation);
                 }
             }
             sampleIndex++;
         }
         
-        return potentialMarkerIdx;
+        return potentialObservationIdx;
     }
 
     /**
-     * Generate potential markers with a message dialog.
+     * Generate potential observations with a message dialog.
      * 
-     * @param originalMark The original sidescan log marker
+     * @param targetContact The target contact to find matches for
      * @param imageWidth The width of the raster image
-     * @param markerConsumer Consumer to receive generated potential markers
-     * @return true if potential markers were found
+     * @param observationConsumer Consumer to receive generated observations
+     * @return true if observations were found
      */
-    public boolean generatePotentialMarkersWithMessage(SidescanLogMarker originalMark, int imageWidth,
-                                                       java.util.function.Consumer<SidescanPotentialMarker> markerConsumer) {
-        int count = generatePotentialMarkers(originalMark, imageWidth, markerConsumer);
+    public boolean generatePotentialObservationsWithMessage(Contact targetContact, int imageWidth,
+                                                            java.util.function.Consumer<Observation> observationConsumer) {
+        int count = generatePotentialObservations(targetContact, imageWidth, observationConsumer);
         
-        String message = I18n.text("Found " + count + " potential marks for " + originalMark.getLabel());
+        String message = I18n.text("Found " + count + " potential observations for " + targetContact.getLabel());
         try {
-            GuiUtils.infoMessage(null, I18n.text("Potential Marks"), message);
+            GuiUtils.infoMessage(null, I18n.text("Potential Observations"), message);
         } catch (java.awt.HeadlessException e) {
             // Running in headless mode (e.g., during tests), just log the message
             log.info(message);

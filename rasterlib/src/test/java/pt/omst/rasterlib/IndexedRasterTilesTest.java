@@ -9,13 +9,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import pt.lsts.neptus.core.LocationType;
-import pt.lsts.neptus.mra.SidescanLogMarker;
-import pt.lsts.neptus.mra.SidescanPotentialMarker;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,164 +79,175 @@ class IndexedRasterTilesTest {
     }
 
     @Test
-    @DisplayName("Test generatePotentialMarkers with matching location")
-    void testGeneratePotentialMarkersWithMatch() {
+    @DisplayName("Test generatePotentialObservations with matching location")
+    void testGeneratePotentialObservationsWithMatch() {
         IndexedRaster raster = createTestRaster();
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
-        // Create a marker at a location that should match one of the samples
+        // Create a contact at a location that should match one of the samples
         // Use the center of the raster (nadir position) for better matching
         SampleDescription midSample = raster.getSamples().get(50);
-        double targetLat = midSample.getPose().getLatitude();
-        double targetLon = midSample.getPose().getLongitude();
+        double targetLat = Math.toDegrees(midSample.getPose().getLatitude());
+        double targetLon = Math.toDegrees(midSample.getPose().getLongitude());
         
         // Use the first sample timestamp minus 10 seconds to ensure we're outside the exclusion zone
         long firstTimestamp = raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
         
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            firstTimestamp - 10000, // 10 seconds before start to avoid exclusion
-            targetLat,
-            targetLon,
-            0.0, // x
-            0.0, // y
-            0, // width
-            0, // height
-            100.0, // range
-            0, // subsystem
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(targetLat);
+        targetContact.setLongitude(targetLon);
+        targetContact.setUuid(UUID.randomUUID());
         
-        List<SidescanPotentialMarker> potentialMarkers = new ArrayList<>();
-        int count = tiles.generatePotentialMarkers(originalMark, 1000, potentialMarkers::add);
+        // Add initial observation at a time outside the raster range
+        Observation initialObs = new Observation();
+        initialObs.setTimestamp(OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(firstTimestamp - 10000), 
+            ZoneOffset.UTC));
+        initialObs.setLatitude(Math.toRadians(targetLat));
+        initialObs.setLongitude(Math.toRadians(targetLon));
+        initialObs.setDepth(0.0);
+        targetContact.getObservations().add(initialObs);
         
-        // Should find at least one potential marker near the matching location
+        List<Observation> potentialObservations = new ArrayList<>();
+        int count = tiles.generatePotentialObservations(targetContact, 1000, potentialObservations::add);
+        
+        // Should find at least one potential observation near the matching location
         // The algorithm looks for matches within 2 meters, at the nadir position
-        assertTrue(count > 0, "Should find at least one potential marker at nadir position");
-        assertEquals(count, potentialMarkers.size());
+        assertTrue(count > 0, "Should find at least one potential observation at nadir position");
+        assertEquals(count, potentialObservations.size());
         
-        // Verify the potential markers are children of the original mark
-        assertEquals(count, originalMark.getChildren().size());
+        // Verify the observations were added to the contact (excluding the initial one)
+        assertEquals(count + 1, targetContact.getObservations().size());
     }
 
     @Test
-    @DisplayName("Test generatePotentialMarkers with no match")
-    void testGeneratePotentialMarkersNoMatch() {
+    @DisplayName("Test generatePotentialObservations with no match")
+    void testGeneratePotentialObservationsNoMatch() {
         IndexedRaster raster = createTestRaster();
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
-        // Create a marker at a location far from the raster path
-        double targetLat = Math.toRadians(45.0); // Far north
-        double targetLon = Math.toRadians(-8.0);
+        // Create a contact at a location far from the raster path
+        double targetLat = 45.0; // Far north (in degrees)
+        double targetLon = -8.0;
         
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            System.currentTimeMillis() - 500000,
-            targetLat,
-            targetLon,
-            0.0, // x
-            0.0, // y
-            0, // width
-            0, // height
-            100.0, // range
-            0, // subsystem
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(targetLat);
+        targetContact.setLongitude(targetLon);
+        targetContact.setUuid(UUID.randomUUID());
         
-        List<SidescanPotentialMarker> potentialMarkers = new ArrayList<>();
-        int count = tiles.generatePotentialMarkers(originalMark, 1000, potentialMarkers::add);
+        List<Observation> potentialObservations = new ArrayList<>();
+        int count = tiles.generatePotentialObservations(targetContact, 1000, potentialObservations::add);
         
-        // Should not find any markers at this distant location
-        assertEquals(0, count, "Should not find markers at distant location");
+        // Should not find any observations at this distant location
+        assertEquals(0, count, "Should not find observations at distant location");
     }
 
     @Test
-    @DisplayName("Test potential markers are properly spaced")
-    void testPotentialMarkerSpacing() {
+    @DisplayName("Test potential observations are properly spaced")
+    void testPotentialObservationSpacing() {
         IndexedRaster raster = createTestRaster();
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
-        // Create a marker at a location that matches multiple samples
+        // Create a contact at a location that matches multiple samples
         SampleDescription sample = raster.getSamples().get(10);
-        double targetLat = sample.getPose().getLatitude();
-        double targetLon = sample.getPose().getLongitude();
+        double targetLat = Math.toDegrees(sample.getPose().getLatitude());
+        double targetLon = Math.toDegrees(sample.getPose().getLongitude());
         
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000,
-            targetLat,
-            targetLon,
-            0.0, // x
-            0.0, // y
-            0, // width
-            0, // height
-            100.0, // range
-            0, // subsystem
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(targetLat);
+        targetContact.setLongitude(targetLon);
+        targetContact.setUuid(UUID.randomUUID());
         
-        List<SidescanPotentialMarker> potentialMarkers = new ArrayList<>();
-        tiles.generatePotentialMarkers(originalMark, 1000, potentialMarkers::add);
+        // Add initial observation
+        Observation initialObs = new Observation();
+        initialObs.setTimestamp(OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
+            ZoneOffset.UTC));
+        targetContact.getObservations().add(initialObs);
         
-        // Verify that potential markers are spaced at least 5 seconds apart
-        for (int i = 1; i < potentialMarkers.size(); i++) {
-            double timeDiff = Math.abs(potentialMarkers.get(i).getTimestamp() - 
-                                      potentialMarkers.get(i-1).getTimestamp());
+        List<Observation> potentialObservations = new ArrayList<>();
+        tiles.generatePotentialObservations(targetContact, 1000, potentialObservations::add);
+        
+        // Verify that potential observations are spaced at least 4 seconds apart
+        for (int i = 1; i < potentialObservations.size(); i++) {
+            double timeDiff = Math.abs(
+                potentialObservations.get(i).getTimestamp().toInstant().toEpochMilli() - 
+                potentialObservations.get(i-1).getTimestamp().toInstant().toEpochMilli()
+            );
             assertTrue(timeDiff >= 4000, 
-                "Potential markers should be spaced at least 4 seconds apart, found: " + timeDiff + "ms");
+                "Potential observations should be spaced at least 4 seconds apart, found: " + timeDiff + "ms");
         }
     }
 
     @Test
-    @DisplayName("Test that potential markers have correct parent relationship")
-    void testPotentialMarkerParentRelationship() {
+    @DisplayName("Test that observations have correct properties")
+    void testObservationProperties() {
         IndexedRaster raster = createTestRaster();
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
         SampleDescription sample = raster.getSamples().get(20);
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000,
-            sample.getPose().getLatitude(),
-            sample.getPose().getLongitude(),
-            0.0, 0.0, 0, 0, 100.0, 0,
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        double targetLat = Math.toDegrees(sample.getPose().getLatitude());
+        double targetLon = Math.toDegrees(sample.getPose().getLongitude());
         
-        List<SidescanPotentialMarker> potentialMarkers = new ArrayList<>();
-        int count = tiles.generatePotentialMarkers(originalMark, 1000, potentialMarkers::add);
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(targetLat);
+        targetContact.setLongitude(targetLon);
+        targetContact.setUuid(UUID.randomUUID());
+        
+        // Add initial observation
+        Observation initialObs = new Observation();
+        initialObs.setTimestamp(OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
+            ZoneOffset.UTC));
+        targetContact.getObservations().add(initialObs);
+        
+        List<Observation> potentialObservations = new ArrayList<>();
+        int count = tiles.generatePotentialObservations(targetContact, 1000, potentialObservations::add);
         
         if (count > 0) {
-            // Verify each potential marker has the correct parent
-            for (SidescanPotentialMarker marker : potentialMarkers) {
-                assertTrue(marker.hasParent());
-                assertEquals(originalMark, marker.getParent());
-                assertTrue(marker.getLabel().startsWith(originalMark.getLabel() + "-p"));
+            // Verify each observation has required properties
+            for (Observation obs : potentialObservations) {
+                assertNotNull(obs.getUuid());
+                assertNotNull(obs.getTimestamp());
+                assertNotNull(obs.getRasterFilename());
+                assertNotNull(obs.getSystemName());
+                assertTrue(obs.getLatitude() != 0 || obs.getLongitude() != 0);
             }
         }
     }
 
     @Test
-    @DisplayName("Test generatePotentialMarkersWithMessage")
-    void testGeneratePotentialMarkersWithMessage() {
+    @DisplayName("Test generatePotentialObservationsWithMessage")
+    void testGeneratePotentialObservationsWithMessage() {
         IndexedRaster raster = createTestRaster();
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
         SampleDescription sample = raster.getSamples().get(30);
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000,
-            sample.getPose().getLatitude(),
-            sample.getPose().getLongitude(),
-            0.0, 0.0, 0, 0, 100.0, 0,
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        double targetLat = Math.toDegrees(sample.getPose().getLatitude());
+        double targetLon = Math.toDegrees(sample.getPose().getLongitude());
+        
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(targetLat);
+        targetContact.setLongitude(targetLon);
+        targetContact.setUuid(UUID.randomUUID());
+        
+        // Add initial observation
+        Observation initialObs = new Observation();
+        initialObs.setTimestamp(OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
+            ZoneOffset.UTC));
+        targetContact.getObservations().add(initialObs);
         
         // This test just verifies the method runs without error
         // We can't easily test the GUI message display in unit tests
-        boolean result = tiles.generatePotentialMarkersWithMessage(originalMark, 1000, null);
+        boolean result = tiles.generatePotentialObservationsWithMessage(targetContact, 1000, null);
         
-        // Result should be true if markers were found, false otherwise
+        // Result should be true if observations were found, false otherwise
         // Just verify the method completes without exception
         assertNotNull(result);
     }
@@ -255,19 +265,26 @@ class IndexedRasterTilesTest {
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
         SampleDescription sample = raster.getSamples().get(40);
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000,
-            sample.getPose().getLatitude(),
-            sample.getPose().getLongitude(),
-            0.0, 0.0, 0, 0, 100.0, 0,
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        double targetLat = Math.toDegrees(sample.getPose().getLatitude());
+        double targetLon = Math.toDegrees(sample.getPose().getLongitude());
         
-        List<SidescanPotentialMarker> potentialMarkers = new ArrayList<>();
-        int count = tiles.generatePotentialMarkers(originalMark, 1000, potentialMarkers::add);
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(targetLat);
+        targetContact.setLongitude(targetLon);
+        targetContact.setUuid(UUID.randomUUID());
         
-        // Should still be able to find markers with different heading
+        // Add initial observation
+        Observation initialObs = new Observation();
+        initialObs.setTimestamp(OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
+            ZoneOffset.UTC));
+        targetContact.getObservations().add(initialObs);
+        
+        List<Observation> potentialObservations = new ArrayList<>();
+        int count = tiles.generatePotentialObservations(targetContact, 1000, potentialObservations::add);
+        
+        // Should still be able to find observations with different heading
         assertTrue(count >= 0, "Method should complete without error");
     }
 
@@ -297,16 +314,13 @@ class IndexedRasterTilesTest {
         
         IndexedRasterTiles tiles = new IndexedRasterTiles(raster);
         
-        SidescanLogMarker originalMark = new SidescanLogMarker(
-            "TestMark",
-            System.currentTimeMillis() - 10000,
-            Math.toRadians(41.0),
-            Math.toRadians(-8.0),
-            0.0, 0.0, 0, 0, 100.0, 0,
-            pt.lsts.neptus.colormap.ColorMapFactory.createBronzeColormap()
-        );
+        Contact targetContact = new Contact();
+        targetContact.setLabel("TestContact");
+        targetContact.setLatitude(41.0);
+        targetContact.setLongitude(-8.0);
+        targetContact.setUuid(UUID.randomUUID());
         
         // Should handle minimal raster without crashing
-        assertDoesNotThrow(() -> tiles.generatePotentialMarkers(originalMark, 1000, null));
+        assertDoesNotThrow(() -> tiles.generatePotentialObservations(targetContact, 1000, null));
     }
 }
