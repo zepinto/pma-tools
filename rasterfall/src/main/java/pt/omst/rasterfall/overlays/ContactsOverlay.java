@@ -116,11 +116,15 @@ public class ContactsOverlay extends AbstractOverlay {
                 
                 drawnCount++;
             } catch (RuntimeException e) {
-                log.debug("Error drawing contact bounding box: {}", e.getMessage());
+                log.debug("Error drawing bounding box for contact '{}': {}", 
+                    contact.getLabel() != null ? contact.getLabel() : contact.getZctFile().getName(), 
+                    e.getMessage());
             }
         }
         
-        log.trace("Drew {} contact bounding boxes", drawnCount);
+        if (log.isDebugEnabled()) {
+            log.debug("Drew {} contact bounding boxes", drawnCount);
+        }
         g2.dispose();
     }
 }
