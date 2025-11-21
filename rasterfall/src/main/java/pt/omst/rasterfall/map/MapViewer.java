@@ -11,6 +11,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Insets;
 import java.io.File;
+import java.time.Instant;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
@@ -29,6 +30,7 @@ import javax.swing.border.EmptyBorder;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.contacts.browser.ContactsMapOverlay;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
@@ -36,6 +38,7 @@ import pt.omst.contacts.reports.GenerateReportDialog;
 import pt.omst.gui.jobs.TaskStatusIndicator;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterfall.RasterfallTiles;
+import pt.omst.rasterfall.overlays.InteractionListenerOverlay.RasterfallListener;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 
@@ -47,12 +50,13 @@ import pt.omst.rasterlib.contacts.ContactCollection;
  */
 @Slf4j
 @Getter
-public class MapViewer extends JPanel implements AutoCloseable {
+public class MapViewer extends JPanel implements AutoCloseable, RasterfallListener {
 
     private final SlippyMap slippyMap;
     private final VerticalContactEditor contactEditor;
     private ContactCollection contactCollection;
     private final ContactsMapOverlay contactsMapOverlay;
+    private final InteractionMapOverlay interactionMapOverlay = new InteractionMapOverlay();
     private final PathMapOverlay pathMapOverlay;
     private final JSplitPane mainSplitPane;
     private final JPanel eastPanel;
@@ -79,8 +83,9 @@ public class MapViewer extends JPanel implements AutoCloseable {
         slippyMap = new SlippyMap();
         contactsMapOverlay = new ContactsMapOverlay(contactCollection);
         pathMapOverlay = new PathMapOverlay();
-        slippyMap.addMapOverlay(contactsMapOverlay);
         slippyMap.addMapOverlay(pathMapOverlay);
+        slippyMap.addMapOverlay(interactionMapOverlay);
+        slippyMap.addMapOverlay(contactsMapOverlay);
         
         contactsMapOverlay.setContactSelectionListener(contact -> {
             log.info("Contact selected: {}", contact.getContact().getLabel());
@@ -432,5 +437,21 @@ public class MapViewer extends JPanel implements AutoCloseable {
             slippyMap.close();
         }
         log.info("Simple Contact Viewer closed");
+    }
+
+    @Override
+    public void onMouseMoved(double latitude, double longitude, Instant timestamp) {
+        log.info("Mouse moved to lat: {}, lon: {}, time: {}", latitude, longitude, timestamp);
+        interactionMapOverlay.setMouseLocation(new LocationType(latitude, longitude));
+        repaint();
+    }
+
+    @Override
+    public void onVisibleBoundsChanged(LocationType loc1, LocationType loc2, LocationType loc3, LocationType loc4, Instant startTime,
+            Instant endTime) {
+
+        interactionMapOverlay.setVisibleBounds(loc1, loc2, loc3, loc4);
+
+        repaint();
     }
 }

@@ -92,6 +92,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
                 rasters.add(raster);
                 RasterfallTile tile = new RasterfallTile(index.getParentFile(), raster);
                 tiles.add(tile);
+                rasters.sort((r1, r2) -> r2.getSamples().get(0).getTimestamp().compareTo(r1.getSamples().get(0).getTimestamp()));
             } catch (IOException e) {
                 log.warning("Error reading raster file: " + e.getMessage());
             }

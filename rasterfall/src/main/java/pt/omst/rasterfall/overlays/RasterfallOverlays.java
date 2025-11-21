@@ -52,6 +52,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     private final HeightOverlay heightOverlay = new HeightOverlay();
     private final ReplayOverlay replayOverlay = new ReplayOverlay();
     private final ContactsOverlay contactsOverlay = new ContactsOverlay();
+    private final InteractionListenerOverlay interactionListenerOverlay = new InteractionListenerOverlay();
     private final SonarCoverageOverlay sonarCoverageOverlay = new SonarCoverageOverlay();
     private final ButtonGroup group = new ButtonGroup();
     private final JPanel controlsPanel = new JPanel(new BorderLayout());
@@ -67,6 +68,16 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         this.tiles = tiles;
         LogReplay.addReplayListener(this);
         contactsOverlay.install(tiles);
+        interactionListenerOverlay.install(tiles);
+        activeOverlays.add(interactionListenerOverlay);
+    }
+
+    public void addInteractionListener(InteractionListenerOverlay.RasterfallListener listener) {
+        interactionListenerOverlay.addListener(listener);
+    }
+
+    public void removeInteractionListener(InteractionListenerOverlay.RasterfallListener listener) {
+        interactionListenerOverlay.removeListener(listener);
     }
 
     @Override
@@ -258,7 +269,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
             overlay.paint(g, c);
         }
 
-        contactsOverlay.paint(g, c);
+        contactsOverlay.paint(g, c);        
     }
 
     @Override

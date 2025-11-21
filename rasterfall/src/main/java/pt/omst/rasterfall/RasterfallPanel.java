@@ -19,6 +19,7 @@ import javax.swing.JViewport;
 
 import lombok.extern.java.Log;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.omst.rasterfall.overlays.InteractionListenerOverlay;
 import pt.omst.rasterfall.overlays.RasterfallOverlays;
 
 @Log
@@ -77,7 +78,7 @@ public class RasterfallPanel extends JPanel implements Closeable {
         this.replay = new RasterfallReplay(scrollbar);
         if (progressCallback != null) {
             progressCallback.accept("Replay controller set up.");
-        }
+        }        
     }
 
     @Override
@@ -117,6 +118,14 @@ public class RasterfallPanel extends JPanel implements Closeable {
         frame.setContentPane(rasterfall);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
+    }
+
+    public void addInteractionListener(InteractionListenerOverlay.RasterfallListener listener) {
+        overlays.addInteractionListener(listener);
+    }
+
+    public void removeInteractionListener(InteractionListenerOverlay.RasterfallListener listener) {
+        overlays.removeInteractionListener(listener);
     }
     
 }

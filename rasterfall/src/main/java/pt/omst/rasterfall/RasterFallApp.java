@@ -185,13 +185,16 @@ public class RasterFallApp extends JFrame {
         try {
             // Get or create ContactCollection
             ContactCollection contacts;
+            RasterfallTiles waterfall = null;
+
             if (rasterfallPanel != null) {
                 try {
-                    RasterfallTiles waterfall = rasterfallPanel.getWaterfall();
+                    waterfall = rasterfallPanel.getWaterfall();
                     contacts = waterfall.getContacts();
                 } catch (Exception ex) {
                     System.err.println("Warning: Could not load contacts from waterfall: " + ex.getMessage());
                     contacts = new ContactCollection();
+                    rasterfallPanel.addInteractionListener(mapViewer);
                 }
             } else {
                 // No folder loaded yet, create empty collection
@@ -200,7 +203,10 @@ public class RasterFallApp extends JFrame {
 
             // Create SimpleContactViewer
             mapViewer = new MapViewer(contacts);
-
+            if (waterfall != null) {
+                mapViewer.loadWaterfall(waterfall);
+            }
+            
             // Create and setup frame
             mapViewerFrame = new JFrame("Map Viewer");
             mapViewerFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
