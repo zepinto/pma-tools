@@ -13,6 +13,7 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,15 +32,18 @@ import javax.swing.JFileChooser;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JEditorPane;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JWindow;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
@@ -137,7 +141,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      */
     public TargetManager(Instant minTime, Instant maxTime) {
         setLayout(new BorderLayout(5, 0));
-        
+
         contactCollection = new ContactCollection();
         pulvisConnectionManager = new PulvisConnectionManager(contactCollection);
         fileWatcherService = new ContactFileWatcherService(contactCollection);
@@ -201,10 +205,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         totalContactsLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
         totalContactsLabel.setPreferredSize(new Dimension(100, 24));
         visibleContactsLabel = new JLabel("Visible: 0");
-        visibleContactsLabel.setFont(new Font("Dialog", Font.PLAIN, 10));        
+        visibleContactsLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
         visibleContactsLabel.setPreferredSize(new Dimension(100, 24));
         taskStatusIndicator = new TaskStatusIndicator(null); // Will set proper parent later
-        taskStatusIndicator.setBorder(new EmptyBorder(0,0,0,0));
+        taskStatusIndicator.setBorder(new EmptyBorder(0, 0, 0, 0));
 
         // Create status bar with background job indicator and contact counts
         statusBar = createStatusBar();
@@ -299,21 +303,21 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         add(outerSplitPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
 
-        // Initialize preferences manager (must be done after all UI components are created)
+        // Initialize preferences manager (must be done after all UI components are
+        // created)
         preferencesManager = new TargetManagerPreferences(
-            mainSplitPane,
-            outerSplitPane,
-            filterPanel,
-            timeSelector,
-            dataSourceManager,
-            fileWatcherService,
-            eastPanelVisible,
-            westPanelVisible,
-            () -> updateVisibleContacts(true),
-            this::showContactDetails,
-            this::hideContactDetails,
-            this::showFilters
-        );
+                mainSplitPane,
+                outerSplitPane,
+                filterPanel,
+                timeSelector,
+                dataSourceManager,
+                fileWatcherService,
+                eastPanelVisible,
+                westPanelVisible,
+                () -> updateVisibleContacts(true),
+                this::showContactDetails,
+                this::hideContactDetails,
+                this::showFilters);
 
         loadPreferences();
 
@@ -449,9 +453,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
      */
     private JPanel createStatusBar() {
         JPanel panel = new JPanel(new BorderLayout(0, 0));
-        panel.setBorder(new EmptyBorder(2,2,0,2));
+        panel.setBorder(new EmptyBorder(2, 2, 0, 2));
         panel.setPreferredSize(new Dimension(100, 26));
-        
+
         // Left side: Contact counts
         JPanel countsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         countsPanel.add(totalContactsLabel);
@@ -604,6 +608,49 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     /**
+     * Shows the About dialog with version and copyright information.
+     * 
+     * @param parent Parent frame for the dialog
+     */
+    public static void showAboutDialog(JFrame parent) {
+        String version = "2025.11.00 (Beta)";
+        String message = "<html><body style='width: 300px; padding: 10px;'>" +
+                "<h2 style='margin: 0; color: #2c3e50;'>TargetManager</h2>" +
+                "<p style='margin: 10px 0;'><b>Version:</b> " + version + "</p>" +
+                "<p style='margin: 10px 0;'><b>Copyright:</b> © 2025<br>" +
+                "OceanScan - Marine Systems & Technology, Lda.</p>" +
+                "<hr style='margin: 10px 0;'>" +
+                "<p style='margin: 10px 0; font-size: 10px;'>" +
+                "Professional desktop application for managing and<br>" +
+                "visualizing marine contact data from sidescan sonar surveys." +
+                "</p>" +
+                "<p style='margin: 10px 0; font-size: 10px;'>" +
+                "<b>Website:</b> <a href='https://www.oceanscan-mst.com'>www.oceanscan-mst.com</a><br>" +
+                "<b>Email:</b> support@omst.pt" +
+                "</p>" +
+                "</body></html>";
+
+        JEditorPane editorPane = new JEditorPane("text/html", message);
+        editorPane.setEditable(false);
+        editorPane.setOpaque(false);
+        editorPane.addHyperlinkListener(e -> {
+            if (e.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
+                try {
+                    java.awt.Desktop.getDesktop().browse(e.getURL().toURI());
+                } catch (Exception ex) {
+                    log.error("Failed to open link", ex);
+                }
+            }
+        });
+
+        JOptionPane.showMessageDialog(
+                parent,
+                editorPane,
+                "About TargetManager",
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
      * Creates a menu bar for the application.
      * 
      * @param frame The parent frame
@@ -750,7 +797,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 try {
                     // Ensure templates directory exists
                     java.io.File templatesDir = new java.io.File("conf/templates");
-                    if (!templatesDir.exists() || templatesDir.listFiles() == null || templatesDir.listFiles().length == 0) {
+                    if (!templatesDir.exists() || templatesDir.listFiles() == null
+                            || templatesDir.listFiles().length == 0) {
                         // Extract default templates
                         pt.omst.contacts.reports.ContactReportGenerator.extractDefaultTemplates();
                     }
@@ -759,14 +807,14 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                     javax.swing.JFileChooser fileChooser = new javax.swing.JFileChooser(templatesDir);
                     fileChooser.setDialogTitle("Select Template to Edit");
                     fileChooser.setFileSelectionMode(javax.swing.JFileChooser.FILES_ONLY);
-                    javax.swing.filechooser.FileNameExtensionFilter filter = 
-                        new javax.swing.filechooser.FileNameExtensionFilter("HTML Templates", "html");
+                    javax.swing.filechooser.FileNameExtensionFilter filter = new javax.swing.filechooser.FileNameExtensionFilter(
+                            "HTML Templates", "html");
                     fileChooser.setFileFilter(filter);
 
                     int result = fileChooser.showOpenDialog(frame);
                     if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
                         java.io.File selectedTemplate = fileChooser.getSelectedFile();
-                        
+
                         GuiUtils.infoMessage(frame, "Template Editor",
                                 "Opening template in system editor.\n\n" +
                                         "Note: Changes are saved directly to the template.\n" +
@@ -823,7 +871,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
         toolsMenu.add(convertMarksItem);
-        
+
         JMenuItem sendAllItem = new JMenuItem("Send All to Data Manager...");
         sendAllItem.addActionListener(e -> {
             if (targetManager != null) {
@@ -836,6 +884,18 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         // Help menu
         JMenu helpMenu = new JMenu("Help");
 
+        // User Manual menu item (F1)
+        JMenuItem manualItem = new JMenuItem("User Manual");
+        manualItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+        manualItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                pt.omst.contacts.help.ManualViewerDialog.showManual(frame);
+            }
+        });
+        helpMenu.add(manualItem);
+        helpMenu.addSeparator();
+
         // Software License menu item
         JMenuItem licenseItem = new JMenuItem("Software License");
         licenseItem.addActionListener(new ActionListener() {
@@ -844,8 +904,19 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 showLicenseDialog(frame);
             }
         });
-
         helpMenu.add(licenseItem);
+        helpMenu.addSeparator();
+
+        // About menu item
+        JMenuItem aboutItem = new JMenuItem("About TargetManager");
+        aboutItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showAboutDialog(frame);
+            }
+        });
+        helpMenu.add(aboutItem);
+
         menuBar.add(helpMenu);
 
         return menuBar;
@@ -1204,7 +1275,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                     try {
                         contactCollection.refreshContact(mainZctFile);
                     } catch (IOException e) {
-                        log.error("Failed to refresh contact {} in collection after grouping", mainZctFile.getName(), e);
+                        log.error("Failed to refresh contact {} in collection after grouping", mainZctFile.getName(),
+                                e);
                     }
 
                     // Reload the main contact in the editor if it's currently displayed
@@ -1266,19 +1338,19 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             }
         });
     }
-    
+
     /**
      * Reloads all contacts from disk by rescanning the data source directories.
      * Called after bulk operations like legacy marker conversion.
      */
     private void reloadContactsFromDisk() {
         log.info("Reloading contacts from all data sources");
-        
+
         // Clear existing contacts
         for (CompressedContact contact : new ArrayList<>(contactCollection.getAllContacts())) {
             contactCollection.removeContact(contact.getZctFile());
         }
-        
+
         // Reload from all data sources
         for (DataSource dataSource : dataSourceManager.getDataSources()) {
             if (dataSource instanceof FolderDataSource) {
@@ -1300,7 +1372,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                 }
             }
         }
-        
+
         updateVisibleContacts(true);
         updateStatusBar();
         slippyMap.repaint();
@@ -1318,12 +1390,12 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         if (parentFolder == null || !parentFolder.exists() || !parentFolder.isDirectory()) {
             return folders;
         }
-        
+
         File marksFile = new File(parentFolder, "marks.dat");
         if (marksFile.exists()) {
             folders.add(parentFolder);
         }
-        
+
         File[] children = parentFolder.listFiles();
         if (children != null) {
             for (File child : children) {
@@ -1337,7 +1409,8 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
     /**
      * Converts legacy marks.dat files to compressed contacts.
-     * Shows a folder selection dialog, recursively searches for folders with marks.dat,
+     * Shows a folder selection dialog, recursively searches for folders with
+     * marks.dat,
      * and converts each one using a separate BackgroundJob.
      * Skips folders that already have .zct files in their contacts/ subfolder.
      */
@@ -1345,19 +1418,19 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fileChooser.setDialogTitle("Select Folder to Convert Legacy Marks");
-        
+
         Window window = SwingUtilities.getWindowAncestor(this);
         int result = fileChooser.showOpenDialog(window);
-        
+
         if (result != JFileChooser.APPROVE_OPTION) {
             return;
         }
-        
+
         File rootFolder = fileChooser.getSelectedFile();
         List<File> foldersWithMarks = findFoldersWithMarks(rootFolder);
-       
+
         int jobsSubmitted = 0;
-        
+
         // Submit jobs for each folder
         for (File folder : foldersWithMarks) {
             // Check if already converted
@@ -1365,16 +1438,15 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             if (!contactsFolder.exists()) {
                 contactsFolder.mkdirs();
             }
-            
+
             final File folderToConvert = folder;
             BackgroundJob conversionJob = new BackgroundJob("Convert " + folder.getName()) {
                 @Override
                 protected Void doInBackground() throws Exception {
                     updateStatus("Converting markers from " + folderToConvert.getName() + "...");
-                    
+
                     try {
-                        Collection<pt.omst.rasterlib.Contact> contacts = 
-                            ContactUtils.convertContacts(folderToConvert);
+                        Collection<pt.omst.rasterlib.Contact> contacts = ContactUtils.convertContacts(folderToConvert);
                         setProgress(100);
                         updateStatus("Completed: " + contacts.size() + " contacts");
                         log.info("Converted {} markers from {}", contacts.size(), folderToConvert);
@@ -1383,10 +1455,10 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                         log.error("Conversion failed for {}", folderToConvert, e);
                         throw e;
                     }
-                    
+
                     return null;
                 }
-                
+
                 @Override
                 protected void done() {
                     super.done();
@@ -1404,20 +1476,20 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
                     }
                 }
             };
-            
+
             fileWatcherService.incrementConversionJobs();
             JobManager.getInstance().submit(conversionJob);
             jobsSubmitted++;
         }
-        
+
         if (jobsSubmitted > 0) {
-            GuiUtils.infoMessage(window, "Conversion Started", 
-                String.format("Converting %d folder(s).\n\nCheck status bar for progress.", 
-                    jobsSubmitted));
+            GuiUtils.infoMessage(window, "Conversion Started",
+                    String.format("Converting %d folder(s).\n\nCheck status bar for progress.",
+                            jobsSubmitted));
         } else {
-            GuiUtils.infoMessage(window, "No Conversion Needed", 
-                String.format("Found %d folder(s) with marks.dat, but all have already been converted.", 
-                    foldersWithMarks.size()));
+            GuiUtils.infoMessage(window, "No Conversion Needed",
+                    String.format("Found %d folder(s) with marks.dat, but all have already been converted.",
+                            foldersWithMarks.size()));
         }
     }
 

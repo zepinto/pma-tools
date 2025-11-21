@@ -66,6 +66,10 @@ dependencies {
     // Mustache templating
     implementation 'com.github.spullara.mustache.java:compiler:0.9.14'
     
+    // Markdown processing for user manual
+    implementation 'org.commonmark:commonmark:0.22.0'
+    implementation 'org.commonmark:commonmark-ext-gfm-tables:0.22.0'
+    
     // PDF generation dependencies
     implementation 'org.jsoup:jsoup:1.18.1'
     implementation 'org.xhtmlrenderer:flying-saucer-pdf:9.9.3'
