@@ -258,7 +258,7 @@ public class ContactUtils {
         boxSize.setNormalizedX2(boxX + boxWidth);
         boxSize.setNormalizedY2(boxY + boxHeight);
         boxSize.setTimestamp(OffsetDateTime.ofInstant(marker.getDate().toInstant(), ZoneId.systemDefault()));
-        boxSize.setUserName(System.getProperty("user.name"));
+        boxSize.setUserName(pt.omst.util.UserPreferences.getUsername());
 
         log.debug("Box is at " + boxX + ", " + boxY + " with width " + boxWidth + " and height " + boxHeight);
 

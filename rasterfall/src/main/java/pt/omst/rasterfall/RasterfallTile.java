@@ -338,4 +338,9 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
     public IndexedRaster getRaster() {
         return raster;
     }
+
+    public double getResolution() {
+        double totalRange = raster.getSensorInfo().getMaxRange() - raster.getSensorInfo().getMinRange();
+        return image.getWidth() / totalRange;
+    }
 }

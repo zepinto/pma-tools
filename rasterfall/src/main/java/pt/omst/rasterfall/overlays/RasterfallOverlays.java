@@ -16,6 +16,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -96,56 +97,72 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         leftPanel.add(button);
     }
 
-    public JPanel getToolsPanel() {
+    private void progress(String message, Consumer<String> progressCallback) {
+        if (progressCallback != null) {
+            progressCallback.accept(message);
+        }
+    }
+
+    public JPanel getToolsPanel(Consumer<String> progressCallback) {
         controlsPanel.add(leftPanel, BorderLayout.WEST);
         controlsPanel.add(rightPanel, BorderLayout.EAST);
-
+        
+        progress("Adding play button...", progressCallback);
         playButton = new JButton("<html><h2>&#x25B6;</h2></html>");
         playButton.setPreferredSize(new Dimension(33, 33));
         playButton.addActionListener(e -> playAction());
         playButton.setMargin(new Insets(0, 0, 0, 0));
-
+        
+        progress("Adding measure button...", progressCallback);
         measureButton = new JToggleButton("<html><h3>&#x27F7; length</h3></html>");
         measureButton.setPreferredSize(new Dimension(80, 33));
         measureButton.addChangeListener(e -> overlayAction(lengthOverlay, measureButton.isSelected()));
         measureButton.setMargin(new Insets(0, 0, 0, 0));
-
+        
+        progress("Adding height button...", progressCallback);
         heightButton = new JToggleButton("<html><h3>&#x2912; &nbsp; height</h3></html>");
         heightButton.setPreferredSize(new Dimension(80, 33));
         heightButton.addChangeListener(e -> overlayAction(heightOverlay, heightButton.isSelected()));
         heightButton.setMargin(new Insets(0, 0, 0, 0));
-
+        
+        progress("Adding info button...", progressCallback);
         infoButton = new JToggleButton("<html><h3>&#x2139; &nbsp; info</h3></html>");
         infoButton.setPreferredSize(new Dimension(80, 33));
         infoButton.addChangeListener(e -> overlayAction(infoOverlay, infoButton.isSelected()));
         infoButton.setMargin(new Insets(0, 0, 0, 0));
-
+        
+        progress("Adding mark button...", progressCallback);
         markButton = new JToggleButton("<html><h3>&#x26f6; &nbsp; mark</h3></html>");
         markButton.setPreferredSize(new Dimension(80, 33));
         markButton.addChangeListener(e -> overlayAction(markOverlay, markButton.isSelected()));
         markButton.setMargin(new Insets(0, 0, 0, 0));
+        progress("Adding grid button...", progressCallback);
 
         gridButton = new JToggleButton("<html><h3>&#x2317; &nbsp; grid</h3></html>");
         gridButton.setPreferredSize(new Dimension(80, 33));
         gridButton.addChangeListener(e -> overlayAction(gridOverlay, gridButton.isSelected()));
         gridButton.setMargin(new Insets(0, 0, 0, 0));
 
+        progress("Adding ruler button...", progressCallback);
         rulerButton = new JToggleButton("<html><h3>&#x2057; &nbsp; ruler</h3></html>");
         rulerButton.setPreferredSize(new Dimension(80, 33));
         rulerButton.addChangeListener(e -> overlayAction(rulerOverlay, rulerButton.isSelected()));
         rulerButton.setMargin(new Insets(0, 0, 0, 0));
-
+       
+        progress("Adding hud button...", progressCallback);
         hudButton = new JToggleButton("<html><h3>&#x2608; &nbsp; hud</h3></html>");
         hudButton.setPreferredSize(new Dimension(80, 33));
         hudButton.addChangeListener(e -> overlayAction(hudOverlay, hudButton.isSelected()));
         hudButton.setMargin(new Insets(0, 0, 0, 0));
         hudButton.setSelected(true);
-
+       
+        progress("Adding coverage button...", progressCallback);
         coverageButton = new JToggleButton("<html><h3>&#x1F4E1; &nbsp; coverage</h3></html>");
         coverageButton.setPreferredSize(new Dimension(100, 33));
         coverageButton.addChangeListener(e -> overlayAction(sonarCoverageOverlay, coverageButton.isSelected()));
         coverageButton.setMargin(new Insets(0, 0, 0, 0));
-
+       
+        progress("Adding speed spinner...", progressCallback);
         speedSpinner = new JSpinner(new SpinnerNumberModel(25, 1, 250, 1));
         speedSpinner.setPreferredSize(new Dimension(75, 33));
         speedSpinner.setFont(new Font("Arial", Font.PLAIN, 16));
@@ -158,6 +175,8 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
                 LogReplay.setReplayState(Instant.now(), Instant.ofEpochMilli(timestamp), 0);
         });
 
+        progress("Adding buttons...", progressCallback);
+        
         leftPanel.add(infoButton);
         leftPanel.add(hudButton);
         leftPanel.add(gridButton);
@@ -169,12 +188,14 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
 
         rightPanel.add(speedSpinner);
         rightPanel.add(playButton);
+        progress("Finalizing controls panel...", progressCallback);
         controlsPanel.setBorder(BorderFactory.createBevelBorder(BevelBorder.RAISED));
 
         group.add(measureButton);
         group.add(heightButton);
         group.add(markButton);
-
+        progress("Buttons set up.", progressCallback);
+        
         return controlsPanel;
     }
 

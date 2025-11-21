@@ -7,6 +7,7 @@ package pt.omst.rasterfall.overlays;
 
 import java.awt.Color;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
 import javax.swing.JComponent;
@@ -28,20 +29,32 @@ public class HudOverlay extends AbstractOverlay {
     @Override
     public void install(RasterfallTiles waterfall) {
         this.waterfall = waterfall;
-        createHud();
+        Thread.ofVirtual().start(this::createHud);
     }
 
     private synchronized void createHud() {
         if (hud == null) {
             SidescanParser parser = SidescanParserFactory.build(waterfall.getRastersFolder().getParentFile());
-            hud = new VehiclePositionHUD(parser, 200, 200);
-            hud.setPathColor(new Color(255,255,255,128));
+            VehiclePositionHUD tmp = new VehiclePositionHUD(parser, 200, 200);            
+            tmp.setPathColor(new Color(255,255,255,128));
+            hud = tmp;         
+            waterfall.repaint();   
         }
     }
 
     @Override
     public void paint(Graphics g, JComponent c) {
         super.paint(g, c);
+        if (hud == null) {
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(255, 255, 255, 200));
+            int x = waterfall.getVisibleRect().x + waterfall.getVisibleRect().width / 2 - 30;
+            int y = waterfall.getVisibleRect().y + waterfall.getVisibleRect().height - 50;
+            g.drawString("loading...", x, y);
+            return;
+        }
         double timestamp = 0.001 * waterfall.getTimestamp();
         hud.setTimestamp(timestamp);
 

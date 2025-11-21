@@ -688,6 +688,17 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         preferencesMenu.add(iconSizeMenu);
         preferencesMenu.addSeparator();
 
+        // Username menu item
+        JMenuItem usernameItem = new JMenuItem("Set Username...");
+        usernameItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                pt.omst.util.UserPreferencesDialog.showDialog(frame);
+            }
+        });
+        preferencesMenu.add(usernameItem);
+        preferencesMenu.addSeparator();
+
         // Contact Types menu item
         JMenuItem contactTypesItem = new JMenuItem("Contact Types");
         contactTypesItem.addActionListener(new ActionListener() {

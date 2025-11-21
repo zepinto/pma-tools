@@ -21,7 +21,6 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.imageio.ImageIO;
 import javax.swing.JComponent;
@@ -43,9 +42,12 @@ import pt.omst.rasterlib.RasterType;
 import pt.omst.rasterlib.SampleDescription;
 import pt.omst.rasterlib.SensorInfo;
 import pt.omst.rasterlib.contacts.CompressedContact;
+import pt.omst.util.UserPreferences;
 
 @Slf4j
 public class MarkOverlay extends AbstractOverlay {
+
+    private static final double EXPANSION_FACTOR = 0.5; // 50% expansion on each side
 
     private RasterfallTiles waterfall;
     private Point2D.Double firstPoint = null;
@@ -97,6 +99,7 @@ public class MarkOverlay extends AbstractOverlay {
 
     public List<SampleDescription> getSamplesBetween(Instant startTime, Instant endTime) {
         List<SampleDescription> samples = new ArrayList<>();
+        
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
             return samples;
         }
@@ -132,13 +135,27 @@ public class MarkOverlay extends AbstractOverlay {
 
         samples.sort((s1, s2) -> s1.getTimestamp().compareTo(s2.getTimestamp()));
 
-        return samples;
+        // Create new list with renumbered indexes from 0 to N
+        List<SampleDescription> renumberedSamples = new ArrayList<>();
+        for (int i = 0; i < samples.size(); i++) {
+            SampleDescription original = samples.get(i);
+            SampleDescription copy = new SampleDescription();
+            copy.setIndex((long) i);
+            copy.setTimestamp(original.getTimestamp());
+            copy.setPose(original.getPose());
+            renumberedSamples.add(copy);
+        }
+
+        return renumberedSamples;
     }
 
     public BufferedImage getContactImage(double minRange, double maxRange, Instant startTime, Instant endTime) {
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
             return null;
         }
+
+        Point2D.Double startPoint = waterfall.getScreenPosition(startTime, minRange);
+        Point2D.Double endPoint = waterfall.getScreenPosition(endTime, maxRange);
 
         // Calculate dimensions
         int totalHeight = 0;
@@ -243,52 +260,21 @@ public class MarkOverlay extends AbstractOverlay {
         }
 
         try {
-            // Debug: List available writers
-            // String[] formats = ImageIO.getWriterFormatNames();
-            // log.info("Available ImageIO writers: {}",
-            // java.util.Arrays.toString(formats));
-
             // 1. Determine image filename
             String jsonPath = destinationFile.getAbsolutePath();
-            String imagePath = jsonPath.replace(".json", ".jpg");
+            String imagePath = jsonPath.replace(".json", ".png");
             File imageFile = new File(imagePath);
 
-            // 2. Save image
-            // Convert to RGB (JPEG does not support transparency)
-            BufferedImage rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
-            Graphics2D g2d = rgbImage.createGraphics();
-            g2d.setColor(Color.BLACK);
-            g2d.fillRect(0, 0, image.getWidth(), image.getHeight());
-            g2d.drawImage(image, 0, 0, null);
-            g2d.dispose();
-
-            boolean saved = false;
-            if (ImageIO.write(rgbImage, "jpg", imageFile)) {
-                log.info("Image written to {}", imageFile.getAbsolutePath());
-                saved = true;
-            } else {
-                log.error("Failed to write image to {} (JPEG writer not found?)", imageFile.getAbsolutePath());
-                // Fallback to PNG
-                File pngFile = new File(jsonPath.replace(".json", ".png"));
-                if (ImageIO.write(image, "png", pngFile)) {
-                    log.info("Fallback: Image written to {}", pngFile.getAbsolutePath());
-                    imageFile = pngFile;
-                    saved = true;
-                }
-            }
-
-            if (!saved) {
-                log.error("Could not save image in JPG or PNG format");
-                return null;
-            }
-
-            // 3. Create IndexedRaster
+            
+            ImageIO.write(image, "png", imageFile);
+            
+            // 2. Create IndexedRaster
             IndexedRaster raster = new IndexedRaster();
             raster.setFilename(imageFile.getName());
             raster.setRasterType(RasterType.SCANLINE);
             raster.setSamples(samples);
 
-            // 4. Create SensorInfo
+            // 3. Create SensorInfo
             SensorInfo info = new SensorInfo();
             // Copy from first tile if available
             SensorInfo sourceInfo = waterfall.getTiles().getFirst().getRaster().getSensorInfo();
@@ -306,7 +292,7 @@ public class MarkOverlay extends AbstractOverlay {
 
             raster.setSensorInfo(info);
 
-            // 5. Save JSON
+            // 4. Save JSON
             String json = Converter.IndexedRasterToJsonString(raster);
             Files.write(destinationFile.toPath(), json.getBytes());
 
@@ -393,10 +379,28 @@ public class MarkOverlay extends AbstractOverlay {
         // Calculate top-left and bottom-right coordinates
         int topLeftX = (int) Math.min(firstPoint.getX(), lastPoint.getX());
         int topLeftY = (int) Math.min(firstPoint.getY(), lastPoint.getY());
+        
         int bottomRightX = (int) Math.max(firstPoint.getX(), lastPoint.getX());
         int bottomRightY = (int) Math.max(firstPoint.getY(), lastPoint.getY());
         int centerX = (topLeftX + bottomRightX) / 2;
         int centerY = (topLeftY + bottomRightY) / 2;
+
+        double minRange = waterfall.getRangeAtScreenX(topLeftX);
+        double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
+        Instant startTime = waterfall.getTimeAtScreenY(bottomRightY);
+        Instant endTime = waterfall.getTimeAtScreenY(topLeftY);
+
+        double width = maxRange - minRange;
+        double height = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0; // in seconds
+
+        // expand by EXPANSION_FACTOR on each side
+        double expandX = width * EXPANSION_FACTOR;
+        double expandY = height * EXPANSION_FACTOR;
+        double expandedMinRange = Math.max(0, minRange - expandX);
+        double expandedMaxRange = maxRange + expandX;
+        Instant expandedStartTime = startTime.minusMillis((long) (expandY * 1000));
+        Instant expandedEndTime = endTime.plusMillis((long) (expandY * 1000));
+
         pt.lsts.neptus.core.LocationType centerLocation = waterfall.getWorldPosition(
                 new Point2D.Double(centerX, centerY));
         RasterfallTiles.TilesPosition pos = waterfall.getPosition(
@@ -416,24 +420,32 @@ public class MarkOverlay extends AbstractOverlay {
         obs.setLongitude(centerLocation.getLongitudeDegs());
         obs.setTimestamp(OffsetDateTime.now());
 
+        // Calculate normalized coordinates of original box within expanded image
+        // Original box is centered in expanded image with EXPANSION_FACTOR padding on each side
+        double normalizedPadding = EXPANSION_FACTOR / (1.0 + 2 * EXPANSION_FACTOR);
+        double boxStartX = normalizedPadding;
+        double boxStartY = normalizedPadding;
+        double boxEndX = 1.0 - normalizedPadding;
+        double boxEndY = 1.0 - normalizedPadding;
+
         Annotation annotation = new Annotation();
-        annotation.setNormalizedX(0.0);
-        annotation.setNormalizedY(0.0);
-        annotation.setNormalizedX2(1.0);
-        annotation.setNormalizedY2(1.0);
+        annotation.setNormalizedX(boxStartX);
+        annotation.setNormalizedY(boxStartY);
+        annotation.setNormalizedX2(boxEndX);
+        annotation.setNormalizedY2(boxEndY);
         annotation.setAnnotationType(AnnotationType.MEASUREMENT);
         annotation.setMeasurementType(MeasurementType.BOX);
         obs.setAnnotations(new ArrayList<>());
+        annotation.setTimestamp(obs.getTimestamp());
+        annotation.setUserName(UserPreferences.getUsername());
         obs.getAnnotations().add(annotation);
+        obs.setUserName(UserPreferences.getUsername());
         contact.getObservations().add(obs);
+        
+        
 
-        double minRange = waterfall.getRangeAtScreenX(topLeftX);
-        double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
-        Instant startTime = waterfall.getTimeAtScreenY(bottomRightY);
-        Instant endTime = waterfall.getTimeAtScreenY(topLeftY);
-
-        BufferedImage image = getContactImage(minRange, maxRange, startTime, endTime);
-        List<SampleDescription> samples = getSamplesBetween(startTime, endTime);
+        BufferedImage image = getContactImage(expandedMinRange, expandedMaxRange, expandedStartTime, expandedEndTime);
+        List<SampleDescription> samples = getSamplesBetween(expandedStartTime, expandedEndTime);
         if (image != null) {
             try {
                 // Create a temp directory for the contact files
@@ -441,7 +453,7 @@ public class MarkOverlay extends AbstractOverlay {
 
                 // Save raster (JSON + Image) inside the temp directory
                 File rasterFile = new File(tempDir, "raster_" + label + ".json");
-                IndexedRaster raster = generateRaster(rasterFile, samples, image, minRange, maxRange);
+                generateRaster(rasterFile, samples, image, expandedMinRange, expandedMaxRange);
                 obs.setRasterFilename(rasterFile.getName()); // Relative path inside the zip
                 // Debug: List files in tempDir
                 if (tempDir.exists() && tempDir.isDirectory()) {

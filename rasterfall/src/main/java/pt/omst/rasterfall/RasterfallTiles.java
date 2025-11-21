@@ -76,7 +76,13 @@ public class RasterfallTiles extends JPanel implements Closeable {
         if (!contactsFolder.exists()) {
             contactsFolder.mkdirs();
         }
+        if (progressCallback != null) {
+            progressCallback.accept("Loading contacts...");
+        }
         contacts = ContactCollection.fromFolder(new File(folder.getParentFile(), "contacts"));
+        if (progressCallback != null) {
+            progressCallback.accept(String.format("Loaded %d contacts.", contacts.getAllContacts().size()));
+        }
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         double verticalSize = 0;
         rastersFolder = folder;
@@ -95,14 +101,19 @@ public class RasterfallTiles extends JPanel implements Closeable {
         if (progressCallback != null) {
             progressCallback.accept("Loading tiles...");
         }
-            
-        for (RasterfallTile tile : tiles) {
+        for (int i = tiles.size() - 1; i >= 0; i--) {
+            if (progressCallback != null) {
+                progressCallback.accept(String.format("Loading tile %d/%d", tiles.size() - i, tiles.size()));
+            }
+            RasterfallTile tile = tiles.get(i);
             add(tile);
             verticalSize += tile.getPreferredSize().getHeight();
         }
+
         if (progressCallback != null) {
             progressCallback.accept(String.format("%d Tiles loaded.", tiles.size()));
         }
+
         double width = tiles.getFirst().getPreferredSize().getWidth();
         setPreferredSize(new Dimension((int) width, (int) verticalSize));
         setMinimumSize(new Dimension((int) width, (int) verticalSize));
@@ -370,6 +381,15 @@ public class RasterfallTiles extends JPanel implements Closeable {
             if (tile.getBounds().contains(0, screenY)) {
                 int y = screenY - tile.getBounds().y;
                 return Instant.ofEpochMilli(tile.getTimestamp(0, y));
+            }
+        }
+        return null;
+    }
+
+    public RasterfallTile getTileUnder(double x, double y) {
+        for (RasterfallTile tile : tiles) {
+            if (tile.getBounds().contains(x, y)) {
+                return tile;
             }
         }
         return null;

@@ -134,7 +134,7 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         if (contact.getObservations().isEmpty()) {
             Observation obs = new Observation();
             obs.setTimestamp(OffsetDateTime.now());
-            obs.setUserName(System.getProperty("user.name"));
+            obs.setUserName(pt.omst.util.UserPreferences.getUsername());
             obs.setUuid(UUID.randomUUID());
             contact.getObservations().add(obs);
         }
@@ -528,7 +528,7 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
         if (contact.getObservations().isEmpty()) {
             Observation obs = new Observation();
             obs.setTimestamp(OffsetDateTime.now());
-            obs.setUserName(System.getProperty("user.name"));
+            obs.setUserName(pt.omst.util.UserPreferences.getUsername());
             obs.setUuid(UUID.randomUUID());
             contact.getObservations().add(obs);
         }

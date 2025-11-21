@@ -43,16 +43,41 @@ public class RasterfallPanel extends JPanel implements Closeable {
     public RasterfallPanel(File rastersFolder, Consumer<String> progressCallback) {
         setLayout(new BorderLayout());
         this.waterfall = new RasterfallTiles(rastersFolder, progressCallback);
+        if (progressCallback != null) {
+            progressCallback.accept("Setting up overlays...");
+        }
         overlays = new RasterfallOverlays(waterfall);
         JLayer<RasterfallTiles> layer = new JLayer<>(waterfall, overlays);
+        if (progressCallback != null) {
+            progressCallback.accept("Overlays set up.");
+        }
         overlays.installUI(layer);
         layer.setLayerEventMask(AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_WHEEL_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK | AWTEvent.COMPONENT_EVENT_MASK);
         viewport.setView(layer);
         this.scrollbar = new RasterfallScrollbar(waterfall, viewport);
+        if (progressCallback != null) {
+            progressCallback.accept("Viewport and scrollbar set up.");
+        }
         add(viewport, BorderLayout.CENTER);
+        if (progressCallback != null) {
+            progressCallback.accept("Adding scrollbar...");
+        }
         add(scrollbar, BorderLayout.EAST);
-        add(overlays.getToolsPanel(), BorderLayout.NORTH);
+        if (progressCallback != null) {
+            progressCallback.accept("Adding tools...");
+        }
+        add(overlays.getToolsPanel(progressCallback), BorderLayout.NORTH);
+        if (progressCallback != null) {
+            progressCallback.accept("Tools panel added.");
+        }
+
+        if (progressCallback != null) {
+            progressCallback.accept("Setting up replay controller...");
+        }
         this.replay = new RasterfallReplay(scrollbar);
+        if (progressCallback != null) {
+            progressCallback.accept("Replay controller set up.");
+        }
     }
 
     @Override

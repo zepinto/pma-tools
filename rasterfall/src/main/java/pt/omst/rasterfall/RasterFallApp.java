@@ -29,6 +29,7 @@ import pt.omst.gui.LoadingPanel;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
+import pt.omst.util.UserPreferencesDialog;
 
 public class RasterFallApp extends JFrame {
 
@@ -70,6 +71,17 @@ public class RasterFallApp extends JFrame {
         
         // Preferences submenu
         JMenu preferencesMenu = new JMenu("Preferences");
+        
+        // Username menu item
+        JMenuItem usernameItem = new JMenuItem("Set Username...");
+        usernameItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                UserPreferencesDialog.showDialog(RasterFallApp.this);
+            }
+        });
+        preferencesMenu.add(usernameItem);
+        preferencesMenu.addSeparator();
         
         // Dark Mode toggle
         JCheckBoxMenuItem darkModeItem = new JCheckBoxMenuItem("Dark Mode");
