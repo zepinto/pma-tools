@@ -88,7 +88,7 @@ import pt.omst.rasterlib.contacts.QuadTree;
  */
 @Slf4j
 @Getter
-public class TargetManager extends JPanel implements AutoCloseable, DataSourceListener {
+public class TargetManager extends JPanel implements AutoCloseable, DataSourceListener, ContactGroupingHandler {
 
     private final SlippyMap slippyMap;
     private final DataSourceManagerPanel dataSourceManager;

@@ -24,18 +24,26 @@ import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
 
 import javax0.license3j.License;
+import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
+import pt.omst.rasterfall.map.MapViewer;
+import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.util.UserPreferencesDialog;
 
+@Slf4j
 public class RasterFallApp extends JFrame {
 
     private static final long serialVersionUID = 1L;
     private RasterfallPanel rasterfallPanel;
     private WelcomePanel welcomePanel;
+
+    // Singleton ContactManager tracking
+    private static JFrame mapViewerFrame;
+    private static MapViewer mapViewer;
 
     public RasterFallApp() {
         setTitle("Sidescan RasterFall");
@@ -43,20 +51,20 @@ public class RasterFallApp extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
-        
+
         // Show welcome panel initially
         welcomePanel = new WelcomePanel();
         add(welcomePanel, BorderLayout.CENTER);
-        
+
         setupMenubar();
     }
 
     private void setupMenubar() {
         JMenuBar menuBar = new JMenuBar();
-        
+
         // File menu
         JMenu fileMenu = new JMenu("File");
-        
+
         // Open folder menu item
         JMenuItem openFolderItem = new JMenuItem("Open Folder...");
         openFolderItem.addActionListener(new ActionListener() {
@@ -65,13 +73,13 @@ public class RasterFallApp extends JFrame {
                 openFolder();
             }
         });
-        
+
         fileMenu.add(openFolderItem);
         fileMenu.addSeparator();
-        
+
         // Preferences submenu
         JMenu preferencesMenu = new JMenu("Preferences");
-        
+
         // Username menu item
         JMenuItem usernameItem = new JMenuItem("Set Username...");
         usernameItem.addActionListener(new ActionListener() {
@@ -82,7 +90,7 @@ public class RasterFallApp extends JFrame {
         });
         preferencesMenu.add(usernameItem);
         preferencesMenu.addSeparator();
-        
+
         // Dark Mode toggle
         JCheckBoxMenuItem darkModeItem = new JCheckBoxMenuItem("Dark Mode");
         darkModeItem.setSelected(GuiUtils.isDarkTheme());
@@ -94,10 +102,10 @@ public class RasterFallApp extends JFrame {
             }
         });
         preferencesMenu.add(darkModeItem);
-        
+
         fileMenu.add(preferencesMenu);
         fileMenu.addSeparator();
-        
+
         // Exit menu item
         JMenuItem exitItem = new JMenuItem("Exit");
         exitItem.addActionListener(new ActionListener() {
@@ -106,14 +114,30 @@ public class RasterFallApp extends JFrame {
                 System.exit(0);
             }
         });
-        
+
         fileMenu.add(exitItem);
-        
-        menuBar.add(fileMenu);        
-        
+
+        menuBar.add(fileMenu);
+
+        // Tools menu
+        JMenu toolsMenu = new JMenu("Tools");
+
+        // Map Viewer menu item
+        JMenuItem mapViewerItem = new JMenuItem("Map Viewer...");
+        mapViewerItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                openMapViewer();
+            }
+        });
+
+        toolsMenu.add(mapViewerItem);
+
+        menuBar.add(toolsMenu);
+
         // Help menu
         JMenu helpMenu = new JMenu("Help");
-        
+
         // Software License menu item
         JMenuItem licenseItem = new JMenuItem("Software License");
         licenseItem.addActionListener(new ActionListener() {
@@ -122,13 +146,13 @@ public class RasterFallApp extends JFrame {
                 showLicenseDialog();
             }
         });
-        
+
         helpMenu.add(licenseItem);
-        
+
         menuBar.add(helpMenu);
         setJMenuBar(menuBar);
     }
-    
+
     private void showLicenseDialog() {
         JFrame licenseFrame = new JFrame("Software License");
         LicensePanel panel = new LicensePanel();
@@ -139,8 +163,7 @@ public class RasterFallApp extends JFrame {
                 License activation = LicenseChecker.getLicenseActivation();
                 panel.setLicense(mainLicense, activation);
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -149,7 +172,79 @@ public class RasterFallApp extends JFrame {
         licenseFrame.setLocationRelativeTo(this);
         licenseFrame.setVisible(true);
     }
-    
+
+    private void openMapViewer() {
+        // Check if MapViewer is already open (singleton pattern)
+        if (mapViewerFrame != null && mapViewerFrame.isDisplayable()) {
+            // Bring existing window to front
+            mapViewerFrame.toFront();
+            mapViewerFrame.requestFocus();
+            return;
+        }
+
+        try {
+            // Get or create ContactCollection
+            ContactCollection contacts;
+            if (rasterfallPanel != null) {
+                try {
+                    RasterfallTiles waterfall = rasterfallPanel.getWaterfall();
+                    contacts = waterfall.getContacts();
+                } catch (Exception ex) {
+                    System.err.println("Warning: Could not load contacts from waterfall: " + ex.getMessage());
+                    contacts = new ContactCollection();
+                }
+            } else {
+                // No folder loaded yet, create empty collection
+                contacts = new ContactCollection();
+            }
+
+            // Create SimpleContactViewer
+            mapViewer = new MapViewer(contacts);
+
+            // Create and setup frame
+            mapViewerFrame = new JFrame("Map Viewer");
+            mapViewerFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            mapViewerFrame.setSize(1400, 900);
+            mapViewerFrame.setJMenuBar(MapViewer.createMenuBar(mapViewerFrame, mapViewer));
+            mapViewerFrame.add(mapViewer);
+
+            // Load preferences
+            SwingUtilities.invokeLater(() -> {
+                mapViewer.loadPreferences();
+            });
+
+            // Cleanup when window closes
+            mapViewerFrame.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowClosing(java.awt.event.WindowEvent e) {
+                    try {
+                        mapViewer.savePreferences();
+                        mapViewer.close();
+                    } catch (Exception ex) {
+                        System.err.println("Error closing Map Viewer: " + ex.getMessage());
+                        ex.printStackTrace();
+                    }
+                }
+
+                @Override
+                public void windowClosed(java.awt.event.WindowEvent e) {
+                    // Clear singleton references to allow reopening
+                    mapViewerFrame = null;
+                    mapViewer = null;
+                }
+            });
+
+            // Center and show
+            GuiUtils.centerOnScreen(mapViewerFrame);
+            mapViewerFrame.setVisible(true);
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            GuiUtils.errorMessage(this, "Error",
+                    "Failed to open Map Viewer: " + ex.getMessage());
+        }
+    }
+
     private void openFolder() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -163,31 +258,31 @@ public class RasterFallApp extends JFrame {
                 fileChooser.setCurrentDirectory(lastFolder);
             }
         }
-        
+
         int result = fileChooser.showOpenDialog(this);
-        
+
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFolder = fileChooser.getSelectedFile();
             prefs.put("lastRasterFolder", selectedFolder.getAbsolutePath());
             loadRasterFolder(selectedFolder);
         }
     }
-    
+
     private void loadRasterFolder(File folder) {
         // Show loading splash screen centered on this window
         JWindow splash = LoadingPanel.showSplashScreen("Loading raster data...", this);
         LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
-        
+
         // Force the splash screen to render before starting heavy work
         splash.toFront();
         splash.repaint();
-        
+
         // Perform loading in background thread to keep UI responsive
         new Thread(() -> {
             try {
                 // Give splash screen time to render and start animation
                 Thread.sleep(150);
-                
+
                 // Close existing panel if one is open
                 if (rasterfallPanel != null) {
                     if (loadingPanel != null) {
@@ -203,12 +298,12 @@ public class RasterFallApp extends JFrame {
                     });
                     Thread.sleep(100);
                 }
-                
+
                 // Remove welcome panel if it's showing
                 if (welcomePanel != null) {
                     SwingUtilities.invokeLater(() -> remove(welcomePanel));
                 }
-                
+
                 // Create progress callback that updates splash screen
                 Consumer<String> progressCallback = (String message) -> {
                     if (loadingPanel != null) {
@@ -216,27 +311,31 @@ public class RasterFallApp extends JFrame {
                     }
                     System.out.println("Loading: " + message);
                 };
-                
+
                 // Create new rasterfall panel with selected folder (in background)
                 if (loadingPanel != null) {
                     SwingUtilities.invokeLater(() -> loadingPanel.setStatus("Initializing rasterfall panel..."));
                 }
-                
+
                 RasterfallPanel newPanel = new RasterfallPanel(folder, progressCallback);
-                
+
                 // Add panel to UI on EDT
                 SwingUtilities.invokeLater(() -> {
                     rasterfallPanel = newPanel;
                     add(rasterfallPanel, BorderLayout.CENTER);
-                    
+
                     // Update window title
                     setTitle("Sidescan RasterFall - " + folder.getName());
-                    
+
+                    // Sync contacts to open MapViewer if it exists
+                    syncContactsToViewer();
+
                     // Refresh the display
-                    if (loadingPanel != null) loadingPanel.setStatus("Finalizing...");
+                    if (loadingPanel != null)
+                        loadingPanel.setStatus("Finalizing...");
                     revalidate();
                     repaint();
-                    
+
                     // Close splash screen after a brief delay
                     new Thread(() -> {
                         try {
@@ -247,44 +346,81 @@ public class RasterFallApp extends JFrame {
                         }
                     }).start();
                 });
-                
+
             } catch (Exception ex) {
                 ex.printStackTrace();
                 SwingUtilities.invokeLater(() -> {
                     LoadingPanel.hideSplashScreen(splash);
-                    JOptionPane.showMessageDialog(this, 
-                        "Error loading raster folder: " + ex.getMessage(), 
-                        "Error", 
-                        JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this,
+                            "Error loading raster folder: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 });
             }
         }).start();
+    }
+
+        /**
+     * Syncs the contacts from the currently loaded folder to the open MapViewer viewer. If no
+     * MapViewer is open or no contacts are loaded, this method does nothing.
+     */
+    private void syncContactsToViewer() {
+        if (mapViewer != null && rasterfallPanel != null) {
+            try {
+                log.info("Syncing contacts and waterfall to MapViewer...");
+                // Load the waterfall path into the map viewer
+                mapViewer.loadWaterfall(rasterfallPanel.getWaterfall());
+                mapViewer.refresh();
+                System.out.println("Synced contacts and waterfall to MapViewer");
+            } catch (Exception e) {
+                System.err.println("Error syncing contacts to viewer: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Gets the currently open MapViewer viewer instance, if any.
+     * 
+     * @return the MapViewer instance, or null if not open
+     */
+    public static MapViewer getMapViewer() {
+        return mapViewer;
+    }
+
+    /**
+     * Checks if the MapViewer is currently open.
+     * 
+     * @return true if the MapViewer window is open
+     */
+    public static boolean isMapViewerOpen() {
+        return mapViewerFrame != null && mapViewerFrame.isDisplayable();
     }
 
     public static void main(String[] args) {
         // Show splash screen during startup
         JWindow splash = LoadingPanel.showSplashScreen("Starting Sidescan RasterFall...");
         LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
-        
+
         // Initialize application in background
         new Thread(() -> {
             try {
-                if (loadingPanel != null) loadingPanel.setStatus("Setting look and feel...");
+                if (loadingPanel != null)
+                    loadingPanel.setStatus("Setting look and feel...");
                 GuiUtils.setLookAndFeel();
-                
-                if (loadingPanel != null) loadingPanel.setStatus("Checking license...");
+
+                if (loadingPanel != null)
+                    loadingPanel.setStatus("Checking license...");
                 try {
                     LicenseChecker.checkLicense(NeptusLicense.RASTERFALL);
-                }
-                catch (Exception ex) {
+                } catch (Exception ex) {
                     ex.printStackTrace();
                     LoadingPanel.hideSplashScreen(splash);
                     try {
                         SwingUtilities.invokeAndWait(() -> {
-                            GuiUtils.errorMessage(null, "License Check Failed", 
-                                "The application license is invalid or missing.\n\n" +
-                                "Error: " + ex.getMessage() + "\n\n" +
-                                "Please contact support or check your license activation.");
+                            GuiUtils.errorMessage(null, "License Check Failed",
+                                    "The application license is invalid or missing.\n\n" +
+                                            "Error: " + ex.getMessage() + "\n\n" +
+                                            "Please contact support or check your license activation.");
                         });
                     } catch (Exception dialogEx) {
                         dialogEx.printStackTrace();
@@ -292,30 +428,31 @@ public class RasterFallApp extends JFrame {
                     System.exit(1);
                     return;
                 }
-                
-                if (loadingPanel != null) loadingPanel.setStatus("Initializing application...");
+
+                if (loadingPanel != null)
+                    loadingPanel.setStatus("Initializing application...");
                 Thread.sleep(500); // Brief delay for smoother experience
-                
+
                 SwingUtilities.invokeLater(() -> {
                     RasterFallApp app = new RasterFallApp();
                     app.setVisible(true);
-                    
+
                     // Close splash screen
                     LoadingPanel.hideSplashScreen(splash);
                 });
-                
+
             } catch (Exception ex) {
                 ex.printStackTrace();
                 SwingUtilities.invokeLater(() -> {
                     LoadingPanel.hideSplashScreen(splash);
-                    JOptionPane.showMessageDialog(null, 
-                        "Application initialization failed: " + ex.getMessage(), 
-                        "Error", 
-                        JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(null,
+                            "Application initialization failed: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 });
                 System.exit(1);
             }
         }).start();
     }
-    
+
 }

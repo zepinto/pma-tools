@@ -32,7 +32,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
 
     private ContactCollection collection;
     private ContactSelectionListener selectionListener = null;
-    private TargetManager targetManager = null;
+    private ContactGroupingHandler groupingHandler = null;
     
     // Selection rectangle fields
     private Point selectionStart = null;
@@ -57,12 +57,20 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         // do in background thread
     }
 
+    public void setContactCollection(ContactCollection collection) {
+        this.collection = collection;
+    }
+
     public void setContactSelectionListener(ContactSelectionListener listener) {
         this.selectionListener = listener;
     }
     
     public void setTargetManager(TargetManager targetManager) {
-        this.targetManager = targetManager;
+        this.groupingHandler = targetManager;
+    }
+    
+    public void setGroupingHandler(ContactGroupingHandler groupingHandler) {
+        this.groupingHandler = groupingHandler;
     }
 
     public void refreshContact(File contactFile) {
@@ -364,7 +372,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         }
         
         // Add separator and group contacts option if 2+ contacts selected
-        if (contacts.size() >= 2 && targetManager != null) {
+        if (contacts.size() >= 2 && groupingHandler != null) {
             popup.addSeparator();
             JMenuItem groupItem = new JMenuItem("Group Selected Contacts...");
             groupItem.addActionListener(ev -> {
@@ -394,7 +402,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
                 if (mainContact != null && !mergeContacts.isEmpty()) {
                     log.info("Grouping {} contacts into main contact: {}", 
                         mergeContacts.size(), mainContact.getContact().getLabel());
-                    targetManager.groupContactsAsync(mainContact, mergeContacts);
+                    groupingHandler.groupContactsAsync(mainContact, mergeContacts);
                 }
             }
         });

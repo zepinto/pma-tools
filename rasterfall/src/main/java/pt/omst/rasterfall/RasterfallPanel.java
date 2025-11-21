@@ -104,6 +104,10 @@ public class RasterfallPanel extends JPanel implements Closeable {
         scrollbar.scrollToTime(time, true);
     }
 
+    public RasterfallTiles getWaterfall() {
+        return waterfall;
+    }
+
     public static void main(String[] args) {
         GuiUtils.setLookAndFeel();
         RasterfallPanel rasterfall = new RasterfallPanel(new File("/LOGS/REP/REP24/lauv-omst-2/20240910/093214_omst-mwm/rasterIndex"), null);

@@ -102,16 +102,20 @@ public class ContactCollection implements MapPainter {
         
         // Run filtering in background thread to avoid UI blocking
         CompletableFuture.runAsync(() -> {
-            List<CompressedContact> contactsInRegion = quadTree.query(region);
+            // If region is null, get all contacts
+            List<CompressedContact> contactsInRegion = region != null 
+                ? quadTree.query(region)
+                : new ArrayList<>(getAllContacts());
 
-            long startMillis = start.toEpochMilli();
-            long endMillis = end.toEpochMilli();
+            // If time filters are null, use all time
+            long startMillis = start != null ? start.toEpochMilli() : Long.MIN_VALUE;
+            long endMillis = end != null ? end.toEpochMilli() : Long.MAX_VALUE;
 
             log.info("Applying filters: region {}, time {} to {}, classifications: {}, confidences: {}, labels: {}",
                     region, start, end, 
-                    classifications.isEmpty() ? "all" : classifications,
-                    confidences.isEmpty() ? "all" : confidences,
-                    labels.isEmpty() ? "all" : labels);
+                    classifications == null || classifications.isEmpty() ? "all" : classifications,
+                    confidences == null || confidences.isEmpty() ? "all" : confidences,
+                    labels == null || labels.isEmpty() ? "all" : labels);
 
             List<File> newFilteredContacts = contactsInRegion.stream()
                 .filter(c -> c.getTimestamp() >= startMillis && c.getTimestamp() <= endMillis)

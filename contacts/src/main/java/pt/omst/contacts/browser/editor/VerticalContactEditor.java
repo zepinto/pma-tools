@@ -241,12 +241,19 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
     public void saveContact() {
         log.info("Saving contact");
         contact.setLabel(nameTextField.getText());
+        
+        // Ensure observations exist and have annotations list initialized
+        Observation observation = contact.getObservations().getFirst();
+        if (observation.getAnnotations() == null) {
+            observation.setAnnotations(new ArrayList<>());
+        }
+        
         ArrayList<Annotation> textAnnotations = getAnnotationsOfType(AnnotationType.TEXT);
         if (textAnnotations.isEmpty()) {
             Annotation textAnnotation = new Annotation();
             textAnnotation.setAnnotationType(AnnotationType.TEXT);
             textAnnotation.setText(descriptionTextArea.getText());
-            contact.getObservations().getFirst().getAnnotations().add(textAnnotation);
+            observation.getAnnotations().add(textAnnotation);
         } else {
             textAnnotations.getFirst().setText(descriptionTextArea.getText());
         }
@@ -259,7 +266,7 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
             classificationAnnotation.setCategory((String) typeComboBox.getSelectedItem());
             classificationAnnotation.setConfidence(
                     Double.valueOf((String) Objects.requireNonNull(confidenceComboBox.getSelectedItem())));
-            contact.getObservations().getFirst().getAnnotations().add(classificationAnnotation);
+            observation.getAnnotations().add(classificationAnnotation);
         } else {
             classificationAnnotations.getFirst().setCategory((String) typeComboBox.getSelectedItem());
             classificationAnnotations.getFirst().setConfidence(
