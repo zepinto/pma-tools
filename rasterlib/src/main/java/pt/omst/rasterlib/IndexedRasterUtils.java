@@ -353,12 +353,12 @@ public class IndexedRasterUtils {
     }
 
     @Data
+    @Getter
     public static class RasterContactInfo {
         private String label;
         private Annotation boxAnnotation = null;
         private Annotation classification = null;
         private SensorInfo sensorInfo = null;
-        @Getter
         @Setter
         private LocationType center;
         private double minRange;
