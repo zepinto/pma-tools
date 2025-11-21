@@ -52,6 +52,7 @@ public class IndexedRasterTiles {
         if (slantCorrection) {
             double alt = pose.getAltitude() != null ? pose.getAltitude() : 0;
             alt = Math.max(alt, 0);
+            // Only apply correction if slant range exceeds altitude
             if (Math.abs(slantRange) > alt) {
                 distance = Math.signum(slantRange) * Math.sqrt(slantRange * slantRange - alt * alt);
             } else {
@@ -211,7 +212,6 @@ public class IndexedRasterTiles {
         int timeOffsetMs = 5000;
         
         long firstTimestamp = raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
-        long lastTimestamp = raster.getSamples().getLast().getTimestamp().toInstant().toEpochMilli();
         
         int sampleIndex = 0;
         
@@ -239,7 +239,9 @@ public class IndexedRasterTiles {
             LocationType minP = calcPointFromIndex(sample, minX, imageWidth, true);
             double minDistance = targetPoint.getHorizontalDistanceInMeters(minP);
             
-            log.debug("Sample {}: distanceToMid={}, minDistance={}", sampleIndex, distanceToMid, minDistance);
+            if (log.isDebugEnabled()) {
+                log.debug("Sample {}: distanceToMid={}, minDistance={}", sampleIndex, distanceToMid, minDistance);
+            }
             
             if (minDistance < 2) {
                 int bestIndex = findClosestSampleIndex(sampleIndex, targetPoint, imageWidth);
