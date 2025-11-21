@@ -23,6 +23,18 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class IndexedRasterTilesTest {
 
+    /**
+     * Helper method to create an observation with timestamp before the raster start.
+     */
+    private Observation createInitialObservation(IndexedRaster raster) {
+        long firstTimestamp = raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
+        Observation obs = new Observation();
+        obs.setTimestamp(OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(firstTimestamp - 10000), 
+            ZoneOffset.UTC));
+        return obs;
+    }
+
     private IndexedRaster createTestRaster() {
         IndexedRaster raster = new IndexedRaster();
         
@@ -100,10 +112,7 @@ class IndexedRasterTilesTest {
         targetContact.setUuid(UUID.randomUUID());
         
         // Add initial observation at a time outside the raster range
-        Observation initialObs = new Observation();
-        initialObs.setTimestamp(OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(firstTimestamp - 10000), 
-            ZoneOffset.UTC));
+        Observation initialObs = createInitialObservation(raster);
         initialObs.setLatitude(Math.toRadians(targetLat));
         initialObs.setLongitude(Math.toRadians(targetLon));
         initialObs.setDepth(0.0);
@@ -162,10 +171,7 @@ class IndexedRasterTilesTest {
         targetContact.setUuid(UUID.randomUUID());
         
         // Add initial observation
-        Observation initialObs = new Observation();
-        initialObs.setTimestamp(OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
-            ZoneOffset.UTC));
+        Observation initialObs = createInitialObservation(raster);
         targetContact.getObservations().add(initialObs);
         
         List<Observation> potentialObservations = new ArrayList<>();
@@ -199,10 +205,7 @@ class IndexedRasterTilesTest {
         targetContact.setUuid(UUID.randomUUID());
         
         // Add initial observation
-        Observation initialObs = new Observation();
-        initialObs.setTimestamp(OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
-            ZoneOffset.UTC));
+        Observation initialObs = createInitialObservation(raster);
         targetContact.getObservations().add(initialObs);
         
         List<Observation> potentialObservations = new ArrayList<>();
@@ -237,10 +240,7 @@ class IndexedRasterTilesTest {
         targetContact.setUuid(UUID.randomUUID());
         
         // Add initial observation
-        Observation initialObs = new Observation();
-        initialObs.setTimestamp(OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
-            ZoneOffset.UTC));
+        Observation initialObs = createInitialObservation(raster);
         targetContact.getObservations().add(initialObs);
         
         // This test just verifies the method runs without error
@@ -275,10 +275,7 @@ class IndexedRasterTilesTest {
         targetContact.setUuid(UUID.randomUUID());
         
         // Add initial observation
-        Observation initialObs = new Observation();
-        initialObs.setTimestamp(OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli() - 10000), 
-            ZoneOffset.UTC));
+        Observation initialObs = createInitialObservation(raster);
         targetContact.getObservations().add(initialObs);
         
         List<Observation> potentialObservations = new ArrayList<>();
