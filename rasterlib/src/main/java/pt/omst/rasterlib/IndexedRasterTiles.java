@@ -1,0 +1,283 @@
+//***************************************************************************
+// Copyright 2025 OceanScan - Marine Systems & Technology, Lda.             *
+//***************************************************************************
+// Author: José Pinto                                                       *
+//***************************************************************************
+package pt.omst.rasterlib;
+
+import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.mra.LogMarker;
+import pt.lsts.neptus.mra.SidescanLogMarker;
+import pt.lsts.neptus.mra.SidescanPotentialMarker;
+import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.I18n;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Utility class for finding potential markers in IndexedRaster data using gradient descent algorithms.
+ * This class adapts sidescan marker finding algorithms to work with IndexedRaster and SampleDescription data.
+ */
+@Slf4j
+public class IndexedRasterTiles {
+
+    private final IndexedRaster raster;
+
+    public IndexedRasterTiles(IndexedRaster raster) {
+        this.raster = raster;
+    }
+
+    /**
+     * Calculate location from a sample at a given range index.
+     * Adapted from ISidescanLine.calcPointFromIndex to work with IndexedRaster.
+     * 
+     * @param sample The sample description containing pose information
+     * @param xIndex The x index in the raster (0 to image width)
+     * @param imageWidth The width of the raster image
+     * @param slantCorrection Whether to apply slant correction
+     * @return LocationType at the calculated position
+     */
+    private LocationType calcPointFromIndex(SampleDescription sample, int xIndex, int imageWidth, boolean slantCorrection) {
+        Pose pose = sample.getPose();
+        LocationType location = new LocationType(pose.getLatitude(), pose.getLongitude());
+        
+        double range = raster.getSensorInfo().getMaxRange();
+        double distance = xIndex * (range * 2.0 / imageWidth) - range;
+        
+        if (slantCorrection) {
+            double alt = pose.getAltitude() != null ? pose.getAltitude() : 0;
+            alt = Math.max(alt, 0);
+            double distanceG = Math.signum(distance) * Math.sqrt(Math.abs(distance * distance - alt * alt));
+            distance = Double.isNaN(distanceG) ? 0 : distanceG;
+        }
+
+        double angle = -(pose.getPsi() != null ? pose.getPsi() : 0) + (xIndex < (imageWidth / 2) ? Math.PI : 0);
+        double offsetNorth = Math.abs(distance) * Math.sin(angle);
+        double offsetEast = Math.abs(distance) * Math.cos(angle);
+        
+        location.setOffsetNorth(offsetNorth);
+        location.setOffsetEast(offsetEast);
+        location.convertToAbsoluteLatLonDepth();
+
+        return location;
+    }
+
+    /**
+     * Get the distance from nadir for a given x index.
+     * 
+     * @param xIndex The x index in the raster
+     * @param imageWidth The width of the raster image
+     * @param slantCorrection Whether to apply slant correction
+     * @param altitude The altitude of the sensor
+     * @return Distance from nadir (negative means port-side)
+     */
+    private double getDistanceFromIndex(int xIndex, int imageWidth, boolean slantCorrection, double altitude) {
+        double range = raster.getSensorInfo().getMaxRange();
+        double distance = xIndex * (range * 2.0 / imageWidth) - range;
+        
+        if (slantCorrection) {
+            altitude = Math.max(altitude, 0);
+            double distanceG = Math.signum(distance) * Math.sqrt(Math.abs(distance * distance - altitude * altitude));
+            distance = Double.isNaN(distanceG) ? 0 : distanceG;
+        }
+        return distance;
+    }
+
+    /**
+     * Find the minimum distance x index to target point using gradient descent.
+     * Adapted from the original findMinX algorithm to work with IndexedRaster.
+     * 
+     * @param targetPoint The target location to find
+     * @param sample The sample description (equivalent to a sidescan line)
+     * @param imageWidth The width of the raster image
+     * @return The x index with minimum distance to target
+     */
+    private int findMinX(LocationType targetPoint, SampleDescription sample, int imageWidth) {
+        int x = 0;
+        int step = 500;
+        double learningRate = 100;
+        
+        LocationType point0 = calcPointFromIndex(sample, x, imageWidth, true);
+        double prevDistance = targetPoint.getHorizontalDistanceInMeters(point0);
+        double distance = prevDistance;
+        
+        while (step > 1) {
+            int prevX = x;
+            int testX = Math.max(0, Math.min(imageWidth - 1, x + step));
+            LocationType pointTest = calcPointFromIndex(sample, testX, imageWidth, true);
+            double newDistance = targetPoint.getHorizontalDistanceInMeters(pointTest);
+            double prevDistanceDerivative = ((newDistance * newDistance) - (prevDistance * prevDistance)) / step;
+            
+            x = (int) (x - learningRate * prevDistanceDerivative);
+            x = Math.max(0, Math.min(imageWidth - 1, x));
+            
+            LocationType pointCurrent = calcPointFromIndex(sample, x, imageWidth, true);
+            distance = targetPoint.getHorizontalDistanceInMeters(pointCurrent);
+            
+            if (distance > prevDistance) {
+                learningRate /= 2;
+                x = prevX;
+            }
+            
+            step = Math.abs(prevX - x);
+            prevDistance = distance;
+        }
+        return x;
+    }
+
+    /**
+     * Find the sample index closest to the target point using gradient descent.
+     * Adapted from the original findClosestTimestamp algorithm.
+     * 
+     * @param initialIndex Starting sample index
+     * @param targetPoint The target location
+     * @param imageWidth The width of the raster image
+     * @return The sample index closest to the target
+     */
+    private int findClosestSampleIndex(int initialIndex, LocationType targetPoint, int imageWidth) {
+        int sampleIndex = initialIndex;
+        int step = 100;
+        double learningRate = 1;
+        
+        SampleDescription sample = raster.getSamples().get(sampleIndex);
+        LocationType point0 = calcPointFromIndex(sample, 0, imageWidth, true);
+        double prevDistance = targetPoint.getHorizontalDistanceInMeters(point0);
+        
+        while (step > 1) {
+            int prevIndex = sampleIndex;
+            sampleIndex = sampleIndex + step;
+            
+            if (sampleIndex >= raster.getSamples().size()) {
+                sampleIndex = raster.getSamples().size() - 1;
+                break;
+            }
+            if (sampleIndex < 0) {
+                sampleIndex = 0;
+                break;
+            }
+            
+            sample = raster.getSamples().get(sampleIndex);
+            LocationType pointTest = calcPointFromIndex(sample, 0, imageWidth, true);
+            double newDistance = targetPoint.getHorizontalDistanceInMeters(pointTest);
+            
+            if (newDistance > prevDistance) {
+                learningRate /= 2;
+                sampleIndex = prevIndex;
+            } else {
+                double prevDistanceDerivative = ((newDistance * newDistance) - (prevDistance * prevDistance)) / step;
+                sampleIndex = (int) Math.max(0, (sampleIndex - learningRate * prevDistanceDerivative));
+            }
+            
+            step = Math.abs(prevIndex - sampleIndex);
+            prevDistance = newDistance;
+        }
+        
+        return Math.max(0, Math.min(raster.getSamples().size() - 1, sampleIndex));
+    }
+
+    /**
+     * Generate potential markers for a given original marker.
+     * Finds all locations in the raster that match the marker's latitude/longitude,
+     * separated by at least 5 seconds.
+     * 
+     * @param originalMark The original sidescan log marker
+     * @param imageWidth The width of the raster image
+     * @param markerConsumer Consumer to receive generated potential markers
+     * @return Number of potential markers found
+     */
+    public int generatePotentialMarkers(SidescanLogMarker originalMark, int imageWidth, 
+                                        java.util.function.Consumer<SidescanPotentialMarker> markerConsumer) {
+        LocationType targetPoint = new LocationType(originalMark.getLatRads(), originalMark.getLonRads());
+        long nextMarkTimeMs = (long) originalMark.getTimestamp();
+        int potentialMarkerIdx = 0;
+        int timeOffsetMs = 5000;
+        
+        long firstTimestamp = raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
+        long lastTimestamp = raster.getSamples().getLast().getTimestamp().toInstant().toEpochMilli();
+        
+        int sampleIndex = 0;
+        
+        while (sampleIndex < raster.getSamples().size()) {
+            SampleDescription sample = raster.getSamples().get(sampleIndex);
+            long ts = sample.getTimestamp().toInstant().toEpochMilli();
+            
+            // Skip if too close to the original mark
+            if (ts > nextMarkTimeMs - timeOffsetMs && ts < nextMarkTimeMs + timeOffsetMs) {
+                sampleIndex++;
+                continue;
+            }
+            
+            int midX = imageWidth / 2;
+            LocationType midPoint = calcPointFromIndex(sample, midX, imageWidth, true);
+            double range = raster.getSensorInfo().getMaxRange();
+            
+            if (targetPoint.getHorizontalDistanceInMeters(midPoint) > range) {
+                sampleIndex++;
+                continue;
+            }
+            
+            int minX = findMinX(targetPoint, sample, imageWidth);
+            LocationType minP = calcPointFromIndex(sample, minX, imageWidth, true);
+            double minDistance = targetPoint.getHorizontalDistanceInMeters(minP);
+            
+            if (minDistance < 2) {
+                int bestIndex = findClosestSampleIndex(sampleIndex, targetPoint, imageWidth);
+                SampleDescription bestSample = raster.getSamples().get(bestIndex);
+                long bestTs = bestSample.getTimestamp().toInstant().toEpochMilli();
+                
+                if (bestTs > nextMarkTimeMs - timeOffsetMs && bestTs < nextMarkTimeMs + timeOffsetMs) {
+                    sampleIndex++;
+                    continue;
+                }
+                
+                minX = findMinX(targetPoint, bestSample, imageWidth);
+                double altitude = bestSample.getPose().getAltitude() != null ? bestSample.getPose().getAltitude() : 0;
+                double distNadir = getDistanceFromIndex(minX, imageWidth, true, altitude);
+                minP = calcPointFromIndex(bestSample, minX, imageWidth, true);
+                
+                log.info("Min Distance improved from " + minDistance + " to " + 
+                         targetPoint.getHorizontalDistanceInMeters(minP));
+                
+                SidescanPotentialMarker potentialMarker = new SidescanPotentialMarker(
+                    originalMark,
+                    originalMark.getLabel() + "-p" + potentialMarkerIdx,
+                    bestTs,
+                    targetPoint.getLatitudeRads(),
+                    targetPoint.getLongitudeRads(),
+                    distNadir
+                );
+                
+                potentialMarkerIdx++;
+                sampleIndex += 4; // Skip ahead a bit
+                
+                originalMark.addChild(potentialMarker);
+                if (markerConsumer != null) {
+                    markerConsumer.accept(potentialMarker);
+                }
+            }
+            sampleIndex++;
+        }
+        
+        return potentialMarkerIdx;
+    }
+
+    /**
+     * Generate potential markers with a message dialog.
+     * 
+     * @param originalMark The original sidescan log marker
+     * @param imageWidth The width of the raster image
+     * @param markerConsumer Consumer to receive generated potential markers
+     * @return true if potential markers were found
+     */
+    public boolean generatePotentialMarkersWithMessage(SidescanLogMarker originalMark, int imageWidth,
+                                                       java.util.function.Consumer<SidescanPotentialMarker> markerConsumer) {
+        int count = generatePotentialMarkers(originalMark, imageWidth, markerConsumer);
+        
+        String message = I18n.text("Found " + count + " potential marks for " + originalMark.getLabel());
+        GuiUtils.infoMessage(null, I18n.text("Potential Marks"), message);
+        
+        return count > 0;
+    }
+}
