@@ -26,14 +26,16 @@ import pt.omst.rasterlib.contacts.CompressedContact;
 @Slf4j
 public class ContactsOverlay extends AbstractOverlay {
 
+    private static final int MAX_CACHE_SIZE = 100;
+    
     private RasterfallTiles waterfall;
     
     // Cache contact info to avoid re-reading from zip files on every paint
     private final Map<CompressedContact, IndexedRasterUtils.RasterContactInfo> contactInfoCache = 
-        new LinkedHashMap<>(100, 0.75f, true) {
+        new LinkedHashMap<>(MAX_CACHE_SIZE, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<CompressedContact, IndexedRasterUtils.RasterContactInfo> eldest) {
-                return size() > 100; // Keep cache size limited
+                return size() > MAX_CACHE_SIZE; // Keep cache size limited
             }
         };
 
@@ -113,7 +115,7 @@ public class ContactsOverlay extends AbstractOverlay {
                 }
                 
                 drawnCount++;
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.debug("Error drawing contact bounding box: {}", e.getMessage());
             }
         }
