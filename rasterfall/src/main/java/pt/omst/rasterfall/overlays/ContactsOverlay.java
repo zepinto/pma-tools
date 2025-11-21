@@ -12,7 +12,9 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Point2D;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.JComponent;
 
@@ -25,10 +27,19 @@ import pt.omst.rasterlib.contacts.CompressedContact;
 public class ContactsOverlay extends AbstractOverlay {
 
     private RasterfallTiles waterfall;
+    
+    // Cache contact info to avoid re-reading from zip files on every paint
+    private final Map<CompressedContact, IndexedRasterUtils.RasterContactInfo> contactInfoCache = 
+        new LinkedHashMap<>(100, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<CompressedContact, IndexedRasterUtils.RasterContactInfo> eldest) {
+                return size() > 100; // Keep cache size limited
+            }
+        };
 
     @Override
     public void cleanup(RasterfallTiles waterfall) {
-        
+        contactInfoCache.clear();
     }
 
     @Override
@@ -44,12 +55,26 @@ public class ContactsOverlay extends AbstractOverlay {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // Get all contacts and draw bounding boxes for those visible in the current view
+        // Get visible time range
+        long topTimestamp = waterfall.getTopTimestamp();
+        long bottomTimestamp = waterfall.getBottomTimestamp();
+        
+        // Get all contacts
         List<CompressedContact> contacts = waterfall.getContacts().getAllContacts();
         
+        int drawnCount = 0;
         for (CompressedContact contact : contacts) {
             try {
-                IndexedRasterUtils.RasterContactInfo info = IndexedRasterUtils.getContactInfo(contact);
+                // Get or compute contact info
+                IndexedRasterUtils.RasterContactInfo info = contactInfoCache.computeIfAbsent(
+                    contact, 
+                    IndexedRasterUtils::getContactInfo
+                );
+                
+                // Skip contacts outside visible time range
+                if (info.getEndTimeStamp() < topTimestamp || info.getStartTimeStamp() > bottomTimestamp) {
+                    continue;
+                }
                 
                 // Get screen positions for the bounding box corners
                 Point2D.Double topLeft = waterfall.getScreenPosition(
@@ -86,11 +111,14 @@ public class ContactsOverlay extends AbstractOverlay {
                     g2.setColor(new Color(255, 255, 255, 230));
                     g2.drawString(contact.getLabel(), x + 5, y - 5);
                 }
+                
+                drawnCount++;
             } catch (Exception e) {
                 log.debug("Error drawing contact bounding box: {}", e.getMessage());
             }
         }
         
+        log.trace("Drew {} contact bounding boxes", drawnCount);
         g2.dispose();
     }
 }
