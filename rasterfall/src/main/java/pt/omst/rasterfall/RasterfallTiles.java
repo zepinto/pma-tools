@@ -54,6 +54,9 @@ public class RasterfallTiles extends JPanel implements Closeable {
     @Getter
     private final double heightProportion;
 
+    @Getter
+    private final File contactsFolder;
+
     public record TilesPosition(Instant timestamp, double range, LocationType location, Pose pose) {}
 
 
@@ -72,7 +75,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
 
     public RasterfallTiles(File folder, Consumer<String> progressCallback) {
-        File contactsFolder = new File(folder.getParentFile(), "contacts");
+        contactsFolder = new File(folder.getParentFile(), "contacts");
         if (!contactsFolder.exists()) {
             contactsFolder.mkdirs();
         }

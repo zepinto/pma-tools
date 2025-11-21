@@ -153,6 +153,20 @@ public class MarkOverlay extends AbstractOverlay {
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
             return null;
         }
+        
+        // Validate and correct range order
+        if (minRange > maxRange) {
+            double temp = minRange;
+            minRange = maxRange;
+            maxRange = temp;
+        }
+        
+        // Validate and correct time order
+        if (startTime.isAfter(endTime)) {
+            Instant temp = startTime;
+            startTime = endTime;
+            endTime = temp;
+        }
 
         Point2D.Double startPoint = waterfall.getScreenPosition(startTime, minRange);
         Point2D.Double endPoint = waterfall.getScreenPosition(endTime, maxRange);
@@ -195,7 +209,7 @@ public class MarkOverlay extends AbstractOverlay {
             }
         }
 
-        if (totalHeight == 0 || width == 0) {
+        if (totalHeight == 0 || width <= 0) {
             return null;
         }
 
@@ -413,6 +427,14 @@ public class MarkOverlay extends AbstractOverlay {
         double expandY = height * EXPANSION_FACTOR;
         double expandedMinRange = Math.max(0, minRange - expandX);
         double expandedMaxRange = maxRange + expandX;
+        
+        // Ensure expanded ranges are still in correct order
+        if (expandedMinRange > expandedMaxRange) {
+            double temp = expandedMinRange;
+            expandedMinRange = expandedMaxRange;
+            expandedMaxRange = temp;
+        }
+        
         Instant expandedStartTime = startTime.minusMillis((long) (expandY * 1000));
         Instant expandedEndTime = endTime.plusMillis((long) (expandY * 1000));
 
@@ -493,12 +515,11 @@ public class MarkOverlay extends AbstractOverlay {
                 File zctFile = zipFolderAndDelete(tempDir);
 
                 // Move/Copy the zip to the final destination
-                File finalZct = new File(label + ".zct");
+                File finalZct = new File(waterfall.getContactsFolder(), label + ".zct");
                 Files.copy(zctFile.toPath(), finalZct.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 waterfall.getContacts().addContact(finalZct);
                 // Cleanup the temporary zip file
                 zctFile.delete();
-
                 log.info("Contact saved to {}", finalZct.getAbsolutePath());
 
             } catch (Exception ex) {
