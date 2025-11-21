@@ -24,7 +24,6 @@ import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
-import javax.print.attribute.standard.Sides;
 
 import lombok.Getter;
 import lombok.Setter;

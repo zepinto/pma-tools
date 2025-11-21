@@ -21,23 +21,28 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.imageio.ImageIO;
 import javax.swing.JComponent;
 import javax.swing.JLayer;
-import javax.swing.JOptionPane;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.rasterfall.RasterfallTile;
 import pt.omst.rasterfall.RasterfallTiles;
+import pt.omst.rasterlib.Annotation;
+import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
+import pt.omst.rasterlib.MeasurementType;
 import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.RasterType;
 import pt.omst.rasterlib.SampleDescription;
 import pt.omst.rasterlib.SensorInfo;
+import pt.omst.rasterlib.contacts.CompressedContact;
 
 @Slf4j
 public class MarkOverlay extends AbstractOverlay {
@@ -49,16 +54,53 @@ public class MarkOverlay extends AbstractOverlay {
 
     private RasterfallTiles.TilesPosition firstPosition = null, lastPosition = null;
 
+    class Marker {
+        Point2D.Double topLeft;
+        Point2D.Double bottomRight;
+        String label;
+        CompressedContact contact;
+    }
+
+    private CopyOnWriteArrayList<Marker> markers = new CopyOnWriteArrayList<>();
+
     @Override
     public void cleanup(RasterfallTiles waterfall) {
-        firstPoint = lastPoint = currentPoint = null;
+        firstPoint = lastPoint = currentPoint = null;        
     }
 
     @Override
     public void install(RasterfallTiles waterfall) {
         this.waterfall = waterfall;
         firstPoint = lastPoint = currentPoint = null;
+        reloadContacts();
     }
+
+    private void reloadContacts() {
+        markers.clear();
+        log.info("Loading contacts for MarkOverlay: total {}", waterfall.getContacts().getAllContacts().size());
+        waterfall.getContacts().getAllContacts().forEach(this::addContact);
+    }
+
+    private void addContact(CompressedContact c) {
+        log.info("Loaded contact: {} with {} observations", c.getContact().getUuid(),
+                c.getContact().getObservations().size());
+        Marker m = new Marker();
+        m.contact = c;
+        m.label = c.getLabel();
+        IndexedRaster raster = c.getFirstRaster();
+        Instant tStart = raster.getSamples().getFirst().getTimestamp().toInstant();
+        Instant tEnd = raster.getSamples().getLast().getTimestamp().toInstant();
+        double minRange = raster.getSensorInfo().getMinRange();
+        double maxRange = raster.getSensorInfo().getMaxRange();
+
+        m.topLeft = waterfall.getScreenPosition(tStart, minRange);
+        m.bottomRight = waterfall.getScreenPosition(tEnd, maxRange);
+
+        markers.add(m);
+        log.info("Marker at screen coords: TL({}, {}), BR({}, {})", m.topLeft.getX(), m.topLeft.getY(),
+                m.bottomRight.getX(), m.bottomRight.getY());
+    }
+    
 
     @Override
     public void paint(Graphics g, JComponent c) {
@@ -103,16 +145,16 @@ public class MarkOverlay extends AbstractOverlay {
             if (tileEnd.isBefore(startTime) || tileStart.isAfter(endTime)) {
                 continue;
             }
-            
+
             Instant overlapStart = tileStart.isAfter(startTime) ? tileStart : startTime;
             Instant overlapEnd = tileEnd.isBefore(endTime) ? tileEnd : endTime;
-            
+
             int startIdx = tile.getSampleIndex(overlapStart);
             int endIdx = tile.getSampleIndex(overlapEnd);
-            
+
             int minIdx = Math.min(startIdx, endIdx);
             int maxIdx = Math.max(startIdx, endIdx);
-            
+
             List<SampleDescription> tileSamples = tile.getRaster().getSamples();
             for (int i = minIdx; i <= maxIdx; i++) {
                 if (i >= 0 && i < tileSamples.size()) {
@@ -124,11 +166,12 @@ public class MarkOverlay extends AbstractOverlay {
                 }
             }
         }
-        
+
         samples.sort((s1, s2) -> s1.getTimestamp().compareTo(s2.getTimestamp()));
-        
+
         return samples;
     }
+
     public BufferedImage getContactImage(double minRange, double maxRange, Instant startTime, Instant endTime) {
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
             return null;
@@ -141,7 +184,7 @@ public class MarkOverlay extends AbstractOverlay {
 
         // Find relevant tiles and calculate height
         java.util.List<RasterfallTile> relevantTiles = new java.util.ArrayList<>();
-        
+
         // Iterate tiles (they are sorted descending by time - newest first)
         for (RasterfallTile tile : waterfall.getTiles()) {
             Instant tileStart = tile.getStartTime().toInstant();
@@ -150,18 +193,18 @@ public class MarkOverlay extends AbstractOverlay {
             if (tileEnd.isBefore(startTime) || tileStart.isAfter(endTime)) {
                 continue;
             }
-            
+
             relevantTiles.add(tile);
-            
+
             // Calculate overlap
             Instant overlapStart = tileStart.isAfter(startTime) ? tileStart : startTime;
             Instant overlapEnd = tileEnd.isBefore(endTime) ? tileEnd : endTime;
-            
+
             int startIdx = tile.getSampleIndex(overlapStart);
             int endIdx = tile.getSampleIndex(overlapEnd);
-            
+
             totalHeight += Math.abs(endIdx - startIdx);
-            
+
             if (width == 0) {
                 BufferedImage tileImg = tile.getImageSync();
                 if (tileImg != null) {
@@ -178,77 +221,109 @@ public class MarkOverlay extends AbstractOverlay {
 
         BufferedImage result = new BufferedImage(width, totalHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = result.createGraphics();
-        
+
         int currentY = 0; // Start from top (newest)
-        
+
         // relevantTiles are sorted newest first.
         // We want to draw from top (newest) to bottom (oldest).
-        
+
         for (RasterfallTile tile : relevantTiles) {
             Instant tileStart = tile.getStartTime().toInstant();
             Instant tileEnd = tile.getEndTime().toInstant();
-            
+
             Instant overlapStart = tileStart.isAfter(startTime) ? tileStart : startTime;
             Instant overlapEnd = tileEnd.isBefore(endTime) ? tileEnd : endTime;
-            
+
             int startIdx = tile.getSampleIndex(overlapStart); // Oldest sample in overlap
-            int endIdx = tile.getSampleIndex(overlapEnd);     // Newest sample in overlap
-            
+            int endIdx = tile.getSampleIndex(overlapEnd); // Newest sample in overlap
+
             int h = Math.abs(endIdx - startIdx);
-            
+
             BufferedImage tileImg = tile.getImageSync();
             if (tileImg != null) {
                 // Calculate source coordinates
                 // Image Y: 0 is newest (last sample), Height is oldest (first sample)
                 // sample index: 0 is oldest, Count-1 is newest.
                 // So y = (Count - 1) - index.
-                
+
                 int tileSamples = tile.getSamplesCount();
                 // y for endIdx (newest) -> top of the slice in source image
-                int srcY = (tileSamples - 1) - endIdx; 
-                if (srcY < 0) srcY = 0;
-                
+                int srcY = (tileSamples - 1) - endIdx;
+                if (srcY < 0)
+                    srcY = 0;
+
                 // x coordinates
                 double tileRange = tile.getRange();
                 double tilePixelsPerMeter = tileImg.getWidth() / (2.0 * tileRange);
-                
+
                 int srcX = (int) ((minRange + tileRange) * tilePixelsPerMeter);
                 int srcW = (int) ((maxRange - minRange) * tilePixelsPerMeter);
-                
+
                 // Draw
-                g2.drawImage(tileImg, 
-                    0, currentY, width, currentY + h, // dest
-                    srcX, srcY, srcX + srcW, srcY + h, // source
-                    null);
+                g2.drawImage(tileImg,
+                        0, currentY, width, currentY + h, // dest
+                        srcX, srcY, srcX + srcW, srcY + h, // source
+                        null);
             }
-            
+
             currentY += h;
         }
-        
+
         g2.dispose();
         return result;
     }
 
-    private IndexedRaster generateRaster(File destinationFile, List<SampleDescription> samples, BufferedImage image, double minRange, double maxRange) {
+    private IndexedRaster generateRaster(File destinationFile, List<SampleDescription> samples, BufferedImage image,
+            double minRange, double maxRange) {
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
             return null;
         }
-        
+
         try {
+            // Debug: List available writers
+            // String[] formats = ImageIO.getWriterFormatNames();
+            // log.info("Available ImageIO writers: {}", java.util.Arrays.toString(formats));
+
             // 1. Determine image filename
             String jsonPath = destinationFile.getAbsolutePath();
             String imagePath = jsonPath.replace(".json", ".jpg");
             File imageFile = new File(imagePath);
-            
+
             // 2. Save image
-            ImageIO.write(image, "jpg", imageFile);
-            
+            // Convert to RGB (JPEG does not support transparency)
+            BufferedImage rgbImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics2D g2d = rgbImage.createGraphics();
+            g2d.setColor(Color.BLACK);
+            g2d.fillRect(0, 0, image.getWidth(), image.getHeight());
+            g2d.drawImage(image, 0, 0, null);
+            g2d.dispose();
+
+            boolean saved = false;
+            if (ImageIO.write(rgbImage, "jpg", imageFile)) {
+                log.info("Image written to {}", imageFile.getAbsolutePath());
+                saved = true;
+            } else {
+                log.error("Failed to write image to {} (JPEG writer not found?)", imageFile.getAbsolutePath());
+                // Fallback to PNG
+                File pngFile = new File(jsonPath.replace(".json", ".png"));
+                if (ImageIO.write(image, "png", pngFile)) {
+                     log.info("Fallback: Image written to {}", pngFile.getAbsolutePath());
+                     imageFile = pngFile;
+                     saved = true;
+                }
+            }
+
+            if (!saved) {
+                log.error("Could not save image in JPG or PNG format");
+                return null;
+            }
+
             // 3. Create IndexedRaster
             IndexedRaster raster = new IndexedRaster();
             raster.setFilename(imageFile.getName());
             raster.setRasterType(RasterType.SCANLINE);
             raster.setSamples(samples);
-            
+
             // 4. Create SensorInfo
             SensorInfo info = new SensorInfo();
             // Copy from first tile if available
@@ -264,17 +339,35 @@ public class MarkOverlay extends AbstractOverlay {
             }
             info.setMinRange(minRange);
             info.setMaxRange(maxRange);
-            
+
             raster.setSensorInfo(info);
-            
+
             // 5. Save JSON
             String json = Converter.IndexedRasterToJsonString(raster);
             Files.write(destinationFile.toPath(), json.getBytes());
-            
+
             return raster;
-            
+
         } catch (Exception e) {
             log.error("Error generating raster", e);
+            return null;
+        }
+    }
+
+    public static File zipFolderAndDelete(File folder) {
+        File zipFile = new File(folder.getParentFile(), folder.getName() + ".zct");
+        try {
+            ZipUtils.zipDir(zipFile.getAbsolutePath(), folder.getAbsolutePath());
+            File[] files = folder.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    file.delete();
+                }
+            }
+            folder.delete();
+            return zipFile;
+        } catch (Exception e) {
+            log.error("Error zipping folder", e);
             return null;
         }
     }
@@ -303,78 +396,89 @@ public class MarkOverlay extends AbstractOverlay {
                 int topLeftY = (int) Math.min(firstPoint.getY(), lastPoint.getY());
                 int bottomRightX = (int) Math.max(firstPoint.getX(), lastPoint.getX());
                 int bottomRightY = (int) Math.max(firstPoint.getY(), lastPoint.getY());
-
-                double minRange = waterfall.getRangeAtScreenX(topLeftX);
-                double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
-                Instant startTime = waterfall.getTimeAtScreenY(bottomRightY);
-                Instant endTime = waterfall.getTimeAtScreenY(topLeftY);
-                
-                BufferedImage image = getContactImage(minRange, maxRange, startTime, endTime);                
-                List<SampleDescription> samples = getSamplesBetween(startTime, endTime);
-
-                
-                
-                if (image != null) {
-                    // Generate raster
-                    File destFile = new File("rectangle_selection.json");
-                    generateRaster(destFile, samples, image, minRange, maxRange);
-                    log.info("Rectangle selection saved to {}", destFile.getAbsolutePath());
-                }
-                
-                log.info("Found {} samples in selection", samples.size());
-                    // Calculate center coordinates
                 int centerX = (topLeftX + bottomRightX) / 2;
                 int centerY = (topLeftY + bottomRightY) / 2;
-
-                // Get world position (latitude/longitude) of center
                 pt.lsts.neptus.core.LocationType centerLocation = waterfall.getWorldPosition(
                         new Point2D.Double(centerX, centerY));
-
-                String centerLatLon = "N/A";
-                if (centerLocation != null) {
-                    centerLatLon = String.format("%.6f°, %.6f°",
-                            centerLocation.getLatitudeDegs(),
-                            centerLocation.getLongitudeDegs());
-                }
-
                 RasterfallTiles.TilesPosition pos = waterfall.getPosition(
                         new Point2D.Double(centerX, centerY));
                 Pose pose = pos.pose();
+
                 Contact contact = new Contact();
-                contact.setLatitude(pose.getLatitude());
-                contact.setLongitude(pose.getLongitude());
+                contact.setLatitude(centerLocation.getLatitudeDegs());
+                contact.setLongitude(centerLocation.getLongitudeDegs());
                 contact.setDepth(pose.getDepth());
                 contact.setUuid(UUID.randomUUID());
 
                 Observation obs = new Observation();
                 obs.setDepth(pose.getDepth());
-                obs.setLatitude(pose.getLatitude());
-                obs.setLongitude(pose.getLongitude());
-                
+                obs.setLatitude(centerLocation.getLatitudeDegs());
+                obs.setLongitude(centerLocation.getLongitudeDegs());
                 obs.setTimestamp(OffsetDateTime.now());
+
+                Annotation annotation = new Annotation();
+                annotation.setNormalizedX(0.0);
+                annotation.setNormalizedY(0.0);
+                annotation.setNormalizedX2(1.0);
+                annotation.setNormalizedY2(1.0);
+                annotation.setAnnotationType(AnnotationType.MEASUREMENT);
+                annotation.setMeasurementType(MeasurementType.BOX);
+                obs.setAnnotations(new ArrayList<>());
+                obs.getAnnotations().add(annotation);
                 contact.getObservations().add(obs);
-                
-                
 
-                // Show dialog with coordinates
-                String message = String.format(
-                        "Rectangle Coordinates:\n\n" +
-                                "Top-Left: (%d, %d)\n" +
-                                "Bottom-Right: (%d, %d)\n\n" +
-                                "Width: %d px\n" +
-                                "Height: %d px\n\n" +
-                                "Center (Lat, Lon): %s",
-                        topLeftX, topLeftY,
-                        bottomRightX, bottomRightY,
-                        bottomRightX - topLeftX,
-                        bottomRightY - topLeftY,
-                        centerLatLon);
+                double minRange = waterfall.getRangeAtScreenX(topLeftX);
+                double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
+                Instant startTime = waterfall.getTimeAtScreenY(bottomRightY);
+                Instant endTime = waterfall.getTimeAtScreenY(topLeftY);
 
-                JOptionPane.showMessageDialog(
-                        waterfall,
-                        message,
-                        "Rectangle Selection",
-                        JOptionPane.INFORMATION_MESSAGE);
+                BufferedImage image = getContactImage(minRange, maxRange, startTime, endTime);
+                List<SampleDescription> samples = getSamplesBetween(startTime, endTime);
+                if (image != null) {
+                    try {
+                        // Create a temp directory for the contact files
+                        File tempDir = Files.createTempDirectory("rasterfall_contact").toFile();
+                        
+                        // Save raster (JSON + Image) inside the temp directory
+                        File destFile = new File(tempDir, "contact.json");
+                        generateRaster(destFile, samples, image, minRange, maxRange);
+                        
+                        // Debug: List files in tempDir
+                        if (tempDir.exists() && tempDir.isDirectory()) {
+                            File[] files = tempDir.listFiles();
+                            if (files != null) {
+                                for (File f : files) {
+                                    log.info("File in temp dir: {} (size: {})", f.getName(), f.length());
+                                }
+                            } else {
+                                log.warn("Temp dir is empty or I/O error");
+                            }
+                        }
+
+                        // Save the contact metadata itself
+                        File contactFile = new File(tempDir, "contact.xml"); // Or .json depending on format
+                        // Assuming we want to save the contact definition too, though the prompt focused on the raster
+                        // For now, let's just ensure the raster is linked in the observation
+                        obs.setRasterFilename(destFile.getName()); // Relative path inside the zip
+
+                        log.info("Rectangle selection saved to {}", destFile.getAbsolutePath());
+
+                        // Zip the directory containing the files
+                        File zctFile = zipFolderAndDelete(tempDir);
+                        
+                        // Move/Copy the zip to the final destination
+                        File finalZct = new File("contact-" + contact.getUuid().toString() + ".zct");
+                        Files.copy(zctFile.toPath(), finalZct.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        
+                        // Cleanup the temporary zip file
+                        zctFile.delete();
+                        
+                        log.info("Contact saved to {}", finalZct.getAbsolutePath());
+                        
+                    } catch (Exception ex) {
+                        log.error("Error saving rectangle selection", ex);
+                    }
+                }
             }
             waterfall.repaint();
         }

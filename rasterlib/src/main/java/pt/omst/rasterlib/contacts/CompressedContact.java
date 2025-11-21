@@ -87,6 +87,21 @@ public class CompressedContact implements MapMarker, QuadTree.Locatable<Compress
                 .orElseThrow().getTimestamp().toInstant().toEpochMilli();        
     }
 
+    public IndexedRaster getFirstRaster() {
+        try {
+            for (Observation obs : contact.getObservations()) {
+                if (obs.getRasterFilename() != null) {
+                    File rasterFile = new File(getTempDir(), obs.getRasterFilename());
+                    if (rasterFile.exists()) {
+                        return Converter.IndexedRasterFromJsonString(Files.readString(rasterFile.toPath()));
+                    }
+                }                
+            }
+        } catch (IOException e) {
+            log.warn("Error reading first raster from {}: {}", zctFile.getAbsolutePath(), e.getMessage());
+        }
+        return null;
+    }
     
 
     /**
