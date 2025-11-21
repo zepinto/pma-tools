@@ -44,21 +44,37 @@ public class IndexedRasterTiles {
         LocationType location = new LocationType(pose.getLatitude(), pose.getLongitude());
         
         double range = raster.getSensorInfo().getMaxRange();
-        double distance = xIndex * (range * 2.0 / imageWidth) - range;
+        // Calculate slant range from x index
+        double slantRange = xIndex * (range * 2.0 / imageWidth) - range;
         
+        // Convert slant range to ground range if requested
+        double distance = slantRange;
         if (slantCorrection) {
             double alt = pose.getAltitude() != null ? pose.getAltitude() : 0;
             alt = Math.max(alt, 0);
-            double distanceG = Math.signum(distance) * Math.sqrt(Math.abs(distance * distance - alt * alt));
-            distance = Double.isNaN(distanceG) ? 0 : distanceG;
+            if (Math.abs(slantRange) > alt) {
+                distance = Math.signum(slantRange) * Math.sqrt(slantRange * slantRange - alt * alt);
+            } else {
+                distance = 0; // Within nadir zone
+            }
         }
 
-        double angle = -(pose.getPsi() != null ? pose.getPsi() : 0) + (xIndex < (imageWidth / 2) ? Math.PI : 0);
-        double offsetNorth = Math.abs(distance) * Math.sin(angle);
-        double offsetEast = Math.abs(distance) * Math.cos(angle);
+        // If distance is essentially zero, return the vehicle position
+        if (Math.abs(distance) < 0.01) {
+            return location;
+        }
+
+        // Use polar coordinates: azimuth and offset distance
+        double heading = pose.getPsi() != null ? pose.getPsi() : 0;
+        if (slantRange >= 0) {
+            // Starboard side (positive range) - perpendicular to heading (+ 90 degrees)
+            location.setAzimuth(Math.toDegrees(heading) + 90);
+        } else {
+            // Port side (negative range) - perpendicular to heading (- 90 degrees)
+            location.setAzimuth(Math.toDegrees(heading) - 90);
+        }
         
-        location.setOffsetNorth(offsetNorth);
-        location.setOffsetEast(offsetEast);
+        location.setOffsetDistance(Math.abs(distance));
         location.convertToAbsoluteLatLonDepth();
 
         return location;
@@ -213,7 +229,8 @@ public class IndexedRasterTiles {
             LocationType midPoint = calcPointFromIndex(sample, midX, imageWidth, true);
             double range = raster.getSensorInfo().getMaxRange();
             
-            if (targetPoint.getHorizontalDistanceInMeters(midPoint) > range) {
+            double distanceToMid = targetPoint.getHorizontalDistanceInMeters(midPoint);
+            if (distanceToMid > range) {
                 sampleIndex++;
                 continue;
             }
@@ -221,6 +238,8 @@ public class IndexedRasterTiles {
             int minX = findMinX(targetPoint, sample, imageWidth);
             LocationType minP = calcPointFromIndex(sample, minX, imageWidth, true);
             double minDistance = targetPoint.getHorizontalDistanceInMeters(minP);
+            
+            log.debug("Sample {}: distanceToMid={}, minDistance={}", sampleIndex, distanceToMid, minDistance);
             
             if (minDistance < 2) {
                 int bestIndex = findClosestSampleIndex(sampleIndex, targetPoint, imageWidth);
@@ -276,7 +295,12 @@ public class IndexedRasterTiles {
         int count = generatePotentialMarkers(originalMark, imageWidth, markerConsumer);
         
         String message = I18n.text("Found " + count + " potential marks for " + originalMark.getLabel());
-        GuiUtils.infoMessage(null, I18n.text("Potential Marks"), message);
+        try {
+            GuiUtils.infoMessage(null, I18n.text("Potential Marks"), message);
+        } catch (java.awt.HeadlessException e) {
+            // Running in headless mode (e.g., during tests), just log the message
+            log.info(message);
+        }
         
         return count > 0;
     }
