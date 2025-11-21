@@ -24,7 +24,7 @@ import pt.omst.rasterlib.contacts.CompressedContact;
 @Slf4j
 public class ContactsOverlay extends AbstractOverlay {
 
-    RasterfallTiles waterfall;
+    private RasterfallTiles waterfall;
 
     @Override
     public void cleanup(RasterfallTiles waterfall) {
@@ -87,6 +87,11 @@ public class ContactsOverlay extends AbstractOverlay {
             int y = (int) Math.min(topLeft.y, bottomRight.y);
             int width = (int) Math.abs(bottomRight.x - topLeft.x);
             int height = (int) Math.abs(bottomRight.y - topLeft.y);
+            
+            // Skip if bounding box is too small to be meaningful
+            if (width < 2 || height < 2) {
+                continue;
+            }
             
             // Draw shadow (black outline)
             g2.setColor(new Color(0, 0, 0, 128));
