@@ -29,12 +29,16 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.SwingUtilities;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.I18n;
 
 /**
  * A zoomable and scrollable time interval selector component.
@@ -92,6 +96,9 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     private static final double ZOOM_FACTOR = 1.2;
     private static final double MIN_VIEW_DURATION_SECONDS = 60; // 1 minute minimum
     
+    // Popup menu
+    private JPopupMenu popupMenu;
+    
     /**
      * Creates a new ZoomableTimeIntervalSelector with the specified time range.
      */
@@ -111,12 +118,13 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         setBackground(getColor(LIGHT_BACKGROUND_COLOR, DARK_BACKGROUND_COLOR));
         
         setupMouseListeners();
+        setupPopupMenu();
     }
     
     /**
      * Zooms the view to show the selected interval with 20% padding on each side.
      */
-    private void zoomToSelection() {
+    public void zoomToSelection() {
         long selectionDuration = Duration.between(selectedStartTime, selectedEndTime).toMillis();
         long padding = (long) (selectionDuration * 0.2); // 20% padding on each side
         
@@ -130,6 +138,8 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         if (viewEndTime.isAfter(absoluteMaxTime)) {
             viewEndTime = absoluteMaxTime;
         }
+        
+        repaint();
     }
     
     private Color getColor(Color light, Color dark) {
@@ -165,6 +175,12 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     }
     
     private void handleMousePressed(MouseEvent e) {
+        // Check for popup trigger (right-click)
+        if (e.isPopupTrigger()) {
+            popupMenu.show(e.getComponent(), e.getX(), e.getY());
+            return;
+        }
+        
         int x = e.getX();
         int startHandleX = timeToX(selectedStartTime);
         int endHandleX = timeToX(selectedEndTime);
@@ -241,6 +257,12 @@ public class ZoomableTimeIntervalSelector extends JPanel {
     }
     
     private void handleMouseReleased(MouseEvent e) {
+        // Check for popup trigger (right-click on some platforms)
+        if (e.isPopupTrigger()) {
+            popupMenu.show(e.getComponent(), e.getX(), e.getY());
+            return;
+        }
+        
         // Fire property change only when handle dragging stops
         if (dragMode == DragMode.START_HANDLE || dragMode == DragMode.END_HANDLE) {
             fireSelectionChanged();
@@ -585,6 +607,93 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         firePropertyChange("selection", null, new Instant[]{selectedStartTime, selectedEndTime});
     }
     
+    /**
+     * Sets up the right-click popup menu.
+     */
+    private void setupPopupMenu() {
+        popupMenu = new JPopupMenu();
+        
+        JMenuItem setStartTimeItem = new JMenuItem(I18n.textOrDefault("timeselector.menu.setstart", "Set Start Time..."));
+        setStartTimeItem.addActionListener(e -> showTimeDialog(true));
+        
+        JMenuItem setEndTimeItem = new JMenuItem(I18n.textOrDefault("timeselector.menu.setend", "Set End Time..."));
+        setEndTimeItem.addActionListener(e -> showTimeDialog(false));
+        
+        JMenuItem resetRangeItem = new JMenuItem(I18n.textOrDefault("timeselector.menu.reset", "Reset to Full Range"));
+        resetRangeItem.addActionListener(e -> resetToFullRange());
+        
+        JMenuItem zoomToSelectionItem = new JMenuItem(I18n.textOrDefault("timeselector.menu.zoom", "Zoom to Selection"));
+        zoomToSelectionItem.addActionListener(e -> zoomToSelection());
+        
+        popupMenu.add(setStartTimeItem);
+        popupMenu.add(setEndTimeItem);
+        popupMenu.addSeparator();
+        popupMenu.add(resetRangeItem);
+        popupMenu.add(zoomToSelectionItem);
+    }
+    
+    /**
+     * Shows the date/time dialog for setting start or end time.
+     * 
+     * @param isStartTime true for start time, false for end time
+     */
+    private void showTimeDialog(boolean isStartTime) {
+        Instant currentTime = isStartTime ? selectedStartTime : selectedEndTime;
+        Instant newTime = DateTimeDialog.showDialog(SwingUtilities.getWindowAncestor(this), currentTime);
+        
+        if (newTime != null) {
+            if (isStartTime) {
+                selectedStartTime = newTime;
+                // Swap if start is after end
+                if (selectedStartTime.isAfter(selectedEndTime)) {
+                    Instant temp = selectedStartTime;
+                    selectedStartTime = selectedEndTime;
+                    selectedEndTime = temp;
+                }
+            } else {
+                selectedEndTime = newTime;
+                // Swap if end is before start
+                if (selectedEndTime.isBefore(selectedStartTime)) {
+                    Instant temp = selectedStartTime;
+                    selectedStartTime = selectedEndTime;
+                    selectedEndTime = temp;
+                }
+            }
+            
+            // Expand absolute bounds if necessary
+            if (selectedStartTime.isBefore(absoluteMinTime)) {
+                absoluteMinTime = selectedStartTime;
+            }
+            if (selectedEndTime.isAfter(absoluteMaxTime)) {
+                absoluteMaxTime = selectedEndTime;
+            }
+            
+            // Expand view to show the new selection if it's outside current view
+            if (selectedStartTime.isBefore(viewStartTime) || selectedEndTime.isAfter(viewEndTime)) {
+                zoomToSelection();
+            }
+            
+            repaint();
+            fireSelectionChanged();
+        }
+    }
+    
+    /**
+     * Resets the view and selection to show the full absolute time range.
+     */
+    private void resetToFullRange() {
+        viewStartTime = absoluteMinTime;
+        viewEndTime = absoluteMaxTime;
+        
+        // Reset selection to middle 50%
+        long totalMillis = Duration.between(absoluteMinTime, absoluteMaxTime).toMillis();
+        selectedStartTime = absoluteMinTime.plusMillis(totalMillis / 4);
+        selectedEndTime = absoluteMaxTime.minusMillis(totalMillis / 4);
+        
+        repaint();
+        fireSelectionChanged();
+    }
+    
     // Inner classes
     private enum TickLevel { YEAR, MONTH, DAY, HOUR, MINUTE, SECOND }
     
@@ -639,7 +748,8 @@ public class ZoomableTimeIntervalSelector extends JPanel {
         JLabel infoLabel = new JLabel("<html><b>Instructions:</b><br>" +
                 "• Drag handles to adjust selection<br>" +
                 "• Scroll wheel to zoom in/out<br>" +
-                "• Drag background to pan left/right</html>");
+                "• Drag background to pan left/right<br>" +
+                "• Right-click for menu options</html>");
         panel.add(infoLabel, BorderLayout.SOUTH);
         
         frame.setContentPane(panel);

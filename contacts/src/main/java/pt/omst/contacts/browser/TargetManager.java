@@ -211,6 +211,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
 
         // Create bottom panel with time selector and status bar
         JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.setBorder(new EmptyBorder(0,2,2,0));
         bottomPanel.add(timeSelector, BorderLayout.CENTER);
         bottomPanel.add(statusBar, BorderLayout.SOUTH);
 
