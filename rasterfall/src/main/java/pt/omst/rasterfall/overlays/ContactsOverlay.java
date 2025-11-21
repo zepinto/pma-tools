@@ -7,17 +7,15 @@ package pt.omst.rasterfall.overlays;
 
 import java.awt.Graphics;
 import java.awt.geom.Point2D;
-import java.time.Instant;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.swing.JComponent;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.rasterfall.RasterfallTiles;
-import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.contacts.CompressedContact;
 @Slf4j
-public class ContactsOverlay extends AbstractOverlay{
+public class ContactsOverlay extends AbstractOverlay {
 
     private static class Marker {
         Point2D.Double topLeft;

@@ -153,19 +153,6 @@ public class MarkOverlay extends AbstractOverlay {
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
             return null;
         }
-        
-        // Ensure parameters are in correct order
-        if (minRange > maxRange) {
-            double temp = minRange;
-            minRange = maxRange;
-            maxRange = temp;
-        }
-        
-        if (startTime.isAfter(endTime)) {
-            Instant temp = startTime;
-            startTime = endTime;
-            endTime = temp;
-        }
 
         Point2D.Double startPoint = waterfall.getScreenPosition(startTime, minRange);
         Point2D.Double endPoint = waterfall.getScreenPosition(endTime, maxRange);
