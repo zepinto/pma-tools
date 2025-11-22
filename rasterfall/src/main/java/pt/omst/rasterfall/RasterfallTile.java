@@ -102,18 +102,9 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
             index++;
         }
         
-        // Calculate X position based on slant range
-        // Map slantRange from [-getRange(), +getRange()] to [0, getWidth()]
         double xx = slantRange + getRange();
 
-        log.info("original slantRange={}, mapped xx={}", slantRange, xx);
-        //if (slantRange < 0)
-        //    xx = slantRange + getRange();
         xx = (xx / (getRange()*2)) * getWidth();
-        log.info("original slantRange={}, mapped xx2={}", slantRange, xx);
-       // log.debug("Tile slant position: timestamp={}, slantRange={}, getRange()={}, index={}, rawX={}, clampedX={}, width={}", 
-       //           timestamp, slantRange, getRange(), index, xx, 
-       //           Math.max(0, Math.min(xx, getWidth())), getWidth());
         
         if (xx < 0)
             xx = 0;
