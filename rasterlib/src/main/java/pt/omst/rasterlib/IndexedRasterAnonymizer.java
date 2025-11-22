@@ -159,7 +159,7 @@ public class IndexedRasterAnonymizer {
     /**
      * Main method for command-line usage.
      * 
-     * Usage: java IndexedRasterAnonymizer <rasterIndex-folder-path>
+     * Usage: java IndexedRasterAnonymizer &lt;rasterIndex-folder-path&gt;
      */
     public static void main(String[] args) {
         if (args.length != 1) {
