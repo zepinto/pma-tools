@@ -88,6 +88,44 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
         return new Point2D.Double(xx, yy);
     }
 
+    public Point2D.Double getSlantedRangePosition(Instant timestamp, double slantRange) {
+        if (timestamp.isBefore(getStartTime().toInstant()))
+            return null;
+        if (timestamp.isAfter(getEndTime().toInstant()))
+            return null;
+        
+        // Find the sample index for this timestamp
+        int index = 0;
+        for (SampleDescription sample : raster.getSamples()) {
+            if (sample.getTimestamp().toInstant().isAfter(timestamp))
+                break;
+            index++;
+        }
+        
+        // Calculate X position based on slant range
+        // Map slantRange from [-getRange(), +getRange()] to [0, getWidth()]
+        double xx = slantRange + getRange();
+
+        log.info("original slantRange={}, mapped xx={}", slantRange, xx);
+        //if (slantRange < 0)
+        //    xx = slantRange + getRange();
+        xx = (xx / (getRange()*2)) * getWidth();
+        log.info("original slantRange={}, mapped xx2={}", slantRange, xx);
+       // log.debug("Tile slant position: timestamp={}, slantRange={}, getRange()={}, index={}, rawX={}, clampedX={}, width={}", 
+       //           timestamp, slantRange, getRange(), index, xx, 
+       //           Math.max(0, Math.min(xx, getWidth())), getWidth());
+        
+        if (xx < 0)
+            xx = 0;
+        if (xx > getWidth())
+            xx = getWidth();
+        
+        // Calculate Y position based on timestamp/index
+        double yy = (getSamplesCount() - index) / (double)getSamplesCount() * getHeight();
+        
+        return new Point2D.Double(xx, yy);
+    }
+
     public Point2D.Double getGroundPosition(Instant timestamp, double slantRange) {
         if (timestamp.isBefore(getStartTime().toInstant()))
             return null;

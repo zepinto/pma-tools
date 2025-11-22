@@ -401,14 +401,16 @@ public class IndexedRasterUtils {
                         sssObservation.getRasterFilename());
                 String rasterJson = StreamUtil.copyStreamToString(is);
                 raster = Converter.IndexedRasterFromJsonString(rasterJson);
-                raster.getSamples().sort( (o1, o2) -> o1.getTimestamp().compareTo(o2.getTimestamp()));
+                //raster.getSamples().sort( (o1, o2) -> o1.getTimestamp().compareTo(o2.getTimestamp()));
                 sensorInfo = raster.getSensorInfo();
                 info.minRange = sensorInfo.getMinRange();
                 info.maxRange = sensorInfo.getMaxRange();
                 
                 info.startTimeStamp = raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
                 info.endTimeStamp = raster.getSamples().getLast().getTimestamp().toInstant().toEpochMilli();
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+                //SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+                //log.info("Contact {} is from {} to {}", info.label,
+                //        sdf.format(info.startTimeStamp), sdf.format(info.endTimeStamp));
                 //System.out.println(info.label+" is from "+sdf.format(new Date(info.startTimeStamp))+" to "+sdf.format(new Date(info.endTimeStamp)));
                 if (boxAnnotation != null) {
                     double newMinRange = info.minRange + boxAnnotation.getNormalizedX() * (info.maxRange - info.minRange);
@@ -416,10 +418,11 @@ public class IndexedRasterUtils {
                     double newStartTimestamp = info.startTimeStamp + boxAnnotation.getNormalizedY() * (info.endTimeStamp - info.startTimeStamp);
                     double newEndTimestamp = info.startTimeStamp + boxAnnotation.getNormalizedY2() * (info.endTimeStamp - info.startTimeStamp);
                     info.boxAnnotation = boxAnnotation;
-                    info.minRange = newMinRange;
-                    info.maxRange = newMaxRange;
-                    info.startTimeStamp = (long) newStartTimestamp;
-                    info.endTimeStamp = (long) newEndTimestamp;
+                    // Ensure minRange is always <= maxRange (box coordinates might be drawn in any direction)
+                    info.minRange = Math.min(newMinRange, newMaxRange);
+                    info.maxRange = Math.max(newMinRange, newMaxRange);
+                    info.startTimeStamp = (long) Math.min(newStartTimestamp, newEndTimestamp);
+                    info.endTimeStamp = (long) Math.max(newStartTimestamp, newEndTimestamp);
                 }
             }
             catch (IOException e) {

@@ -20,7 +20,9 @@ import java.nio.file.Files;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 import javax.swing.BoxLayout;
@@ -36,6 +38,8 @@ import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.Pose;
+import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
+import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
 
 @Log
@@ -57,8 +61,10 @@ public class RasterfallTiles extends JPanel implements Closeable {
     @Getter
     private final File contactsFolder;
 
-    public record TilesPosition(Instant timestamp, double range, LocationType location, Pose pose) {}
+    // Cache for RasterContactInfo to avoid recalculation
+    private final Map<CompressedContact, RasterContactInfo> contactInfoCache = new HashMap<>();
 
+    public record TilesPosition(Instant timestamp, double range, LocationType location, Pose pose) {}
 
     public static List<File> findRasterFiles(File parentFolder) {
         List<File> files = new ArrayList<>();
@@ -145,11 +151,16 @@ public class RasterfallTiles extends JPanel implements Closeable {
     public Point2D.Double getSlantedScreenPosition(Instant timestamp, double range) {
         for (RasterfallTile tile : tiles) {
             if (tile.containstTime(timestamp)) {
-                Point2D.Double relativePosition = tile.getSlantedRangePosition(range);
+                Point2D.Double relativePosition = tile.getSlantedRangePosition(timestamp, range);
+                if (relativePosition == null) {
+                    log.warning("Failed to get slanted range position for timestamp " + timestamp + " and range " + range);
+                    return null;
+                }
                 Point2D.Double absolutePosition = new Point2D.Double(tile.getBounds().x + relativePosition.x, tile.getBounds().y + relativePosition.y);
                 return absolutePosition;
             }
         }
+        log.warning("No tile contains timestamp " + timestamp);
         return null;
     }
 
@@ -327,6 +338,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
             tile.close();
         tiles.clear();
         rasters.clear();
+        contactInfoCache.clear();
     }
     
     @Override
@@ -402,6 +414,31 @@ public class RasterfallTiles extends JPanel implements Closeable {
             }
         }
         return null;
+    }
+
+    public List<RasterContactInfo> getVisibleContacts() {
+        List<CompressedContact> allContacts = contacts.getAllContacts();
+        ArrayList<RasterContactInfo> contactInfos = new ArrayList<>();
+        for (CompressedContact contact : allContacts) {
+            // Check cache first
+            RasterContactInfo cinfo = contactInfoCache.get(contact);
+            if (cinfo == null) {
+                // Calculate and cache if not present
+                cinfo = IndexedRasterUtils.getContactInfo(contact);
+                if (cinfo == null)
+                    continue;
+                contactInfoCache.put(contact, cinfo);
+            }
+            long contactStart = cinfo.getStartTimeStamp();
+            long contactEnd = cinfo.getEndTimeStamp();
+            long visibleStart = getBottomTimestamp();
+            long visibleEnd = getTopTimestamp();
+            if (contactEnd < visibleStart || contactStart > visibleEnd)
+                continue;
+
+            contactInfos.add(cinfo);
+        }
+        return contactInfos;
     }
 
     public static void main(String[] args) {

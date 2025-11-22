@@ -31,3 +31,9 @@ conf/licenses
 
 # Hidden files in conf directory
 conf/.*
+
+# Ignore bin directories
+**/bin/
+
+# Ignore class files
+*.class

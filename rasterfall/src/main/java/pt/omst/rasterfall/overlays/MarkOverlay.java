@@ -167,10 +167,6 @@ public class MarkOverlay extends AbstractOverlay {
             startTime = endTime;
             endTime = temp;
         }
-
-        Point2D.Double startPoint = waterfall.getScreenPosition(startTime, minRange);
-        Point2D.Double endPoint = waterfall.getScreenPosition(endTime, maxRange);
-
         // Calculate dimensions
         int totalHeight = 0;
         int width = 0;
@@ -401,6 +397,8 @@ public class MarkOverlay extends AbstractOverlay {
 
         double minRange = waterfall.getRangeAtScreenX(topLeftX);
         double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
+
+        
         
         // Ensure min/max are in correct order (handle inverted selections)
         if (minRange > maxRange) {
@@ -427,6 +425,11 @@ public class MarkOverlay extends AbstractOverlay {
         double expandY = height * EXPANSION_FACTOR;
         double expandedMinRange = Math.max(0, minRange - expandX);
         double expandedMaxRange = maxRange + expandX;
+
+        if (minRange < 0)
+            expandedMinRange = minRange - expandX; // allow negative ranges
+        if (maxRange < 0)
+            expandedMaxRange = Math.min(0, maxRange + expandX); // allow negative ranges
         
         // Ensure expanded ranges are still in correct order
         if (expandedMinRange > expandedMaxRange) {
