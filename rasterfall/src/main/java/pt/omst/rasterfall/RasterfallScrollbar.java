@@ -28,6 +28,9 @@ import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -37,6 +40,9 @@ import javax.swing.SwingUtilities;
 
 import lombok.extern.java.Log;
 import pt.omst.rasterfall.replay.LogReplay;
+import pt.omst.rasterlib.IndexedRasterUtils;
+import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
+import pt.omst.rasterlib.contacts.CompressedContact;
 
 @Log
 public class RasterfallScrollbar extends JComponent implements LogReplay.Listener, Closeable {
@@ -47,6 +53,9 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
     private final JViewport viewport;
     private Point2D scrollDragStart = null, waterfallDragStart = null;
     private final RasterfallTiles waterfall;
+    
+    // Cache for RasterContactInfo to avoid recalculation
+    private final Map<CompressedContact, RasterContactInfo> contactInfoCache = new HashMap<>();
 
     public long getStartTime() {
         return waterfall.getStartTime();
@@ -299,6 +308,18 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
         waterfall.repaint();
     }
 
+    /**
+     * Converts a timestamp to Y position on the scrollbar (in scrollImage coordinates).
+     * This is the inverse of yToTimestamp logic.
+     */
+    private double timestampToScrollbarY(long timestamp) {
+        long startTime = getStartTime();
+        long endTime = getEndTime();
+        int height = scrollImage.getHeight() - scrollHeight;
+        double fracIndex = (double) (timestamp - startTime) / (endTime - startTime);
+        return  (height - (fracIndex * scrollImage.getHeight())) + scrollHeight;
+    }
+
     @Override
     public void paint(Graphics g) {
         double relativePosition = (double) position / (getHeight()-scrollHeight);
@@ -370,6 +391,67 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
             g2d.setColor(new Color(0, 255, 0));
             g2d.drawString(timeStr, 2, (int)(position + scrollHeight/2) + 12);
         }
+        
+        // Draw contacts as small crosses
+        drawContacts(g2d);
+    }
+    
+    /**
+     * Draws contacts as 3x3 pixel crosses on the scrollbar.
+     */
+    private void drawContacts(Graphics2D g2d) {
+        List<CompressedContact> allContacts = waterfall.getContacts().getAllContacts();
+        if (allContacts == null || allContacts.isEmpty())
+            return;
+            
+        // Calculate visible portion of scrollImage
+        double relativePosition = (double) position / (getHeight() - scrollHeight);
+        int extraHeight = scrollImage.getHeight() - getHeight();
+        int startPixel = (int) (relativePosition * extraHeight);
+        startPixel = Math.max(0, startPixel);
+        int endPixel = startPixel + getHeight();
+        //log.info("Drawing contacts on scrollbar, visible pixels: " + startPixel + " to " + endPixel);
+        g2d.setColor(Color.WHITE);
+        
+        double maxRange = waterfall.getRasters().isEmpty() ? 100 : 
+                waterfall.getRasters().get(0).getSensorInfo().getMaxRange();
+
+        for (CompressedContact contact : allContacts) {
+            // Check cache first
+            RasterContactInfo cinfo = contactInfoCache.get(contact);
+            if (cinfo == null) {
+                // Calculate and cache if not present
+                cinfo = IndexedRasterUtils.getContactInfo(contact);
+                if (cinfo == null)
+                    continue;
+                contactInfoCache.put(contact, cinfo);
+            }
+            
+            // Calculate center timestamp and range
+            long centerTime = (cinfo.getStartTimeStamp() + cinfo.getEndTimeStamp()) / 2;
+            double centerRange = (cinfo.getMinRange() + cinfo.getMaxRange()) / 2.0;
+            // Convert timestamp to Y position in scrollImage coordinates
+            double scrollImageY = timestampToScrollbarY(centerTime);
+            
+            // Skip if not visible in current scrollbar viewport
+            if (scrollImageY < startPixel || scrollImageY > endPixel)
+                continue;
+            
+            // Convert to screen coordinates
+            int screenY = (int) (scrollImageY - startPixel);
+            
+            // Calculate X position based on range (centered on scrollbar)
+            // Normalize range to 0-1 across scrollbar width            
+            double rangeNorm = (centerRange + maxRange) / (2 * maxRange);
+            int screenX = (int) (rangeNorm * getWidth());
+            screenX = Math.max(1, Math.min(getWidth() - 2, screenX));
+            
+            // Draw 3x3 cross
+            // Horizontal line
+            g2d.drawLine(screenX - 1, screenY, screenX + 1, screenY);
+            // Vertical line
+            g2d.drawLine(screenX, screenY - 1, screenX, screenY + 1);
+        }
     }
 
     @Override
@@ -379,6 +461,7 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
 
     @Override
     public void close() throws IOException {
+        contactInfoCache.clear();
         waterfall.close();
     }
 
