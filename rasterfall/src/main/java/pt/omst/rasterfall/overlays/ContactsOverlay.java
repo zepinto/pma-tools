@@ -5,87 +5,126 @@
 //***************************************************************************
 package pt.omst.rasterfall.overlays;
 
+import java.awt.BasicStroke;
+import java.awt.Color;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.geom.Point2D;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.swing.JComponent;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.omst.rasterfall.RasterfallTiles;
+import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.contacts.CompressedContact;
+
 @Slf4j
 public class ContactsOverlay extends AbstractOverlay {
 
-    private static class Marker {
-        Point2D.Double topLeft;
-        Point2D.Double bottomRight;
-        String label;
-        CompressedContact contact;
-    }
-
-    private void reloadContacts() {
-        markers.clear();
-        log.info("Loading contacts for MarkOverlay: total {}", waterfall.getContacts().getAllContacts().size());
-        waterfall.getContacts().getAllContacts().forEach(this::addContact);
-    }
-
-    private void addContact(CompressedContact c) {
-        // log.info("Loaded contact: {} with {} observations", c.getContact().getUuid(),
-        //         c.getContact().getObservations().size());
-        // Marker m = new Marker();
-        // m.contact = c;
-        // m.label = c.getLabel();
-        // IndexedRaster raster = c.getFirstRaster();
-        // if (raster == null) {
-        //     log.warn("Contact {} has no raster, skipping marker creation", c.getContact().getUuid());
-        //     return;
-        // }
-        // Instant tStart = raster.getSamples().getFirst().getTimestamp().toInstant();
-        // Instant tEnd = raster.getSamples().getLast().getTimestamp().toInstant();
-        // double minRange = raster.getSensorInfo().getMinRange();
-        // double maxRange = raster.getSensorInfo().getMaxRange();
-
-        // m.topLeft = waterfall.getScreenPosition(tStart, minRange);
-        // m.bottomRight = waterfall.getScreenPosition(tEnd, maxRange);
-
-        // markers.add(m);
-        // log.info("Marker at screen coords: TL({}, {}), BR({}, {})", m.topLeft.getX(), m.topLeft.getY(),
-        //         m.bottomRight.getX(), m.bottomRight.getY());
-    }
-
-    private CopyOnWriteArrayList<Marker> markers = new CopyOnWriteArrayList<>();
-
-
-    RasterfallTiles waterfall;
+    private static final int MAX_CACHE_SIZE = 100;
     
+    private RasterfallTiles waterfall;
+    
+    // Cache contact info to avoid re-reading from zip files on every paint
+    private final Map<CompressedContact, IndexedRasterUtils.RasterContactInfo> contactInfoCache = 
+        new LinkedHashMap<>(MAX_CACHE_SIZE, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<CompressedContact, IndexedRasterUtils.RasterContactInfo> eldest) {
+                return size() > MAX_CACHE_SIZE; // Keep cache size limited
+            }
+        };
 
     @Override
     public void cleanup(RasterfallTiles waterfall) {
-        
+        contactInfoCache.clear();
     }
 
     @Override
     public void install(RasterfallTiles waterfall) {
-        this.waterfall = waterfall;        
-        reloadContacts();
+        this.waterfall = waterfall;
     }
     
     @Override
     public void paint(Graphics g, JComponent c) {
         if (waterfall == null)
             return;
-        // List<RasterContactInfo> contacts = waterfall.getVisibleContactInfos();
-        // for (RasterContactInfo contact : contacts) {
-            
-        //     Point2D.Double pos = waterfall.getSlantedScreenPosition(Instant.ofEpochMilli(contact.getStartTimeStamp()), contact.getMinRange());
-        //     Point2D.Double pos2 = waterfall.getSlantedScreenPosition(Instant.ofEpochMilli(contact.getEndTimeStamp()), contact.getMaxRange());
 
-        //     g.setColor(Color.white);
-        //     g.drawRect((int) pos.getX(), (int) pos.getY(), (int)(pos2.getX()-pos.getX()), (int)(pos2.getY()-pos.getY()));
-            
-        //     System.out.println("Contact info: " + contact);
-        // }
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        // Get visible time range
+        long topTimestamp = waterfall.getTopTimestamp();
+        long bottomTimestamp = waterfall.getBottomTimestamp();
+        
+        // Get all contacts
+        List<CompressedContact> contacts = waterfall.getContacts().getAllContacts();
+        
+        int drawnCount = 0;
+        for (CompressedContact contact : contacts) {
+            try {
+                // Get or compute contact info
+                IndexedRasterUtils.RasterContactInfo info = contactInfoCache.computeIfAbsent(
+                    contact, 
+                    IndexedRasterUtils::getContactInfo
+                );
+                
+                // Skip contacts outside visible time range
+                if (info.getEndTimeStamp() < topTimestamp || info.getStartTimeStamp() > bottomTimestamp) {
+                    continue;
+                }
+                
+                // Get screen positions for the bounding box corners
+                Point2D.Double topLeft = waterfall.getScreenPosition(
+                    Instant.ofEpochMilli(info.getStartTimeStamp()), 
+                    info.getMinRange()
+                );
+                Point2D.Double bottomRight = waterfall.getScreenPosition(
+                    Instant.ofEpochMilli(info.getEndTimeStamp()), 
+                    info.getMaxRange()
+                );
+                
+                // Skip if either position is null (contact not in visible tiles)
+                if (topLeft == null || bottomRight == null)
+                    continue;
+                
+                // Calculate rectangle dimensions
+                int x = (int) Math.min(topLeft.x, bottomRight.x);
+                int y = (int) Math.min(topLeft.y, bottomRight.y);
+                int width = (int) Math.abs(bottomRight.x - topLeft.x);
+                int height = (int) Math.abs(bottomRight.y - topLeft.y);
+                
+                // Draw semi-transparent shadow
+                g2.setColor(new Color(0, 0, 0, 100));
+                g2.setStroke(new BasicStroke(3.0f));
+                g2.drawRect(x, y, width, height);
+                
+                // Draw white bounding box
+                g2.setColor(new Color(255, 255, 255, 200));
+                g2.setStroke(new BasicStroke(2.0f));
+                g2.drawRect(x, y, width, height);
+                
+                // Draw label if available
+                if (contact.getLabel() != null && !contact.getLabel().isEmpty()) {
+                    g2.setColor(new Color(255, 255, 255, 230));
+                    g2.drawString(contact.getLabel(), x + 5, y - 5);
+                }
+                
+                drawnCount++;
+            } catch (RuntimeException e) {
+                log.debug("Error drawing bounding box for contact '{}': {}", 
+                    contact.getLabel() != null ? contact.getLabel() : contact.getZctFile().getName(), 
+                    e.getMessage());
+            }
+        }
+        
+        if (log.isDebugEnabled()) {
+            log.debug("Drew {} contact bounding boxes", drawnCount);
+        }
+        g2.dispose();
     }
 }
