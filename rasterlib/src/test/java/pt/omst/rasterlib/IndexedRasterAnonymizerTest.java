@@ -304,4 +304,160 @@ class IndexedRasterAnonymizerTest {
         
         return raster;
     }
+
+    // ========== Contact Anonymization Tests ==========
+
+    @Test
+    @DisplayName("Test contact anonymization creates anonymized-contacts folder")
+    void testContactAnonymizationCreatesFolder() throws IOException {
+        // Create contacts folder and a sample .zct file
+        File contactsFolder = new File(tempDir.toFile(), "contacts");
+        assertTrue(contactsFolder.mkdirs());
+
+        // Create a mock .zct file with a contact
+        File zctFile = new File(contactsFolder, "test_contact.zct");
+        createMockZctFile(zctFile, 40.0, -8.0);
+
+        // Create reference location
+        pt.lsts.neptus.core.LocationType refLocation = new pt.lsts.neptus.core.LocationType(40.0, -8.0);
+
+        // Run contact anonymization
+        IndexedRasterAnonymizer.anonymizeContactsFolder(contactsFolder, refLocation);
+
+        // Check that anonymized-contacts folder was created
+        File anonymizedContactsFolder = new File(tempDir.toFile(), "anonymized-contacts");
+        assertTrue(anonymizedContactsFolder.exists());
+        assertTrue(anonymizedContactsFolder.isDirectory());
+    }
+
+    @Test
+    @DisplayName("Test contact anonymization copies .zct files")
+    void testContactAnonymizationCopiesFiles() throws IOException {
+        // Create contacts folder and sample .zct files
+        File contactsFolder = new File(tempDir.toFile(), "contacts");
+        assertTrue(contactsFolder.mkdirs());
+
+        createMockZctFile(new File(contactsFolder, "contact1.zct"), 40.0, -8.0);
+        createMockZctFile(new File(contactsFolder, "contact2.zct"), 40.01, -8.01);
+
+        // Create reference location
+        pt.lsts.neptus.core.LocationType refLocation = new pt.lsts.neptus.core.LocationType(40.0, -8.0);
+
+        // Run contact anonymization
+        IndexedRasterAnonymizer.anonymizeContactsFolder(contactsFolder, refLocation);
+
+        // Check that .zct files were copied
+        File anonymizedContactsFolder = new File(tempDir.toFile(), "anonymized-contacts");
+        assertTrue(new File(anonymizedContactsFolder, "contact1.zct").exists());
+        assertTrue(new File(anonymizedContactsFolder, "contact2.zct").exists());
+    }
+
+    @Test
+    @DisplayName("Test contact coordinates are anonymized")
+    void testContactCoordinatesAnonymized() throws IOException {
+        // Create contacts folder and a sample .zct file
+        File contactsFolder = new File(tempDir.toFile(), "contacts");
+        assertTrue(contactsFolder.mkdirs());
+
+        double originalLat = 40.0;
+        double originalLon = -8.0;
+        File zctFile = new File(contactsFolder, "test_contact.zct");
+        createMockZctFile(zctFile, originalLat, originalLon);
+
+        // Create reference location (same as the contact)
+        pt.lsts.neptus.core.LocationType refLocation = new pt.lsts.neptus.core.LocationType(originalLat, originalLon);
+
+        // Run contact anonymization
+        IndexedRasterAnonymizer.anonymizeContactsFolder(contactsFolder, refLocation);
+
+        // Read the anonymized contact
+        File anonymizedZctFile = new File(tempDir.toFile(), "anonymized-contacts/test_contact.zct");
+        assertTrue(anonymizedZctFile.exists());
+
+        // Extract and verify the contact
+        Contact anonymizedContact = pt.omst.rasterlib.contacts.CompressedContact.extractCompressedContact(anonymizedZctFile);
+        assertNotNull(anonymizedContact);
+
+        // Since the contact was at the same location as reference, it should be at the anonymized start
+        assertEquals(45.0, anonymizedContact.getLatitude(), 0.0001);
+        assertEquals(-15.0, anonymizedContact.getLongitude(), 0.0001);
+    }
+
+    @Test
+    @DisplayName("Test contact relative positions preserved")
+    void testContactRelativePositionsPreserved() throws IOException {
+        // Create contacts folder
+        File contactsFolder = new File(tempDir.toFile(), "contacts");
+        assertTrue(contactsFolder.mkdirs());
+
+        // Create two contacts at different locations
+        double lat1 = 40.0, lon1 = -8.0;
+        double lat2 = 40.01, lon2 = -8.01;
+        
+        createMockZctFile(new File(contactsFolder, "contact1.zct"), lat1, lon1);
+        createMockZctFile(new File(contactsFolder, "contact2.zct"), lat2, lon2);
+
+        // Calculate original distance
+        pt.lsts.neptus.core.LocationType loc1 = new pt.lsts.neptus.core.LocationType(lat1, lon1);
+        pt.lsts.neptus.core.LocationType loc2 = new pt.lsts.neptus.core.LocationType(lat2, lon2);
+        double originalDistance = loc1.getHorizontalDistanceInMeters(loc2);
+
+        // Run contact anonymization with first location as reference
+        IndexedRasterAnonymizer.anonymizeContactsFolder(contactsFolder, loc1);
+
+        // Read anonymized contacts
+        File anonymizedFolder = new File(tempDir.toFile(), "anonymized-contacts");
+        Contact contact1 = pt.omst.rasterlib.contacts.CompressedContact.extractCompressedContact(
+            new File(anonymizedFolder, "contact1.zct"));
+        Contact contact2 = pt.omst.rasterlib.contacts.CompressedContact.extractCompressedContact(
+            new File(anonymizedFolder, "contact2.zct"));
+
+        // Calculate anonymized distance
+        pt.lsts.neptus.core.LocationType anonLoc1 = new pt.lsts.neptus.core.LocationType(
+            contact1.getLatitude(), contact1.getLongitude());
+        pt.lsts.neptus.core.LocationType anonLoc2 = new pt.lsts.neptus.core.LocationType(
+            contact2.getLatitude(), contact2.getLongitude());
+        double anonymizedDistance = anonLoc1.getHorizontalDistanceInMeters(anonLoc2);
+
+        // Distances should be preserved (within 10m due to coordinate system differences)
+        assertEquals(originalDistance, anonymizedDistance, 10.0);
+    }
+
+    @Test
+    @DisplayName("Test missing contacts folder handled gracefully")
+    void testMissingContactsFolderHandled() throws IOException {
+        File nonExistentFolder = new File(tempDir.toFile(), "nonexistent");
+        pt.lsts.neptus.core.LocationType refLocation = new pt.lsts.neptus.core.LocationType(40.0, -8.0);
+
+        // Should not throw exception
+        assertDoesNotThrow(() -> 
+            IndexedRasterAnonymizer.anonymizeContactsFolder(nonExistentFolder, refLocation));
+    }
+
+    // Helper method to create a mock .zct file
+    private void createMockZctFile(File zctFile, double lat, double lon) throws IOException {
+        // Create a contact
+        Contact contact = new Contact();
+        contact.setLabel("Test Contact");
+        contact.setLatitude(lat);
+        contact.setLongitude(lon);
+        contact.setDepth(10.0);
+
+        // Create a temporary directory for the contact
+        Path tempContactDir = Files.createTempDirectory("zct-temp");
+        File contactJsonFile = new File(tempContactDir.toFile(), "contact.json");
+        
+        // Write contact.json
+        String contactJson = Converter.ContactToJsonString(contact);
+        Files.writeString(contactJsonFile.toPath(), contactJson);
+
+        // Create the .zct file (zip it) - arguments are (zipFile, sourceDir)
+        pt.lsts.neptus.util.ZipUtils.zipDir(zctFile.getAbsolutePath(), tempContactDir.toString());
+
+        // Clean up temp directory
+        Files.walk(tempContactDir)
+                .sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
+    }
 }

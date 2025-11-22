@@ -7,17 +7,19 @@ package pt.omst.rasterlib;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
+import pt.lsts.neptus.util.ZipUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 /**
- * Utility class to anonymize IndexedRaster files by translating all coordinates
- * while keeping velocities, angles, and images unchanged.
+ * Utility class to anonymize IndexedRaster files and CompressedContact files 
+ * by translating all coordinates while keeping velocities, angles, and images unchanged.
  * 
  * The anonymization translates all coordinates so that the vehicle starts at
  * lat=45, lon=-15 (Atlantic Ocean) and calculates remaining coordinates based
@@ -157,6 +159,128 @@ public class IndexedRasterAnonymizer {
     }
 
     /**
+     * Anonymizes contact files (.zct) in a contacts folder.
+     * Creates an "anonymized-contacts" folder as a sibling to the contacts folder.
+     * 
+     * @param contactsFolder the folder containing .zct contact files
+     * @param referenceLocation the original reference location (first position from raster data)
+     * @throws IOException if file operations fail
+     */
+    public static void anonymizeContactsFolder(File contactsFolder, LocationType referenceLocation) throws IOException {
+        if (!contactsFolder.exists() || !contactsFolder.isDirectory()) {
+            log.warn("Contacts folder does not exist: {}", contactsFolder);
+            return;
+        }
+
+        // Create anonymized-contacts folder as a sibling
+        File parentFolder = contactsFolder.getParentFile();
+        File anonymizedContactsFolder = new File(parentFolder, "anonymized-contacts");
+        
+        if (!anonymizedContactsFolder.exists()) {
+            if (!anonymizedContactsFolder.mkdirs()) {
+                throw new IOException("Failed to create anonymized-contacts folder: " + anonymizedContactsFolder);
+            }
+        }
+
+        log.info("Anonymizing contact files from {} to {}", contactsFolder, anonymizedContactsFolder);
+
+        // Process all .zct files in the folder
+        File[] zctFiles = contactsFolder.listFiles((dir, name) -> name.endsWith(".zct"));
+        if (zctFiles == null || zctFiles.length == 0) {
+            log.warn("No .zct files found in {}", contactsFolder);
+            return;
+        }
+
+        int processed = 0;
+        for (File zctFile : zctFiles) {
+            try {
+                anonymizeContactFile(zctFile, anonymizedContactsFolder, referenceLocation);
+                processed++;
+            } catch (Exception e) {
+                log.error("Failed to anonymize contact file: " + zctFile.getName(), e);
+            }
+        }
+
+        log.info("Contact anonymization complete. Processed {} files.", processed);
+    }
+
+    /**
+     * Anonymizes a single contact file (.zct).
+     * 
+     * @param zctFile the .zct file to anonymize
+     * @param outputFolder the folder where anonymized files will be saved
+     * @param referenceLocation the original reference location for coordinate translation
+     * @throws IOException if file operations fail
+     */
+    private static void anonymizeContactFile(File zctFile, File outputFolder, LocationType referenceLocation) throws IOException {
+        log.debug("Processing contact file: {}", zctFile.getName());
+
+        // Extract contact.json from the .zct file
+        InputStream contactStream = ZipUtils.getFileInZip(zctFile.getAbsolutePath(), "contact.json");
+        if (contactStream == null) {
+            log.warn("No contact.json found in {}", zctFile.getName());
+            return;
+        }
+
+        String contactJson = new String(contactStream.readAllBytes());
+        Contact contact = Converter.ContactFromJsonString(contactJson);
+
+        // Anonymize the contact coordinates
+        anonymizeContact(contact, referenceLocation);
+
+        // Copy the entire .zct file to the output folder
+        File outputZctFile = new File(outputFolder, zctFile.getName());
+        Files.copy(zctFile.toPath(), outputZctFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        // Update the contact.json inside the copied .zct file
+        String anonymizedContactJson = Converter.ContactToJsonString(contact);
+        ZipUtils.updateFileInZip(outputZctFile.getAbsolutePath(), "contact.json", anonymizedContactJson);
+
+        log.debug("Anonymized contact file written to: {}", outputZctFile.getName());
+    }
+
+    /**
+     * Anonymizes coordinates in a Contact object.
+     * 
+     * @param contact the contact to anonymize (modified in place)
+     * @param referenceLocation the original reference location for coordinate translation
+     */
+    private static void anonymizeContact(Contact contact, LocationType referenceLocation) {
+        if (contact == null) {
+            return;
+        }
+
+        // Anonymize the main contact coordinates
+        if (contact.getLatitude() != null && contact.getLongitude() != null) {
+            LocationType contactLocation = new LocationType(contact.getLatitude(), contact.getLongitude());
+            LocationType anonymizedLocation = translateLocation(contactLocation, referenceLocation);
+            contact.setLatitude(anonymizedLocation.getLatitudeDegs());
+            contact.setLongitude(anonymizedLocation.getLongitudeDegs());
+        }
+
+        log.debug("Anonymized contact: {}", contact.getLabel());
+    }
+
+    /**
+     * Translates a location from its original position to an anonymized position.
+     * 
+     * @param location the location to translate
+     * @param referenceLocation the original reference location (first position)
+     * @return the anonymized location
+     */
+    private static LocationType translateLocation(LocationType location, LocationType referenceLocation) {
+        // Calculate offset from the reference position
+        double[] offset = location.getOffsetFrom(referenceLocation);
+        
+        // Create new location by applying the offset to the anonymized start
+        LocationType anonymizedStart = new LocationType(ANONYMIZED_START_LAT, ANONYMIZED_START_LON);
+        anonymizedStart.translatePosition(offset[0], offset[1], offset[2]);
+        anonymizedStart.convertToAbsoluteLatLonDepth();
+        
+        return anonymizedStart;
+    }
+
+    /**
      * Main method for command-line usage.
      * 
      * Usage: java IndexedRasterAnonymizer &lt;rasterIndex-folder-path&gt;
@@ -171,6 +295,26 @@ public class IndexedRasterAnonymizer {
         
         try {
             anonymizeFolder(rasterIndexFolder);
+            
+            // Also anonymize contacts if they exist
+            File parentFolder = rasterIndexFolder.getParentFile();
+            File contactsFolder = new File(parentFolder, "contacts");
+            
+            if (contactsFolder.exists() && contactsFolder.isDirectory()) {
+                // Get the first raster to extract reference location
+                File[] jsonFiles = rasterIndexFolder.listFiles((dir, name) -> name.endsWith(".json"));
+                if (jsonFiles != null && jsonFiles.length > 0) {
+                    String jsonContent = Files.readString(jsonFiles[0].toPath());
+                    IndexedRaster raster = Converter.IndexedRasterFromJsonString(jsonContent);
+                    if (raster.getSamples() != null && !raster.getSamples().isEmpty()) {
+                        Pose firstPose = raster.getSamples().get(0).getPose();
+                        LocationType referenceLocation = new LocationType(firstPose.getLatitude(), firstPose.getLongitude());
+                        
+                        anonymizeContactsFolder(contactsFolder, referenceLocation);
+                    }
+                }
+            }
+            
             System.out.println("Anonymization completed successfully!");
         } catch (Exception e) {
             System.err.println("Error during anonymization: " + e.getMessage());
