@@ -56,6 +56,9 @@ dependencies {
     // UI dependencies
     implementation name: 'flatlaf-3.5.2'
     
+    // Image processing
+    implementation 'com.jhlabs:filters:2.0.235-1'
+    
     // Testing
     testImplementation(platform('org.junit:junit-bom:5.11.1'))
     testImplementation('org.junit.jupiter:junit-jupiter')

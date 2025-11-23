@@ -109,7 +109,6 @@ public class PathMapOverlay extends AbstractMapOverlay {
 
     @Override
     public void paint(Graphics g, JComponent c) {
-        log.info("Painting path overlay, pathReady={}, startLocation={}", pathReady, startLocation);
         if (!pathReady || startLocation == null) {
             return;
         }

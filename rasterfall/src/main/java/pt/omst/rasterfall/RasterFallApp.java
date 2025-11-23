@@ -47,6 +47,7 @@ public class RasterFallApp extends JFrame {
     // Singleton ContactManager tracking
     private static JFrame mapViewerFrame;
     private static MapViewer mapViewer;
+    private JMenuItem openLogFolderItem;
 
     public RasterFallApp() {
         setTitle("Sidescan RasterFall");
@@ -136,8 +137,17 @@ public class RasterFallApp extends JFrame {
 
         toolsMenu.add(mapViewerItem);
 
-        menuBar.add(toolsMenu);
+        openLogFolderItem = new JMenuItem("Browse Folder");
+        openLogFolderItem.setEnabled(false); // Disabled until folder is loaded
+        openLogFolderItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                openCurrentLogFolder();
+            }
+        });
+        toolsMenu.add(openLogFolderItem);
 
+        menuBar.add(toolsMenu);
         // Help menu
         JMenu helpMenu = new JMenu("Help");
 
@@ -156,14 +166,14 @@ public class RasterFallApp extends JFrame {
 
         // Add horizontal glue to push status indicator to the right
         menuBar.add(Box.createHorizontalGlue());
-        
+
         // Ensure the status indicator has proper size
         statusIndicator.setPreferredSize(new java.awt.Dimension(30, 20));
         statusIndicator.setMinimumSize(new java.awt.Dimension(30, 20));
         statusIndicator.setMaximumSize(new java.awt.Dimension(30, 20));
         statusIndicator.setVisible(true);
         menuBar.add(statusIndicator);
-        
+
         setJMenuBar(menuBar);
     }
 
@@ -185,6 +195,23 @@ public class RasterFallApp extends JFrame {
         licenseFrame.pack();
         licenseFrame.setLocationRelativeTo(this);
         licenseFrame.setVisible(true);
+    }
+
+    private void openCurrentLogFolder() {
+        if (rasterfallPanel == null) {
+            return;
+        }
+
+        try {
+            File logFolder = rasterfallPanel.getWaterfall().getRastersFolder();
+            if (logFolder != null && logFolder.exists() && logFolder.isDirectory()) {
+                java.awt.Desktop.getDesktop().open(logFolder);
+            } else {
+                GuiUtils.errorMessage(this, "Error", "Log folder not found or invalid.");
+            }
+        } catch (Exception ex) {
+            GuiUtils.errorMessage(this, "Error", "Failed to open log folder: " + ex.getMessage());
+        }
     }
 
     private void openMapViewer() {
@@ -220,7 +247,7 @@ public class RasterFallApp extends JFrame {
             if (waterfall != null) {
                 mapViewer.loadWaterfall(waterfall);
             }
-            
+
             // Create and setup frame
             mapViewerFrame = new JFrame("Map Viewer");
             mapViewerFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -345,6 +372,11 @@ public class RasterFallApp extends JFrame {
                     // Update window title
                     setTitle("Sidescan RasterFall - " + folder.getName());
 
+                    // Enable "Open Log Folder" menu item
+                    if (openLogFolderItem != null) {
+                        openLogFolderItem.setEnabled(true);
+                    }
+
                     // Sync contacts to open MapViewer if it exists
                     syncContactsToViewer();
 
@@ -378,8 +410,9 @@ public class RasterFallApp extends JFrame {
         }).start();
     }
 
-        /**
-     * Syncs the contacts from the currently loaded folder to the open MapViewer viewer. If no
+    /**
+     * Syncs the contacts from the currently loaded folder to the open MapViewer
+     * viewer. If no
      * MapViewer is open or no contacts are loaded, this method does nothing.
      */
     private void syncContactsToViewer() {

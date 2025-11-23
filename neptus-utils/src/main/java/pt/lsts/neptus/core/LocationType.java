@@ -5,6 +5,7 @@
 //***************************************************************************
 package pt.lsts.neptus.core;
 
+import java.awt.geom.Point2D;
 /*
  * Copyright (c) 2004-2016 Universidade do Porto - Faculdade de Engenharia
  * Laboratório de Sistemas e Tecnologia Subaquática (LSTS)
@@ -44,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.MapTileUtil;
 
 /**
  * The base for the definition of this coordinate system
@@ -796,5 +798,16 @@ public class LocationType implements Serializable, Comparable<LocationType>, Clo
         double[] offsets = getOffsetFrom(anotherLocation);
         double sum = offsets[0] * offsets[0] + offsets[1] * offsets[1];
         return Math.sqrt(sum);
+    }
+
+    public Point2D getPointInPixel(int levelOfDetail) {
+        LocationType meWithOffset = this.getNewAbsoluteLatLonDepth();
+        return MapTileUtil.degreesToXY(meWithOffset.getLatitudeDegs(), meWithOffset.getLongitudeDegs(), levelOfDetail);
+    }
+
+    public double[] getDistanceInPixelTo(LocationType target, int levelOfDetail) {
+        LocationType meWithOffset = this.getNewAbsoluteLatLonDepth();
+        LocationType targetWithOffset = target.getNewAbsoluteLatLonDepth();
+        return MapTileUtil.getOffsetInPixels(meWithOffset, targetWithOffset, levelOfDetail);
     }
 }

@@ -10,6 +10,7 @@ import java.awt.BorderLayout;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.JFrame;
@@ -21,6 +22,8 @@ import lombok.extern.java.Log;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterfall.overlays.InteractionListenerOverlay;
 import pt.omst.rasterfall.overlays.RasterfallOverlays;
+import pt.omst.rasterlib.IndexedRasterCreator;
+import pt.omst.rasterlib.IndexedRasterUtils;
 
 @Log
 public class RasterfallPanel extends JPanel implements Closeable {
@@ -43,6 +46,22 @@ public class RasterfallPanel extends JPanel implements Closeable {
 
     public RasterfallPanel(File rastersFolder, Consumer<String> progressCallback) {
         setLayout(new BorderLayout());
+        // check rasters have already been indexed
+        if (progressCallback != null) {
+            progressCallback.accept("Loading rasterfall tiles...");
+            List<File> files = RasterfallTiles.findRasterFiles(rastersFolder);
+            if (files.isEmpty()) {
+                progressCallback.accept("No raster files found in folder: " + rastersFolder.getAbsolutePath());
+                log.warning("No raster files found in folder: " + rastersFolder.getAbsolutePath());
+                IndexedRasterCreator.exportRasters(rastersFolder, 0,
+                        progressCallback == null ? null : msg -> {
+                            progressCallback.accept(msg);
+                        });
+            } else {
+                progressCallback.accept("Found " + files.size() + " raster files.");
+            }
+        }
+
         this.waterfall = new RasterfallTiles(rastersFolder, progressCallback);
         if (progressCallback != null) {
             progressCallback.accept("Setting up overlays...");
