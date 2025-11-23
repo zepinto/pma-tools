@@ -10,6 +10,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
@@ -33,6 +34,7 @@ import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.rasterfall.map.MapViewer;
+import pt.omst.rasterlib.IndexedRasterCreator;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.gui.RasterFolderChooser;
 import pt.omst.util.UserPreferencesDialog;
@@ -357,12 +359,26 @@ public class RasterFallApp extends JFrame {
                     System.out.println("Loading: " + message);
                 };
 
+                List<File> files = RasterfallTiles.findRasterFiles(folder);
+                File openedFile = folder;
+                if (files.isEmpty()) {
+                    log.warn("No raster files found in folder: " + folder.getAbsolutePath());
+                    progressCallback.accept("Exporting rasters from " + folder.getAbsolutePath());
+                    openedFile = IndexedRasterCreator.exportRasters(folder, 0,
+                            progressCallback == null ? null : msg -> {
+                                progressCallback.accept(msg);
+                            });
+                    files = RasterfallTiles.findRasterFiles(openedFile);
+                }
+                
+                progressCallback.accept("Found " + files.size() + " raster files.");
+
                 // Create new rasterfall panel with selected folder (in background)
                 if (loadingPanel != null) {
                     SwingUtilities.invokeLater(() -> loadingPanel.setStatus("Initializing rasterfall panel..."));
                 }
 
-                RasterfallPanel newPanel = new RasterfallPanel(folder, progressCallback);
+                RasterfallPanel newPanel = new RasterfallPanel(openedFile, progressCallback);
 
                 // Add panel to UI on EDT
                 SwingUtilities.invokeLater(() -> {

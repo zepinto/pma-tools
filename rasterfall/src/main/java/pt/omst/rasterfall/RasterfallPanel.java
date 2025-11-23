@@ -48,18 +48,7 @@ public class RasterfallPanel extends JPanel implements Closeable {
         setLayout(new BorderLayout());
         // check rasters have already been indexed
         if (progressCallback != null) {
-            progressCallback.accept("Loading rasterfall tiles...");
-            List<File> files = RasterfallTiles.findRasterFiles(rastersFolder);
-            if (files.isEmpty()) {
-                progressCallback.accept("No raster files found in folder: " + rastersFolder.getAbsolutePath());
-                log.warning("No raster files found in folder: " + rastersFolder.getAbsolutePath());
-                IndexedRasterCreator.exportRasters(rastersFolder, 0,
-                        progressCallback == null ? null : msg -> {
-                            progressCallback.accept(msg);
-                        });
-            } else {
-                progressCallback.accept("Found " + files.size() + " raster files.");
-            }
+            progressCallback.accept("Loading rasterfall tiles...");            
         }
 
         this.waterfall = new RasterfallTiles(rastersFolder, progressCallback);
