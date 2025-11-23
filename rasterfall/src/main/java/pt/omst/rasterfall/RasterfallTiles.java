@@ -34,6 +34,8 @@ import lombok.Getter;
 import lombok.extern.java.Log;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.omst.gui.jobs.BackgroundJob;
+import pt.omst.gui.jobs.JobManager;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.IndexedRasterUtils;
@@ -100,6 +102,15 @@ public class RasterfallTiles extends JPanel implements Closeable {
                 IndexedRaster raster = Converter.IndexedRasterFromJsonString(Files.readString(index.toPath()));
                 rasters.add(raster);
                 RasterfallTile tile = new RasterfallTile(index.getParentFile(), raster);
+                JobManager.getInstance().submit(new BackgroundJob("Loading tile " + index.getName()) {
+                    @Override
+                    protected Void doInBackground() throws Exception {
+                        updateStatus("Loading image from "+raster.getFilename());
+                        tile.getImage();
+                        updateStatus("Image loaded.");
+                        return null;
+                    }
+                });
                 tiles.add(tile);
                 rasters.sort((r1, r2) -> r2.getSamples().get(0).getTimestamp().compareTo(r1.getSamples().get(0).getTimestamp()));
             } catch (IOException e) {

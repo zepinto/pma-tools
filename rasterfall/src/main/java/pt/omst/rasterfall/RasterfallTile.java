@@ -250,7 +250,7 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
         }
     }
 
-    public BufferedImage getImage() {
+    public synchronized BufferedImage getImage() {
         if (image != null)
             return image;
         if (raster.getFilename() == null || !new File(folder, raster.getFilename()).exists()) {

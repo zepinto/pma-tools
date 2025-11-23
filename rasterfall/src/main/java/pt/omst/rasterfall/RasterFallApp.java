@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
+import javax.swing.Box;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -27,6 +28,7 @@ import javax0.license3j.License;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.LoadingPanel;
+import pt.omst.gui.jobs.TaskStatusIndicator;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
@@ -40,7 +42,7 @@ public class RasterFallApp extends JFrame {
     private static final long serialVersionUID = 1L;
     private RasterfallPanel rasterfallPanel;
     private WelcomePanel welcomePanel;
-
+    private final TaskStatusIndicator statusIndicator;
     // Singleton ContactManager tracking
     private static JFrame mapViewerFrame;
     private static MapViewer mapViewer;
@@ -55,7 +57,7 @@ public class RasterFallApp extends JFrame {
         // Show welcome panel initially
         welcomePanel = new WelcomePanel();
         add(welcomePanel, BorderLayout.CENTER);
-
+        statusIndicator = new TaskStatusIndicator(this);
         setupMenubar();
     }
 
@@ -150,6 +152,17 @@ public class RasterFallApp extends JFrame {
         helpMenu.add(licenseItem);
 
         menuBar.add(helpMenu);
+
+        // Add horizontal glue to push status indicator to the right
+        menuBar.add(Box.createHorizontalGlue());
+        
+        // Ensure the status indicator has proper size
+        statusIndicator.setPreferredSize(new java.awt.Dimension(30, 20));
+        statusIndicator.setMinimumSize(new java.awt.Dimension(30, 20));
+        statusIndicator.setMaximumSize(new java.awt.Dimension(30, 20));
+        statusIndicator.setVisible(true);
+        menuBar.add(statusIndicator);
+        
         setJMenuBar(menuBar);
     }
 
