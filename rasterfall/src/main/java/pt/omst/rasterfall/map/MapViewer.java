@@ -199,6 +199,16 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
             });
         });
         contactsMapOverlay.setGroupingHandler(grouper);
+
+        contactCollection.addChangeListener(() -> {
+            log.info("Contact collection changed, refreshing map overlay");
+            SwingUtilities.invokeLater(() -> {
+                updateStatusBar();
+                contactsMapOverlay.refresh();
+                slippyMap.repaint();
+            });
+        });
+        
     }
 
     public void loadWaterfall(RasterfallTiles waterfall) {
@@ -209,6 +219,8 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     public void refreshContacts() {
         contactsMapOverlay.setContactCollection(contactCollection);
+        showAllContacts(); // Reapply filters with new collection
+        updateStatusBar();
         repaint();
     }
     

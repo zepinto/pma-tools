@@ -85,6 +85,13 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         }
     }
 
+    public void refresh() {
+        // Re-apply current filters to pick up any new contacts that were added
+        if (collection != null) {
+            collection.reapplyCurrentFilters();
+        }
+    }
+
 
     @Override
     public void cleanup(SlippyMap map) {

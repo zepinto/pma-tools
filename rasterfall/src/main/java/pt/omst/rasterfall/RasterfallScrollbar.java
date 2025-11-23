@@ -68,6 +68,9 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
     public RasterfallScrollbar(RasterfallTiles waterfall, JViewport viewport) {
         this.viewport = viewport;
         this.waterfall = waterfall;
+        waterfall.getContacts().addChangeListener(() -> {
+            repaint();
+        });
         int height = 0;
         addGuiHooks();
         setFocusable(true);
