@@ -255,6 +255,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
                 return tile.getWorldPosition(x, y);
             }
         }
+        log.info("No tile contains point " + point);
         return null;
     }
 
