@@ -365,6 +365,7 @@ public class IndexedRasterUtils {
         private double maxRange;
         private long startTimeStamp;
         private long endTimeStamp;        
+        private CompressedContact contact;
     }
 
     public static RasterContactInfo getContactInfo(CompressedContact contact) {
@@ -372,7 +373,7 @@ public class IndexedRasterUtils {
         RasterContactInfo info = new RasterContactInfo();
         info.center = new LocationType(c.getLatitude(), c.getLongitude());
         info.label = c.getLabel();
-
+        info.setContact(contact);
         Observation sssObservation = null;
         Annotation boxAnnotation = null;
         SensorInfo sensorInfo = null;
