@@ -623,6 +623,7 @@ public class MarkOverlay extends AbstractOverlay {
                 JMenuItem removeButton = new JMenuItem("Remove");
                 removeButton.addActionListener(evt -> {
                     // Remove contact
+                    contact.getContact().getZctFile().delete();
                     waterfall.getContacts().removeContact(contact.getContact().getZctFile());
                     waterfall.repaint();
                 });
