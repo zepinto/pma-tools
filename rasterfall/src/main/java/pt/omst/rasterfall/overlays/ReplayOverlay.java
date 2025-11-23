@@ -21,9 +21,11 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JLayer;
 
+import lombok.extern.slf4j.Slf4j;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.replay.LogReplay;
 
+@Slf4j
 public class ReplayOverlay extends AbstractOverlay implements LogReplay.Listener {
 
     private final JLabel label = new JLabel();
@@ -96,6 +98,7 @@ public class ReplayOverlay extends AbstractOverlay implements LogReplay.Listener
 
     @Override
     public void replayStateChanged(Instant realTime, Instant replayTime, double speed) {
+        log.info("Replay time: {}, Speed: {}X", replayTime, speed);
         lastSpeed = speed;
         lastReplayTime = replayTime.toEpochMilli();
         lastRealTime = realTime.toEpochMilli();

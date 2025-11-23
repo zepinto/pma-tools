@@ -9,7 +9,9 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Point2D;
@@ -23,11 +25,18 @@ import java.util.List;
 import java.util.UUID;
 
 import javax.imageio.ImageIO;
+import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JLayer;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.border.EmptyBorder;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.ZipUtils;
+import pt.omst.contacts.ContactEditor;
 import pt.omst.rasterfall.RasterfallTile;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterlib.Annotation;
@@ -41,6 +50,7 @@ import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.RasterType;
 import pt.omst.rasterlib.SampleDescription;
 import pt.omst.rasterlib.SensorInfo;
+import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.util.UserPreferences;
 
@@ -533,9 +543,91 @@ public class MarkOverlay extends AbstractOverlay {
         }
     }
 
+    RasterContactInfo findContactAtScreenPosition(Point2D.Double screenPos) {
+        if (waterfall == null)
+            return null;
+
+        List<RasterContactInfo> contacts = waterfall.getVisibleContacts();
+        if (contacts == null || contacts.isEmpty())
+            return null;
+
+        for (RasterContactInfo contact : contacts) {
+
+            Point2D.Double pos = waterfall.getSlantedScreenPosition(Instant.ofEpochMilli(contact.getStartTimeStamp()),
+                    contact.getMinRange());
+            Point2D.Double pos2 = waterfall.getSlantedScreenPosition(Instant.ofEpochMilli(contact.getEndTimeStamp()),
+                    contact.getMaxRange());
+
+            if (pos == null || pos2 == null) {
+                continue;
+            }
+
+            int x = (int) Math.min(pos.getX(), pos2.getX());
+            int y = (int) Math.min(pos.getY(), pos2.getY());
+            int width = (int) Math.abs(pos2.getX() - pos.getX());
+            int height = (int) Math.abs(pos2.getY() - pos.getY());
+
+            Rectangle rect = new Rectangle(x, y, width, height);
+            if (rect.contains(screenPos)) {
+                return contact;
+            }
+        }
+        return null;
+    }
+
+    private void editContact(RasterContactInfo contactInfo) {
+        ContactEditor editor = new ContactEditor();
+        editor.setVisible(true);
+    }
+
     @Override
     protected void processMouseEvent(MouseEvent e, JLayer<? extends RasterfallTiles> l) {
         if (e.getID() == MouseEvent.MOUSE_CLICKED) {
+
+        if (e.getClickCount() == 2) {
+            log.info("Double click detected, resetting selection.");
+            firstPoint = lastPoint = currentPoint = null;
+            waterfall.repaint();
+            return;
+        }
+        if (e.getButton() == MouseEvent.BUTTON3) {     
+            if (firstPoint != null) {
+                firstPoint = lastPoint = currentPoint = null;
+                waterfall.repaint();
+                return;
+            }
+
+            JPopupMenu menu = new JPopupMenu();
+            // Add menu items as needed
+            RasterContactInfo contact = findContactAtScreenPosition(new Point2D.Double(e.getX(), e.getY()));
+            if (contact != null) {
+                log.info("Right-clicked on contact: {}", contact.getLabel());
+                // Add contact-specific menu items
+                String html = "<html><strong>" + contact.getLabel()+ "</strong>";
+
+                if (contact.getClassification() != null) 
+                    html += ": " + contact.getClassification().getCategory() + " / "
+                            + contact.getClassification().getConfidence().intValue() + "";
+                html += "</html>";
+                JLabel item = new JLabel(html);
+                item.setBorder(new EmptyBorder(5, 5, 5, 5));
+                menu.add(item);
+                menu.addSeparator();
+                JMenuItem editButton = new JMenuItem("Edit Contact");
+                editButton.addActionListener(evt -> {
+                    // Open contact editor dialog
+                    editContact(contact);
+                });
+                menu.add(editButton);
+            } else {
+                JMenu item = new JMenu("Mark Overlay");
+                menu.add(item);
+            }
+            menu.show(e.getComponent(), e.getX(), e.getY());
+            firstPoint = lastPoint = currentPoint = null;
+            return;
+        }
+
             if (lastPoint != null) {
                 // Reset for new rectangle
                 lastPoint = firstPoint = null;
@@ -552,8 +644,10 @@ public class MarkOverlay extends AbstractOverlay {
                 lastPosition = waterfall.getPosition(lastPoint);
                 currentPoint = null;
                 createContact(firstPoint, lastPoint);
+                firstPoint = lastPoint = null;
             }
         }
+        
         waterfall.repaint();
     }
 

@@ -130,24 +130,6 @@ public class RasterfallTiles extends JPanel implements Closeable {
         heightProportion = verticalSize / width;
     }
 
-    // private LinkedHashMap<CompressedContact, RasterContactInfo> infos = new LinkedHashMap<>();
-
-    // public List<IndexedRasterUtils.RasterContactInfo> getVisibleContactInfos() {
-    //     List<IndexedRasterUtils.RasterContactInfo> contactInfos = new ArrayList<>();
-    //     List<CompressedContact> cts = contacts.getContactsBetween(getBottomTimestamp(), getTopTimestamp());
-    //     for (CompressedContact contact : cts) {
-    //         if (!infos.containsKey(contact)) {
-    //             RasterContactInfo info = IndexedRasterUtils.getContactInfo(contact);
-    //             infos.put(contact, info);
-    //         }
-    //         RasterContactInfo info = infos.get(contact);
-    //         if (info != null) {
-    //             contactInfos.add(info);
-    //         }
-    //     }
-    //     return contactInfos;
-    // }
-
     public Point2D.Double getSlantedScreenPosition(Instant timestamp, double range) {
         for (RasterfallTile tile : tiles) {
             if (tile.containstTime(timestamp)) {
@@ -208,6 +190,12 @@ public class RasterfallTiles extends JPanel implements Closeable {
     public long getBottomTimestamp() {
         double x = getVisibleRect().getX()+getVisibleRect().getWidth()/2;
         double y = getVisibleRect().getY()+getVisibleRect().getHeight();
+        return getTimestamp(new Point2D.Double(x, y));
+    }
+
+    public long getMiddleTimestamp() {
+        double x = getVisibleRect().getX()+getVisibleRect().getWidth()/2;
+        double y = getVisibleRect().getY()+getVisibleRect().getHeight()/2;
         return getTimestamp(new Point2D.Double(x, y));
     }
 

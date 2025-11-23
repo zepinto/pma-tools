@@ -271,6 +271,7 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
             log.info("Timestamp out of bounds: " + timestamp);
             return;
         }
+        log.info("Scrolling to time: " + new Date(timestamp));
 
         long startTime = getStartTime();
         long endTime = getEndTime();

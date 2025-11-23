@@ -75,7 +75,7 @@ public class RasterfallPanel extends JPanel implements Closeable {
         if (progressCallback != null) {
             progressCallback.accept("Setting up replay controller...");
         }
-        this.replay = new RasterfallReplay(scrollbar);
+        this.replay = new RasterfallReplay(scrollbar, waterfall);
         if (progressCallback != null) {
             progressCallback.accept("Replay controller set up.");
         }        
