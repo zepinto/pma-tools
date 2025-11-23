@@ -6,8 +6,10 @@
 package pt.omst.rasterfall.overlays;
 
 import java.awt.Color;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
-import java.awt.Rectangle;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.geom.Point2D;
 import java.time.Instant;
 import java.util.List;
@@ -37,11 +39,12 @@ public class ContactsOverlay extends AbstractOverlay {
     public void paint(Graphics g, JComponent c) {
         if (waterfall == null)
             return;
-        //log.info("Painting contacts overlay");
         List<RasterContactInfo> contacts = waterfall.getVisibleContacts();
         if (contacts == null || contacts.isEmpty())
             return;
-        //Rectangle rect = waterfall.getVisibleRect();
+        FontMetrics fm = g.getFontMetrics();
+        Graphics2D g2 = (Graphics2D) g;
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         for (RasterContactInfo contact : contacts) {
 
             Point2D.Double pos = waterfall.getSlantedScreenPosition(Instant.ofEpochMilli(contact.getStartTimeStamp()),
@@ -55,7 +58,7 @@ public class ContactsOverlay extends AbstractOverlay {
             }
           
 
-            g.setColor(Color.yellow);
+            g.setColor(Color.white);
             
             int x = (int) Math.min(pos.getX(), pos2.getX());
             int y = (int) Math.min(pos.getY(), pos2.getY());
@@ -63,6 +66,10 @@ public class ContactsOverlay extends AbstractOverlay {
             int height = (int) Math.abs(pos2.getY() - pos.getY());
 
             g.drawRect(x, y, width, height);
+            int widthLabel = fm.stringWidth(contact.getLabel());
+            // draw contact label
+            g.setFont(g.getFont().deriveFont(10f));
+            g.drawString(contact.getLabel(), x + width - widthLabel + 6, y + height + 12);
         }
     }
 }

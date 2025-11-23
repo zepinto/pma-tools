@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
@@ -29,12 +30,33 @@ import pt.omst.rasterlib.AnnotationType;
 public class ContactCollection implements MapPainter {
     private QuadTree<File, CompressedContact> quadTree = new QuadTree<>();
     private List<File> filteredContacts = new ArrayList<>();
+    
     private QuadTree.Region currentRegion = null;
     private Instant currentStart = null;
     private Instant currentEnd = null;
     private Set<String> currentClassifications = null;
     private Set<String> currentConfidences = null;
     private Set<String> currentLabels = null;
+
+    private CopyOnWriteArrayList<Runnable> changeListeners = new CopyOnWriteArrayList<>();
+    
+    public void addChangeListener(Runnable listener) {
+        changeListeners.add(listener);
+    }
+
+    public void updateContact(File zctContact, CompressedContact compressedContact) throws IOException {
+        quadTree.update(zctContact, compressedContact);       
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
+    }
+
+    public void updateContact(File zctContact) throws IOException {
+        quadTree.update(zctContact, new CompressedContact(zctContact));       
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
+    }
 
     public static ContactCollection empty() {
         return new ContactCollection();
@@ -51,6 +73,9 @@ public class ContactCollection implements MapPainter {
                 log.error("Error on contact {}", contactFile.getAbsolutePath(), e);                
             }
         }
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
     }
 
     public void removeRootFolder(File folder) {
@@ -58,6 +83,9 @@ public class ContactCollection implements MapPainter {
         for (File contactFile : contactFiles) {
             removeContact(contactFile);            
         }        
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
     }
 
     public void applyFilters(QuadTree.Region region, Instant start, Instant end) {
@@ -78,6 +106,10 @@ public class ContactCollection implements MapPainter {
         log.info("Filtered contacts: {} in region {} between {} and {}", 
             newFilteredContacts.size(), region, start, end);
         this.filteredContacts = newFilteredContacts;
+
+        // for (Runnable listener : changeListeners) {
+        //     listener.run();
+        // }
     }
 
     /**
@@ -128,6 +160,10 @@ public class ContactCollection implements MapPainter {
             log.info("Filtered contacts: {} match all criteria", newFilteredContacts.size());
             this.filteredContacts = newFilteredContacts;
         });
+
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
     }
 
     /**
@@ -185,6 +221,44 @@ public class ContactCollection implements MapPainter {
                 .anyMatch(ann -> labels.contains(ann.getCategory()));
         }
         return false;
+    }
+
+    /**
+     * Re-applies the current filters to regenerate the filtered contacts list.
+     * This is useful when new contacts are added to the collection and the
+     * filtered list needs to be updated without changing the filter criteria.
+     * This method does NOT trigger change listeners to avoid infinite loops.
+     */
+    public void reapplyCurrentFilters() {
+        // Run filtering in background thread to avoid UI blocking
+        CompletableFuture.runAsync(() -> {
+            // If region is null, get all contacts
+            List<CompressedContact> contactsInRegion = currentRegion != null 
+                ? quadTree.query(currentRegion)
+                : new ArrayList<>(getAllContacts());
+
+            // If time filters are null, use all time
+            long startMillis = currentStart != null ? currentStart.toEpochMilli() : Long.MIN_VALUE;
+            long endMillis = currentEnd != null ? currentEnd.toEpochMilli() : Long.MAX_VALUE;
+
+            log.debug("Reapplying current filters: region {}, time {} to {}, classifications: {}, confidences: {}, labels: {}",
+                    currentRegion, currentStart, currentEnd, 
+                    currentClassifications == null || currentClassifications.isEmpty() ? "all" : currentClassifications,
+                    currentConfidences == null || currentConfidences.isEmpty() ? "all" : currentConfidences,
+                    currentLabels == null || currentLabels.isEmpty() ? "all" : currentLabels);
+
+            List<File> newFilteredContacts = contactsInRegion.stream()
+                .filter(c -> c.getTimestamp() >= startMillis && c.getTimestamp() <= endMillis)
+                .filter(c -> matchesClassificationFilter(c, currentClassifications))
+                .filter(c -> matchesConfidenceFilter(c, currentConfidences))
+                .filter(c -> matchesLabelFilter(c, currentLabels))
+                .map(CompressedContact::getZctFile)
+                .toList();
+
+            log.debug("Reapplied filters: {} contacts match criteria", newFilteredContacts.size());
+            this.filteredContacts = newFilteredContacts;
+        });
+        // NOTE: Do NOT fire change listeners here to avoid infinite loop
     }
 
     public List<CompressedContact> getFilteredContacts() {        
@@ -251,7 +325,11 @@ public class ContactCollection implements MapPainter {
      * @throws IOException if an error occurs while reading the contact
      */
     public void addContact(File zctContact) throws IOException {
-        quadTree.add(zctContact, new CompressedContact(zctContact));        
+        quadTree.add(zctContact, new CompressedContact(zctContact));       
+        
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
     }
 
     /**
@@ -259,7 +337,12 @@ public class ContactCollection implements MapPainter {
      * @param label the label of the contact to remove
      */
     public CompressedContact removeContact(File zctContact) {
-        return quadTree.remove(zctContact);
+        CompressedContact removed = quadTree.remove(zctContact);
+
+        for (Runnable listener : changeListeners) {
+            listener.run();
+        }
+        return removed;
     }
 
     /**

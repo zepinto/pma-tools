@@ -88,7 +88,7 @@ public class MarkOverlay extends AbstractOverlay {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setStroke(new BasicStroke(2f));
-            g2.setColor(new Color(255, 255, 255, 200));
+            g2.setColor(new Color(255, 255, 0, 200));
 
             // Calculate rectangle bounds
             int x = (int) Math.min(firstPoint.getX(), drawPoint.getX());
@@ -99,8 +99,8 @@ public class MarkOverlay extends AbstractOverlay {
             // Draw rectangle
             g2.drawRect(x, y, width, height);
 
-            // Fill with semi-transparent white
-            g2.setColor(new Color(255, 255, 255, 30));
+            // Fill with semi-transparent yellow
+            g2.setColor(new Color(255, 255, 0, 30));
             g2.fillRect(x, y, width, height);
 
             g2.dispose();
@@ -613,12 +613,21 @@ public class MarkOverlay extends AbstractOverlay {
                 item.setBorder(new EmptyBorder(5, 5, 5, 5));
                 menu.add(item);
                 menu.addSeparator();
-                JMenuItem editButton = new JMenuItem("Edit Contact");
+                JMenuItem editButton = new JMenuItem("Edit");
                 editButton.addActionListener(evt -> {
                     // Open contact editor dialog
                     editContact(contact);
                 });
                 menu.add(editButton);
+
+                JMenuItem removeButton = new JMenuItem("Remove");
+                removeButton.addActionListener(evt -> {
+                    // Remove contact
+                    waterfall.getContacts().removeContact(contact.getContact().getZctFile());
+                    waterfall.repaint();
+                });
+                menu.add(removeButton);
+               
             } else {
                 JMenu item = new JMenu("Mark Overlay");
                 menu.add(item);
