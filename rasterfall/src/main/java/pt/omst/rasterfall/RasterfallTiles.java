@@ -441,6 +441,15 @@ public class RasterfallTiles extends JPanel implements Closeable {
         return contactInfos;
     }
 
+    public Pose getPositionAtTime(long timeMillis) throws IOException {
+        for (RasterfallTile tile : tiles) {
+            if (tile.containstTime(Instant.ofEpochMilli(timeMillis))) {
+                return tile.getPoseAtTime(Instant.ofEpochMilli(timeMillis));
+            }
+        }
+        return null;
+    }
+
     public static void main(String[] args) {
         GuiUtils.setLookAndFeel();
         JFrame frame = new JFrame("Index Raster Waterfall");

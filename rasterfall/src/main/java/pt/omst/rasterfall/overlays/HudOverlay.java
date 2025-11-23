@@ -14,13 +14,12 @@ import javax.swing.JComponent;
 
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.VehiclePositionHUD;
-import pt.omst.sidescan.SidescanParser;
-import pt.omst.sidescan.SidescanParserFactory;
 
 public class HudOverlay extends AbstractOverlay {
 
     private RasterfallTiles waterfall;
     private VehiclePositionHUD hud = null;
+
     @Override
     public void cleanup(RasterfallTiles waterfall) {
 
@@ -29,17 +28,18 @@ public class HudOverlay extends AbstractOverlay {
     @Override
     public void install(RasterfallTiles waterfall) {
         this.waterfall = waterfall;
-        //createHud();
+        // createHud();
         Thread.ofVirtual().start(this::createHud);
     }
 
     private synchronized void createHud() {
         if (hud == null) {
-            SidescanParser parser = SidescanParserFactory.build(waterfall.getRastersFolder().getParentFile());
-            VehiclePositionHUD tmp = new VehiclePositionHUD(parser, 200, 200);            
-            tmp.setPathColor(new Color(255,255,255,128));
-            hud = tmp;         
-            waterfall.repaint();   
+            // SidescanParser parser =
+            // SidescanParserFactory.build(waterfall.getRastersFolder().getParentFile());
+            VehiclePositionHUD tmp = new VehiclePositionHUD(waterfall, 200, 200);
+            tmp.setPathColor(new Color(255, 255, 255, 128));
+            hud = tmp;
+            waterfall.repaint();
         }
     }
 
@@ -59,7 +59,7 @@ public class HudOverlay extends AbstractOverlay {
         double timestamp = 0.001 * waterfall.getTimestamp();
         hud.setTimestamp(timestamp);
 
-        int xMargin = (waterfall.getVisibleRect().width - hud.getWidth())/2;
+        int xMargin = (waterfall.getVisibleRect().width - hud.getWidth()) / 2;
         int yMargin = waterfall.getVisibleRect().height - hud.getHeight();
         BufferedImage image = hud.getImage(timestamp);
         if (image != null) {

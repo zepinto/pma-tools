@@ -77,7 +77,7 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setLeftComponent(observationsPanel);
         splitPane.setRightComponent(createInputsPanel());
-        splitPane.setDividerLocation(0.35);
+        splitPane.setDividerLocation(0.60);
         add(splitPane, BorderLayout.CENTER);
         observationsPanel.addChangeListener(this);
 

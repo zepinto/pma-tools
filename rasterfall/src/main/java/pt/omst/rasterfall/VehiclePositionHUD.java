@@ -50,8 +50,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.core.SystemPositionAndAttitude;
-import pt.omst.sidescan.SidescanParameters;
-import pt.omst.sidescan.SidescanParser;
+import pt.omst.rasterlib.Pose;
 
 /**
  * @author zp
@@ -72,21 +71,34 @@ public class VehiclePositionHUD {
 
     protected Color pathColor = Color.black;
 
-    public VehiclePositionHUD(SidescanParser ssparser, int width, int height) {
+    public VehiclePositionHUD(RasterfallTiles waterfall, int width, int height) {
         this.width = width;
         this.height = height;
-        loadSidescanPositions(ssparser);
+        loadSidescanPositions(waterfall);
     }
 
-    protected void loadSidescanPositions(SidescanParser ssparser) {
-        int subsystem = ssparser.getSubsystemList().getLast();
-        SidescanParameters params = ssparser.getDefaultParams();
-        startTime = ssparser.firstPingTimestamp() / 1000.0;
-        endTime = ssparser.lastPingTimestamp() / 1000.0;
-        for (long time = ssparser.firstPingTimestamp(); time < ssparser.lastPingTimestamp(); time += 1000) {
+    protected void loadSidescanPositions(RasterfallTiles waterfall) {
+        startTime = waterfall.getStartTime() / 1000.0 ;
+        endTime = waterfall.getEndTime() / 1000.0;
+        for (long time =  ((long) startTime); time <= (long) endTime; time ++) {
             SystemPositionAndAttitude state = null;
             try {
-                 state = ssparser.getLineAtTime(time, subsystem, params).getState();
+                Pose pose = waterfall.getPositionAtTime((long)(time * 1000));
+                if (pose != null) {
+                    state = new SystemPositionAndAttitude();
+                    state.setPosition(new LocationType(pose.getLatitude(), pose.getLongitude()));
+                    state.setAltitude(pose.getAltitude());
+                    state.setDepth(pose.getDepth());
+                    state.setP(pose.getP());
+                    state.setQ(pose.getQ());
+                    state.setR(pose.getR());
+                    state.setPitch(pose.getPhi());
+                    state.setRoll(pose.getTheta());
+                    state.setYaw(pose.getPsi());
+                    state.setU(pose.getU());
+                    state.setV(pose.getV());
+                    state.setW(pose.getW());                    
+                }
             }
             catch (Exception e) {
                 log.error("Error loading position at time " + time);
@@ -153,7 +165,7 @@ public class VehiclePositionHUD {
     /**
      * @param startTime the startTime to set
      */
-    public final void setStartTime(double startTime) {
+    public final void setStartTime(long startTime) {
         this.startTime = startTime;
     }
 
@@ -173,7 +185,7 @@ public class VehiclePositionHUD {
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         for (double timestamp = startTimestamp; timestamp < endTimestamp; timestamp += timestep) {
             Graphics2D g = (Graphics2D) g2.create();
-            setTimestamp(timestamp);
+            setTimestamp((long) timestamp);
             SystemPositionAndAttitude state = states.get(currentPosition);
 
             g.scale(zoom, zoom);
@@ -242,21 +254,7 @@ public class VehiclePositionHUD {
             currentPosition = (int) (timeSecs - startTime);
         }
     }
-
-    /**
-     * @return the endTime
-     */
-    public final double getEndTime() {
-        return endTime;
-    }
-
-    /**
-     * @param endTime the endTime to set
-     */
-    public final void setEndTime(double endTime) {
-        this.endTime = endTime;
-    }
-
+    
     /**
      * @param pathColor the pathColor to set
      */

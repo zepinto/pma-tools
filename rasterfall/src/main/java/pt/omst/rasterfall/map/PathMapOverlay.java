@@ -14,6 +14,8 @@ import javax.swing.JComponent;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
+import pt.omst.gui.jobs.BackgroundJob;
+import pt.omst.gui.jobs.JobManager;
 import pt.omst.mapview.AbstractMapOverlay;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterfall.RasterfallTiles;
@@ -36,7 +38,14 @@ public class PathMapOverlay extends AbstractMapOverlay {
         offsetPath = new GeneralPath();
         startLocation = null;
         pathReady = false;
-        Thread.ofVirtual().start(this::createPath);        
+        JobManager.getInstance().submit(new BackgroundJob("Creating path from raster samples") {
+            @Override
+            protected Void doInBackground() throws Exception {
+                createPath();
+                return null;
+            }            
+        });
+        
     }
 
     private void createPath() {
@@ -100,6 +109,7 @@ public class PathMapOverlay extends AbstractMapOverlay {
 
     @Override
     public void paint(Graphics g, JComponent c) {
+        log.info("Painting path overlay, pathReady={}, startLocation={}", pathReady, startLocation);
         if (!pathReady || startLocation == null) {
             return;
         }

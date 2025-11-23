@@ -27,6 +27,7 @@ import java.util.UUID;
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JLayer;
 import javax.swing.JMenu;
@@ -576,8 +577,31 @@ public class MarkOverlay extends AbstractOverlay {
     }
 
     private void editContact(RasterContactInfo contactInfo) {
+        JDialog dialog = new JDialog();
+        dialog.setTitle("Edit Contact: " + contactInfo.getLabel());
+        dialog.setModal(true);
+        dialog.setSize(1100, 500);
+        dialog.setLocationRelativeTo(null);
         ContactEditor editor = new ContactEditor();
-        editor.setVisible(true);
+        try {
+            editor.loadZct(contactInfo.getContact().getZctFile());
+        } catch (Exception ex) {
+            log.error("Error loading contact for editing", ex);
+        }        
+        dialog.add(editor);
+        editor.addSaveListener((uuid, file) -> {
+            try {
+                waterfall.getContacts().refreshContact(contactInfo.getContact().getZctFile());
+                waterfall.repaint();
+                dialog.dispose();
+            } catch (Exception ex) {
+                log.error("Error saving edited contact", ex);
+            }
+        });
+        dialog.setAlwaysOnTop(true);
+        dialog.setModalExclusionType(java.awt.Dialog.ModalExclusionType.APPLICATION_EXCLUDE);
+        dialog.setModal(false);
+        dialog.setVisible(true);
     }
 
     @Override

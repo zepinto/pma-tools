@@ -34,6 +34,7 @@ import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.rasterfall.map.MapViewer;
 import pt.omst.rasterlib.contacts.ContactCollection;
+import pt.omst.rasterlib.gui.RasterFolderChooser;
 import pt.omst.util.UserPreferencesDialog;
 
 @Slf4j
@@ -265,9 +266,7 @@ public class RasterFallApp extends JFrame {
     }
 
     private void openFolder() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        fileChooser.setDialogTitle("Select Raster Folder");
+        RasterFolderChooser fileChooser = new RasterFolderChooser();
 
         Preferences prefs = Preferences.userNodeForPackage(RasterFallApp.class);
         String lastDir = prefs.get("lastRasterFolder", null);
