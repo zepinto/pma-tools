@@ -33,6 +33,8 @@ warning() {
 
 # Project metadata
 PROJECT_VERSION="2025.11.00"
+# Windows-compatible version (major version must be 0-255 for MSI)
+WINDOWS_VERSION="25.11.0"
 VENDOR="OceanScan Marine Systems & Technology"
 COPYRIGHT="Copyright 2025 OceanScan - Marine Systems & Technology, Lda."
 
@@ -402,12 +404,19 @@ build_app_installer() {
         icon_path=""
     fi
     
+    # Use Windows-compatible version for MSI format
+    local app_version="$PROJECT_VERSION"
+    if [ "$format" = "msi" ]; then
+        app_version="$WINDOWS_VERSION"
+        info "Using Windows-compatible version: $app_version"
+    fi
+    
     # Build jpackage command
     local jpackage_cmd=(
         jpackage
         --type "$format"
         --name "$app_name"
-        --app-version "$PROJECT_VERSION"
+        --app-version "$app_version"
         --vendor "$VENDOR"
         --copyright "$COPYRIGHT"
         --description "$description"

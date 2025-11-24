@@ -10,6 +10,8 @@ $ErrorActionPreference = "Stop"
 
 # Project metadata
 $PROJECT_VERSION = "2025.11.00"
+# Windows-compatible version (major version must be 0-255 for MSI)
+$WINDOWS_VERSION = "25.11.0"
 $VENDOR = "OceanScan Marine Systems & Technology"
 $COPYRIGHT = "Copyright 2025 OceanScan - Marine Systems & Technology, Lda."
 
@@ -342,11 +344,14 @@ function Build-AppInstaller {
         Write-Warning-Msg "Icon not found: $iconPath"
     }
     
+    # Use Windows-compatible version for MSI
+    Write-Info "Using Windows-compatible version: $WINDOWS_VERSION"
+    
     # Build jpackage command
     $jpackageArgs = @(
         "--type", "msi",
         "--name", $appName,
-        "--app-version", $PROJECT_VERSION,
+        "--app-version", $WINDOWS_VERSION,
         "--vendor", $VENDOR,
         "--copyright", $COPYRIGHT,
         "--description", $description,
