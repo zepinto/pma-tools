@@ -17,6 +17,7 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -530,7 +531,37 @@ public class MarkOverlay extends AbstractOverlay {
 
                 // Move/Copy the zip to the final destination
                 File finalZct = new File(waterfall.getContactsFolder(), label + ".zct");
-                Files.copy(zctFile.toPath(), finalZct.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                
+                // On Windows, file handles may not be immediately released after closing streams
+                // Give the OS time to release file locks by suggesting GC and waiting briefly
+                System.gc();
+                
+                // Retry logic for Windows file locking issues
+                int retries = 3;
+                IOException lastException = null;
+                for (int i = 0; i < retries; i++) {
+                    try {
+                        Files.copy(zctFile.toPath(), finalZct.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        lastException = null;
+                        break;
+                    } catch (java.nio.file.FileSystemException e) {
+                        lastException = e;
+                        if (i < retries - 1) {
+                            log.warn("File copy attempt {} failed, retrying in 100ms: {}", i + 1, e.getMessage());
+                            try {
+                                Thread.sleep(100);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                throw e;
+                            }
+                        }
+                    }
+                }
+                
+                if (lastException != null) {
+                    throw lastException;
+                }
+                
                 waterfall.getContacts().addContact(finalZct);
                 // Cleanup the temporary zip file
                 zctFile.delete();

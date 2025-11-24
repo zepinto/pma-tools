@@ -235,9 +235,8 @@ public class ZipUtils {
      * Compresses a source folder (of file) into a Zip.
      */
     public static boolean zipDir(String zipFile, String sourceDir, String encoding) {
-        try {
-            File fxZipFile = new File(zipFile);
-            ZipArchiveOutputStream zOutStream = new ZipArchiveOutputStream(fxZipFile);
+        File fxZipFile = new File(zipFile);
+        try (ZipArchiveOutputStream zOutStream = new ZipArchiveOutputStream(fxZipFile)) {
             zOutStream.setEncoding(encoding);
 
             zOutStream.setUseLanguageEncodingFlag(true);
@@ -245,8 +244,6 @@ public class ZipUtils {
             zOutStream.setCreateUnicodeExtraFields(UnicodeExtraFieldPolicy.NOT_ENCODEABLE);
 
             zipDirWorker(sourceDir, sourceDir, zOutStream);
-
-            zOutStream.close();
 
             return true;
         } catch (Exception e) {

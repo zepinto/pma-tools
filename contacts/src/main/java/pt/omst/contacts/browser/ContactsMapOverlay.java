@@ -533,7 +533,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             g2d.drawString(radiusText, textX, textY);
         }
 
-        if (hoveringContact != null && hoveringContact != selectedContact) {
+        if (hoveringContact != null) {
             // Highlight hovering contact
             Image thumbnail = hoveringContact.getThumbnail();
             if (thumbnail != null && thumbnail.getWidth(null) > 1) {    
@@ -556,21 +556,9 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
                     thumbnail,
                     (int)xLoc,
                     (int)yLoc,
-                    null);
-                // int x = (int)screenPos[0] - thumbnail.getWidth(null) / 2 - 4;
-                // int y = (int)screenPos[1] - thumbnail.getHeight(null) / 2 - 4;
-                // int width = thumbnail.getWidth(null) + 8;
-                // int height = thumbnail.getHeight(null) + 8;
-                
-                // g2d.setColor(new java.awt.Color(0, 255, 0, 100)); // Semi-transparent green
-                // g2d.setStroke(new java.awt.BasicStroke(2.0f));
-                
-                // g2d.fillRect(x, y, width, height);
-                // g2d.setColor(new java.awt.Color(0, 255, 0)); // Solid green border
-                // g2d.drawRect(x, y, width, height);
+                    null);                
             }
         }
-        
         g2d.dispose();
     }
 
