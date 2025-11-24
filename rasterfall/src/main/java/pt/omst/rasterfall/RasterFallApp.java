@@ -6,14 +6,18 @@
 package pt.omst.rasterfall;
 
 import java.awt.BorderLayout;
+import java.awt.Image;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
+import javax.imageio.ImageIO;
 import javax.swing.Box;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JFileChooser;
@@ -57,12 +61,49 @@ public class RasterFallApp extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
+        
+        // Set application icon (fixes Windows Task Manager icon)
+        setApplicationIcon();
 
         // Show welcome panel initially
         welcomePanel = new WelcomePanel();
         add(welcomePanel, BorderLayout.CENTER);
         statusIndicator = new TaskStatusIndicator(this);
         setupMenubar();
+    }
+    
+    /**
+     * Sets the application icon for the window and task manager.
+     * Loads multiple icon sizes for optimal display quality.
+     */
+    private void setApplicationIcon() {
+        try {
+            List<Image> icons = new ArrayList<>();
+            // Load multiple sizes for better quality at different scales
+            String[] sizes = {"16", "32", "48", "64", "128", "256"};
+            
+            for (String size : sizes) {
+                InputStream is = getClass().getResourceAsStream("/icons/rasterfall-" + size + ".png");
+                if (is != null) {
+                    Image img = ImageIO.read(is);
+                    if (img != null) {
+                        icons.add(img);
+                    }
+                    is.close();
+                } else {
+                    log.warn("Icon resource not found: /icons/rasterfall-{}.png", size);
+                }
+            }
+            
+            if (!icons.isEmpty()) {
+                setIconImages(icons);
+                log.info("Loaded {} application icon sizes", icons.size());
+            } else {
+                log.warn("No application icons found in resources");
+            }
+        } catch (Exception e) {
+            log.error("Failed to load application icons", e);
+        }
     }
 
     private void setupMenubar() {
@@ -364,7 +405,7 @@ public class RasterFallApp extends JFrame {
                 if (files.isEmpty()) {
                     log.warn("No raster files found in folder: " + folder.getAbsolutePath());
                     progressCallback.accept("Exporting rasters from " + folder.getAbsolutePath());
-                    openedFile = IndexedRasterCreator.exportRasters(folder, 0,
+                    IndexedRasterCreator.exportRasters(folder, 0,
                             progressCallback == null ? null : msg -> {
                                 progressCallback.accept(msg);
                             });
@@ -373,10 +414,13 @@ public class RasterFallApp extends JFrame {
                 
                 progressCallback.accept("Found " + files.size() + " raster files.");
 
+                if (!openedFile.getName().equals("rasterIndex"))
+                    openedFile = new File(folder, "rasterIndex");
                 // Create new rasterfall panel with selected folder (in background)
                 if (loadingPanel != null) {
                     SwingUtilities.invokeLater(() -> loadingPanel.setStatus("Initializing rasterfall panel..."));
                 }
+                log.info("Loading raster folder: " + openedFile.getAbsolutePath());
 
                 RasterfallPanel newPanel = new RasterfallPanel(openedFile, progressCallback);
 

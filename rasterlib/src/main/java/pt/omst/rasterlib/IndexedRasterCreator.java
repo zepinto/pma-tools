@@ -82,9 +82,10 @@ public class IndexedRasterCreator {
      * @param margin    The margin to use, this is the number of pixels to include
      *                  on each side of the marker
      */
-    public IndexedRaster export(SidescanLogMarker marker, SidescanParser parser, SidescanHistogramNormalizer normalizer, int subsystem, int margin) {
+    public IndexedRaster export(SidescanLogMarker marker, SidescanParser parser, SidescanHistogramNormalizer normalizer,
+            int subsystem, int margin) {
         ArrayList<SidescanLine> lines = SidescanMarkerUtils.getNormalizedLines(marker, parser, subsystem, margin,
-                margin);       
+                margin);
         if (normalizer != null) {
             for (SidescanLine l : lines) {
                 normalizer.normalize(l, subsystem);
@@ -267,98 +268,100 @@ public class IndexedRasterCreator {
     static final int MaxWidth = 5000;
     static final int MaxHeight = 500;
 
-    public static void exportRasters(File folder, int subsystem, Consumer<String> progress) {
+    public static File exportRasters(File folder, int subsystem, Consumer<String> progress) {
         SidescanParser ssparser = null;
         ExecutorService executor = null;
-        
+
         try {
             ssparser = SidescanParserFactory.build(folder);
-           
+
             if (ssparser.getSubsystemList().isEmpty()) {
                 log.error("No subsystems found in sidescan folder {}", folder.getAbsolutePath());
-                return;
+                return null;
             }
-            
 
             SidescanParameters params = ssparser.getDefaultParams();
             final int sub = subsystem > 0 ? subsystem : ssparser.getSubsystemList().getLast();
             System.out.println("Using subsystem: " + sub);
-            
+
             if (progress == null)
                 progress = (s) -> {
                 };
             progress.accept("Starting raster export for folder " + folder.getAbsolutePath());
+
+            final Consumer<String> finalProgress = progress;
             SidescanHistogramNormalizer normalizer = SidescanHistogramNormalizer.create(ssparser, folder);
-        
-        long start = ssparser.firstPingTimestamp();
 
-        ISidescanLine line = null;
+            long start = ssparser.firstPingTimestamp();
 
-        progress.accept("Reading first lines to get sensor info...");
-        var lines = ssparser.getLinesBetween(start, start + 1000, sub, params);
-        if (lines.isEmpty()) {
-            log.error("No sidescan lines found in folder {} for subsystem {}", folder.getAbsolutePath(), sub);
-            return;
-        }
-        line = lines.getFirst();
+            ISidescanLine line = null;
 
-        SensorInfo sensorInfo = new SensorInfo();
-        sensorInfo.setSystemName("rasterlib");
-        sensorInfo.setFrequency(line.getFrequency() / 1000d);
-        if (SENSOR_TYPES.containsKey(line.getFrequency()))
-            sensorInfo.setSensorModel(SENSOR_TYPES.get(line.getFrequency()));
-        else
-            sensorInfo.setSensorModel("Sidescan " + line.getFrequency() / 1000 + "kHz");
-        sensorInfo.setMinRange((double) -line.getRange());
-        sensorInfo.setMaxRange((double) line.getRange());
-        long lastTime = ssparser.lastPingTimestamp();
-
-        LinkedList<SidescanLine> lineQueue = new LinkedList<>();
-
-        executor = Executors.newVirtualThreadPerTaskExecutor();
-
-        progress.accept("Processing lines...");
-        File outputDir = new File(folder, "rasterIndex");
-        if (outputDir.exists())
-            if (!outputDir.delete()) {
-                log.error("Could not delete output directory {}", outputDir.getAbsolutePath());
+            progress.accept("Reading first lines to get sensor info...");
+            var lines = ssparser.getLinesBetween(start, start + 1000, sub, params);
+            if (lines.isEmpty()) {
+                log.error("No sidescan lines found in folder {} for subsystem {}", folder.getAbsolutePath(), sub);
+                return null;
             }
-        if (!outputDir.mkdirs()) {
-            log.error("Could not create output directory {}", outputDir.getAbsolutePath());
-        }
-        for (long time = ssparser.firstPingTimestamp(); time <= lastTime; time += 1000) {
-            lines = ssparser.getLinesBetween(time, time + 1000, sub, params);
-            if (lines.isEmpty())
-                continue;
-            lineQueue.addAll(lines);
-            if (lineQueue.size() >= MaxHeight) {
-                int timestamp = (int) (lineQueue.peek().getTimestampMillis() / 1000);
-                ArrayList<SidescanLine> firstLines = new ArrayList<>(MaxHeight);
-                for (int i = 0; i < MaxHeight; i++) {
-                    firstLines.add(lineQueue.poll());
+            line = lines.getFirst();
+
+            SensorInfo sensorInfo = new SensorInfo();
+            sensorInfo.setSystemName("rasterlib");
+            sensorInfo.setFrequency(line.getFrequency() / 1000d);
+            if (SENSOR_TYPES.containsKey(line.getFrequency()))
+                sensorInfo.setSensorModel(SENSOR_TYPES.get(line.getFrequency()));
+            else
+                sensorInfo.setSensorModel("Sidescan " + line.getFrequency() / 1000 + "kHz");
+            sensorInfo.setMinRange((double) -line.getRange());
+            sensorInfo.setMaxRange((double) line.getRange());
+            long lastTime = ssparser.lastPingTimestamp();
+
+            LinkedList<SidescanLine> lineQueue = new LinkedList<>();
+
+            executor = Executors.newVirtualThreadPerTaskExecutor();
+
+            File outputDir = new File(folder, "rasterIndex");
+            if (outputDir.exists())
+                if (!outputDir.delete()) {
+                    log.error("Could not delete output directory {}", outputDir.getAbsolutePath());
                 }
-                executor.submit(() -> {
-                    long startTime = System.currentTimeMillis();
-                    IndexedRasterCreator creator = new IndexedRasterCreator(
-                            new File(outputDir, "sss_" + sub + "_" + timestamp + ".json"), sensorInfo);
-                    for (SidescanLine l : firstLines)
-                        normalizer.normalize(l, sub);                    
-                    creator.export(firstLines);
-                    log.debug("Processed " + firstLines.size() + " lines in "
-                            + (System.currentTimeMillis() - startTime) + "ms");
-                });
+            if (!outputDir.mkdirs()) {
+                log.error("Could not create output directory {}", outputDir.getAbsolutePath());
             }
-        }
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(1, java.util.concurrent.TimeUnit.HOURS)) {
-                log.error("Timeout while processing sidescan data");
+            for (long time = ssparser.firstPingTimestamp(); time <= lastTime; time += 1000) {
+                lines = ssparser.getLinesBetween(time, time + 1000, sub, params);
+                if (lines.isEmpty())
+                    continue;
+                lineQueue.addAll(lines);
+                if (lineQueue.size() >= MaxHeight) {
+                    int timestamp = (int) (lineQueue.peek().getTimestampMillis() / 1000);
+                    ArrayList<SidescanLine> firstLines = new ArrayList<>(MaxHeight);
+                    for (int i = 0; i < MaxHeight; i++) {
+                        firstLines.add(lineQueue.poll());
+                    }
+                    executor.submit(() -> {
+                        long startTime = System.currentTimeMillis();
+                        IndexedRasterCreator creator = new IndexedRasterCreator(
+                                new File(outputDir, "sss_" + sub + "_" + timestamp + ".json"), sensorInfo);
+                        finalProgress.accept("Creating raster named sss_" + sub + "_" + timestamp + ".json");
+                        for (SidescanLine l : firstLines)
+                            normalizer.normalize(l, sub);
+                        creator.export(firstLines);
+                        log.debug("Processed " + firstLines.size() + " lines in "
+                                + (System.currentTimeMillis() - startTime) + "ms");
+                    });
+                }
             }
-        } catch (InterruptedException e) {
-            log.error("Interrupted while processing sidescan data", e);
-        }
-        progress.accept("Raster export completed.");
-        
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(1, java.util.concurrent.TimeUnit.HOURS)) {
+                    log.error("Timeout while processing sidescan data");
+                }
+            } catch (InterruptedException e) {
+                log.error("Interrupted while processing sidescan data", e);
+            }
+            progress.accept("Raster export completed.");
+            return outputDir;
+
         } finally {
             // Cleanup resources
             if (ssparser != null) {
@@ -372,6 +375,7 @@ public class IndexedRasterCreator {
                 executor.shutdown();
             }
         }
+        
     }
 
     public static void main(String[] args) {

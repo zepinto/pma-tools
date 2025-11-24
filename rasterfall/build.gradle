@@ -4,6 +4,7 @@ plugins {
     id 'maven-publish'
     id "io.freefair.lombok" version "8.10.2"
     id 'com.gradleup.shadow' version '8.3.5'
+    id 'edu.sc.seis.launch4j' version '3.0.6'
 }
 
 group 'pt.omst'
@@ -82,6 +83,29 @@ shadowJar {
     manifest {
         attributes 'Main-Class': 'pt.omst.rasterfall.RasterFallApp'
     }
+}
+
+// Configure Launch4j to create Windows executable
+launch4j {
+    mainClassName = 'pt.omst.rasterfall.RasterFallApp'
+    outputDir = 'launch4j'
+    outfile = 'rasterfall.exe'
+    jarTask = shadowJar
+    icon = "${projectDir}/../app-icons/rasterfall.ico"
+    productName = 'RasterFall'
+    fileDescription = 'OMST RasterFall - Sidescan Sonar Data Viewer'
+    version = project.version.toString()
+    textVersion = project.version.toString()
+    copyright = '2025 OceanScan - Marine Systems & Technology, Lda.'
+    companyName = 'OceanScan - Marine Systems & Technology'
+    jreMinVersion = '21'
+    bundledJrePath = 'jre'
+    jvmOptions = ['-Xmx2048m']
+}
+
+// Ensure shadow jar is built before creating exe
+tasks.named('createExe') {
+    dependsOn shadowJar
 }
 
 // Configure publishing

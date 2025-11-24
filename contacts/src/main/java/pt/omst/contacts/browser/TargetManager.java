@@ -9,12 +9,14 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Image;
 import java.awt.Insets;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
 
 import javax.swing.BorderFactory;
@@ -1436,6 +1439,42 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     }
 
     /**
+     * Sets the application icon for the window and task manager.
+     * Loads multiple icon sizes for optimal display quality.
+     * 
+     * @param frame The frame to set the icon for
+     */
+    private static void setApplicationIcon(JFrame frame) {
+        try {
+            List<Image> icons = new ArrayList<>();
+            // Load multiple sizes for better quality at different scales
+            String[] sizes = {"16", "32", "48", "64", "128", "256"};
+            
+            for (String size : sizes) {
+                InputStream is = TargetManager.class.getResourceAsStream("/icons/tgtmanager-" + size + ".png");
+                if (is != null) {
+                    Image img = ImageIO.read(is);
+                    if (img != null) {
+                        icons.add(img);
+                    }
+                    is.close();
+                } else {
+                    log.warn("Icon resource not found: /icons/tgtmanager-{}.png", size);
+                }
+            }
+            
+            if (!icons.isEmpty()) {
+                frame.setIconImages(icons);
+                log.info("Loaded {} application icon sizes", icons.size());
+            } else {
+                log.warn("No application icons found in resources");
+            }
+        } catch (Exception e) {
+            log.error("Failed to load application icons", e);
+        }
+    }
+    
+    /**
      * Main method for testing the layout.
      */
     public static void main(String[] args) {
@@ -1481,6 +1520,9 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
         frame.setSize(1400, 900);
         frame.setJMenuBar(createMenuBar(frame, layout));
         frame.add(layout);
+        
+        // Set application icon (fixes Windows Task Manager icon)
+        setApplicationIcon(frame);
 
         // Load preferences after adding to frame but before making visible
         SwingUtilities.invokeLater(() -> {
