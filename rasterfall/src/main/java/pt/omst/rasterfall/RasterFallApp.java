@@ -149,6 +149,23 @@ public class RasterFallApp extends JFrame {
             }
         });
         preferencesMenu.add(darkModeItem);
+        preferencesMenu.addSeparator();
+
+        // Rendering Quality toggle
+        JCheckBoxMenuItem renderQualityItem = new JCheckBoxMenuItem("High Quality Rendering");
+        renderQualityItem.setSelected(RasterfallPreferences.isRenderQuality());
+        renderQualityItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                boolean quality = renderQualityItem.isSelected();
+                RasterfallPreferences.setRenderQuality(quality);
+                // Repaint the waterfall panel if it exists
+                if (rasterfallPanel != null) {
+                    rasterfallPanel.repaint();
+                }
+            }
+        });
+        preferencesMenu.add(renderQualityItem);
 
         fileMenu.add(preferencesMenu);
         fileMenu.addSeparator();

@@ -17,7 +17,7 @@ public class IconCache {
 
     private final Map<String, Map<Integer, Image>> cache = new LinkedHashMap<>();
     private final Object lock = new Object();
-    private int currentIconSize = 12; // Default size
+    private int currentIconSize = 24; // Default size
 
     private IconCache() {
         // Private constructor to prevent instantiation

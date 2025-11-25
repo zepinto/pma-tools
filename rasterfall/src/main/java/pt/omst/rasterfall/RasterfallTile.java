@@ -341,9 +341,12 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
             g2d.drawString("Error loading "+raster.getFilename(), 10, 10);
         }
         else {
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+            if (RasterfallPreferences.isRenderQuality()) {
+                g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            } else {
+                g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+            }
             g2d.drawImage(image, (int)leftMargin, 0, getWidth(), getHeight(), null);
         }
         // paint index of the tile

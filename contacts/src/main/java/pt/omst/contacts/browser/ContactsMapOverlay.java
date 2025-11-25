@@ -445,10 +445,22 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             (int)screenPos[0] - halfSize, 
             (int)screenPos[1] - halfSize, 
             null);
-        g.drawString(
-            contact.getContact().getLabel(),
-            (int)screenPos[0] + halfSize, 
-            (int)screenPos[1] - halfSize);
+        
+        // Draw label with black border for contrast
+        String label = contact.getContact().getLabel();
+        int labelX = (int)screenPos[0] + halfSize;
+        int labelY = (int)screenPos[1] - halfSize;
+        
+        // Draw black border (4 cardinal directions for efficiency)
+        g.setColor(java.awt.Color.BLACK);
+        g.drawString(label, labelX - 1, labelY);
+        g.drawString(label, labelX + 1, labelY);
+        g.drawString(label, labelX, labelY - 1);
+        g.drawString(label, labelX, labelY + 1);
+        
+        // Draw white label on top
+        g.setColor(java.awt.Color.WHITE);
+        g.drawString(label, labelX, labelY);
     }
 
     @Override
