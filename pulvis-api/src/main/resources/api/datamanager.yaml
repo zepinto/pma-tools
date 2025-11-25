@@ -1518,9 +1518,7 @@ components:
       - latitude
       - longitude
       - raster-filename
-      - system-name
       - timestamp
-      - user-name
       type: object
       properties:
         uuid:

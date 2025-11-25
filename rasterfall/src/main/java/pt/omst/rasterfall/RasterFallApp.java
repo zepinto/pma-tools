@@ -41,7 +41,6 @@ import pt.omst.rasterfall.map.MapViewer;
 import pt.omst.rasterlib.IndexedRasterCreator;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.gui.RasterFolderChooser;
-import pt.omst.util.UserPreferencesDialog;
 
 @Slf4j
 public class RasterFallApp extends JFrame {
@@ -127,15 +126,15 @@ public class RasterFallApp extends JFrame {
         // Preferences submenu
         JMenu preferencesMenu = new JMenu("Preferences");
 
-        // Username menu item
-        JMenuItem usernameItem = new JMenuItem("Set Username...");
-        usernameItem.addActionListener(new ActionListener() {
+        // Mission Preferences menu item
+        JMenuItem missionPrefsItem = new JMenuItem("Mission Preferences...");
+        missionPrefsItem.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                UserPreferencesDialog.showDialog(RasterFallApp.this);
+                editMissionPrefs();
             }
         });
-        preferencesMenu.add(usernameItem);
+        preferencesMenu.add(missionPrefsItem);
         preferencesMenu.addSeparator();
 
         // Dark Mode toggle
@@ -373,10 +372,19 @@ public class RasterFallApp extends JFrame {
         }
     }
 
+    private boolean editMissionPrefs() {
+        return MissionPreferencesDialog.showDialog(this);
+    }
+
     private void loadRasterFolder(File folder) {
+        
+        if (!editMissionPrefs()) {
+            return; // User cancelled mission preferences
+        }
+        
         // Show loading splash screen centered on this window
-        JWindow splash = LoadingPanel.showSplashScreen("Loading raster data...", this);
-        LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
+        final JWindow splash = LoadingPanel.showSplashScreen("Loading raster data...", this);
+        final LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
 
         // Force the splash screen to render before starting heavy work
         splash.toFront();

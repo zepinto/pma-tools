@@ -10,7 +10,6 @@ import java.awt.BorderLayout;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.JFrame;
@@ -22,8 +21,6 @@ import lombok.extern.java.Log;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.rasterfall.overlays.InteractionListenerOverlay;
 import pt.omst.rasterfall.overlays.RasterfallOverlays;
-import pt.omst.rasterlib.IndexedRasterCreator;
-import pt.omst.rasterlib.IndexedRasterUtils;
 
 @Log
 public class RasterfallPanel extends JPanel implements Closeable {
