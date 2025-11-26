@@ -139,6 +139,8 @@ public class ContactCollection implements MapPainter {
         // }
     }
 */
+
+
     /**
      * Applies filters to the contacts based on region, time, and classification/confidence/label criteria.
      * Empty sets for classification/confidence/label filters mean "show all" for that criterion.
@@ -400,6 +402,35 @@ public class ContactCollection implements MapPainter {
  
     public List<CompressedContact> getAllContacts() {
         return quadTree.getAll();
+    }
+
+    /**
+     * Creates a new selection view of this collection with no filters.
+     * @return A new ContactsSelection containing all contacts
+     */
+    public ContactsSelection select() {
+        return new ContactsSelection(this);
+    }
+
+    /**
+     * Creates a new selection view of this collection with the specified filters.
+     * 
+     * @param region Geographic region filter (null = no region filter)
+     * @param startTime Start time filter (null = no start time filter)
+     * @param endTime End time filter (null = no end time filter)
+     * @param classifications Classification types to include (null/empty = all)
+     * @param confidences Confidence levels to include (null/empty = all)
+     * @param labels Labels to include (null/empty = all)
+     * @return A new ContactsSelection with the specified filters
+     */
+    public ContactsSelection select(QuadTree.Region region,
+                                    Instant startTime, 
+                                    Instant endTime,
+                                    Set<String> classifications, 
+                                    Set<String> confidences, 
+                                    Set<String> labels) {
+        return new ContactsSelection(this, region, startTime, endTime, 
+                                     classifications, confidences, labels);
     }
 
     @Override

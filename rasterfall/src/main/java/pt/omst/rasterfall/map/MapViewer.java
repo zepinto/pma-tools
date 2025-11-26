@@ -47,6 +47,7 @@ import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.overlays.InteractionListenerOverlay.RasterfallListener;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.rasterlib.contacts.ContactCollection;
+import pt.omst.rasterlib.contacts.ContactsSelection;
 
 /**
  * Simplified contact viewer for RasterFall integration.
@@ -61,6 +62,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     private final SlippyMap slippyMap;
     private final VerticalContactEditor contactEditor;
     private ContactCollection contactCollection;
+    private ContactsSelection currentSelection;
     private final ContactsMapOverlay contactsMapOverlay;
     private final DataSourceManagerPanel dataSourceManager;
     private final ContactFilterPanel filterPanel;
@@ -363,8 +365,8 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         var confidences = filterPanel.getSelectedConfidences();
         var labels = filterPanel.getSelectedLabels();
 
-        // Apply filters - pass null for empty sets to show all
-        contactCollection.applyFilters(
+        // Create a new selection with the specified filters
+        currentSelection = contactCollection.select(
             null, // region
             null, // start time
             null, // end time
@@ -374,7 +376,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         );
 
         // Update the filter panel's contact list with filtered results
-        filterPanel.setContacts(contactCollection.getAllContacts());
+        filterPanel.setContacts(currentSelection.getContacts());
         
         // Update map display
         contactsMapOverlay.refresh();
@@ -460,7 +462,9 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     private void updateStatusBar() {
         SwingUtilities.invokeLater(() -> {
             int totalContacts = contactCollection.getAllContacts().size();
+            int visibleContacts = currentSelection != null ? currentSelection.size() : totalContacts;
             totalContactsLabel.setText("Total: " + totalContacts);
+            visibleContactsLabel.setText("Visible: " + visibleContacts);
         });
     }
 
