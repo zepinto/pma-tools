@@ -22,6 +22,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JLayer;
 
+import pt.lsts.neptus.core.LocationType;
 import pt.omst.rasterfall.RasterfallDebug;
 import pt.omst.rasterfall.RasterfallScrollbar;
 import pt.omst.rasterfall.RasterfallTile;
@@ -33,7 +34,7 @@ public class InfoOverlay extends AbstractOverlay {
     private final Point2D lastPoint = new Point2D.Double();
     private final String html = "<html><body style='color: white; font-family: Helvetica; font-size: 12px;'>";
     private RasterfallTiles waterfall;
-    private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+    private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS 'UTC'");
     {
         sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
     }
@@ -62,9 +63,8 @@ public class InfoOverlay extends AbstractOverlay {
                 // Comprehensive debug information
                 label.setText(buildDebugHTML());
             } else {
-                // Standard info display
-                label.setText(html + waterfall.getWorldPosition(lastPoint) + "<br>" +
-                        sdf.format(new Date(waterfall.getTimestamp(lastPoint))) + "<br>" + String.format("%.1f m", range) + "</body></html>");
+                // Standard info display with full pose information
+                label.setText(buildInfoHTML(range));
             }
             waterfall.repaint();
         }
@@ -75,10 +75,56 @@ public class InfoOverlay extends AbstractOverlay {
         if (e.getID() == MouseEvent.MOUSE_EXITED) {
             lastPoint.setLocation(waterfall.getVisibleRect().getX()+waterfall.getVisibleRect().getWidth()/2,
                     waterfall.getVisibleRect().getY()+waterfall.getVisibleRect().getHeight()/2);
-            label.setText(html + waterfall.getWorldPosition(lastPoint) + "<br>" +
-                    sdf.format(new Date(waterfall.getTimestamp(lastPoint))) + "<br>" + String.format("%.1f m", 0f) + "</body></html>");
+            double range = waterfall.getRange(lastPoint);
+            label.setText(buildInfoHTML(range));
             waterfall.repaint();
         }
+    }
+
+    private String buildInfoHTML(double range) {
+        StringBuilder sb = new StringBuilder(html);
+        
+        RasterfallTiles.TilesPosition pos = waterfall.getPosition(lastPoint);
+        
+        LocationType location = waterfall.getWorldPosition(lastPoint);
+        // Location and time
+        sb.append(location.getLatitudeAsPrettyString()+", ").append(location.getLongitudeAsPrettyString()).append("<br>");
+        sb.append(sdf.format(new Date(waterfall.getTimestamp(lastPoint)))).append("<br>");
+        //sb.append(String.format("<b>Range:</b> %.1f m", range));
+        
+        if (pos != null && pos.pose() != null) {
+            var pose = pos.pose();
+           // sb.append("<br>");
+            
+            // Depth and altitude
+            if (pose.getDepth() != null) {
+                sb.append(String.format("<b>Dep:</b> %.1f m&nbsp;&nbsp;", pose.getDepth()));
+            }
+            if (pose.getAltitude() != null) {
+                sb.append(String.format("<b>Alt:</b> %.1f m&nbsp;&nbsp;", pose.getAltitude()));
+            }
+            
+            // Orientation (convert from radians to degrees)
+            sb.append("<br>");
+            if (pose.getPhi() != null) {
+                sb.append(String.format("<b>Roll:</b> %.1f°&nbsp;&nbsp;", pose.getPhi()));
+            }
+            if (pose.getPsi() != null) {
+                sb.append(String.format("<b>Hdg:</b> %.1f°", pose.getPsi()));
+            }
+            
+            // Velocities (if available)
+            boolean hasVelocity = pose.getU() != null || pose.getV() != null || pose.getW() != null;
+            if (hasVelocity) {
+                sb.append("<br>");
+                if (pose.getU() != null) {
+                    sb.append(String.format("<b>Speed:</b> %.2f m/s&nbsp;&nbsp;", pose.getU()));
+                }
+            }
+        }
+        
+        sb.append("</body></html>");
+        return sb.toString();
     }
 
     @Override
@@ -97,9 +143,9 @@ public class InfoOverlay extends AbstractOverlay {
             g2.translate(waterfall.getVisibleRect().getWidth() - 620, 20);
             label.setBounds(0, 0, 600, 500);
         } else {
-            // Standard position at bottom-left
-            g2.translate(20, waterfall.getVisibleRect().getHeight()-90);
-            label.setBounds(0, 0, 310, 70);
+            // Standard position at bottom-left with larger size for pose info
+            g2.translate(20, waterfall.getVisibleRect().getHeight()-140);
+            label.setBounds(0, 0, 230, 124);
         }
         
         label.paint(g2);
