@@ -291,7 +291,18 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
         Pose pose = sample.getPose();
         double minX = raster.getSensorInfo().getMinRange();
         double maxX = raster.getSensorInfo().getMaxRange();
-        double xOffset = minX + (maxX - minX) * imageCoords.x;
+        double slantRange = minX + (maxX - minX) * imageCoords.x;
+        
+        // Apply slant range correction: ground range = sqrt(slant_range² - altitude²)
+        double altitude = pose.getAltitude();
+        double xOffset;
+        if (Math.abs(slantRange) > altitude) {
+            xOffset = Math.signum(slantRange) * Math.sqrt(slantRange * slantRange - altitude * altitude);
+        } else {
+            // If slant range is less than altitude (nadir zone), ground range is near zero
+            xOffset = 0;
+        }
+        
         LocationType loc = new LocationType(pose.getLatitude(), pose.getLongitude());
         loc.setOffsetDistance(xOffset);
         if (xOffset < 0) {

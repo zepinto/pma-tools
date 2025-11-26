@@ -1,6 +1,7 @@
 package pt.omst.rasterfall.overlays;
 
 import java.awt.Graphics;
+import java.awt.Point;
 import java.awt.event.MouseEvent;
 import java.awt.geom.Point2D;
 import java.time.Instant;
@@ -34,13 +35,18 @@ public class InteractionListenerOverlay extends AbstractOverlay {
             lastVisibleStartTime = null;
             lastVisibleEndTime = null;
             waterfall.repaint();
+        } else if (!active) {
+            // Clear bounds/cursor when deactivated
+            for (RasterfallListener listener : listeners) {
+                listener.onMouseMoved(Double.NaN, Double.NaN, null);
+                listener.onVisibleBoundsChanged(null, null, null);
+            }
         }
     }
 
     public static interface RasterfallListener {
         public void onMouseMoved(double latitude, double longitude, Instant timestamp);
-        public void onVisibleBoundsChanged(LocationType loc1, LocationType loc2, LocationType loc3, LocationType loc4,
-                Instant startTime, Instant endTime);
+        public void onVisibleBoundsChanged(LocationType[] boundaryPoints, Instant startTime, Instant endTime);
     }
 
     public void addListener(RasterfallListener listener) {
@@ -90,21 +96,47 @@ public class InteractionListenerOverlay extends AbstractOverlay {
     @Override
     public void paint(Graphics g, JComponent c) {
         if (!active) return;
+        
+        // Get the visible viewport bounds
+        java.awt.Rectangle visibleRect = waterfall.getVisibleRect();
+        int viewX = visibleRect.x;
+        int viewY = visibleRect.y;
+        int viewWidth = visibleRect.width;
+        int viewHeight = visibleRect.height;
        
-        Instant start = waterfall.getTimeAtScreenY(waterfall.getVisibleRect().y);
-       
-        Instant end = waterfall.getTimeAtScreenY(waterfall.getVisibleRect().y + waterfall.getVisibleRect().height - 1);
+        Instant start = waterfall.getTimeAtScreenY(viewY);
+        Instant end = waterfall.getTimeAtScreenY(viewY + viewHeight - 1);
 
         if (lastVisibleStartTime == null || lastVisibleEndTime == null ||
                 !lastVisibleStartTime.equals(start) || !lastVisibleEndTime.equals(end)) {
             lastVisibleStartTime = start;
             lastVisibleEndTime = end;
-            LocationType topLeft = waterfall.getWorldPosition(new Point2D.Double(0, 0));
-            LocationType topRight = waterfall.getWorldPosition(new Point2D.Double(waterfall.getWidth()-1, 0));
-            LocationType bottomLeft = waterfall.getWorldPosition(new Point2D.Double(0, waterfall.getHeight()-1));
-            LocationType bottomRight = waterfall.getWorldPosition(new Point2D.Double(waterfall.getWidth()-1, waterfall.getHeight()-1));
+            
+            // Compute 12 boundary points: 4 corners + 4 intermediate on each side (left/right)
+            LocationType[] boundaryPoints = new LocationType[12];
+            
+            // Top edge: just the two corners (left to right)
+            boundaryPoints[0] = waterfall.getWorldPosition(new Point2D.Double(viewX, viewY)); // top-left
+            boundaryPoints[1] = waterfall.getWorldPosition(new Point2D.Double(viewX + viewWidth - 1, viewY)); // top-right
+            
+            // Right edge: 4 intermediate points (top to bottom, excluding corners)
+            for (int i = 0; i < 4; i++) {
+                int y = viewY + ((i + 1) * viewHeight / 5);
+                boundaryPoints[2 + i] = waterfall.getWorldPosition(new Point2D.Double(viewX + viewWidth - 1, y));
+            }
+            
+            // Bottom edge: just the two corners (right to left)
+            boundaryPoints[6] = waterfall.getWorldPosition(new Point2D.Double(viewX + viewWidth - 1, viewY + viewHeight - 1)); // bottom-right
+            boundaryPoints[7] = waterfall.getWorldPosition(new Point2D.Double(viewX, viewY + viewHeight - 1)); // bottom-left
+            
+            // Left edge: 4 intermediate points (bottom to top, excluding corners)
+            for (int i = 0; i < 4; i++) {
+                int y = viewY + viewHeight - 1 - ((i + 1) * viewHeight / 5);
+                boundaryPoints[8 + i] = waterfall.getWorldPosition(new Point2D.Double(viewX, y));
+            }
+            
             for (RasterfallListener listener : listeners) {
-                listener.onVisibleBoundsChanged(bottomLeft, topLeft, topRight, bottomRight, start, end);
+                listener.onVisibleBoundsChanged(boundaryPoints, start, end);
             }
         }
     }

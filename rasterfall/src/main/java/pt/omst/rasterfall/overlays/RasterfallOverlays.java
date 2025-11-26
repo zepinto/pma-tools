@@ -42,7 +42,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
 
     private JButton playButton;
     private JToggleButton measureButton, heightButton, markButton, infoButton, gridButton, rulerButton, hudButton,
-            coverageButton;
+            coverageButton, syncButton;
     private JSpinner speedSpinner;
 
     private final RulerOverlay rulerOverlay = new RulerOverlay();
@@ -175,6 +175,13 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         coverageButton.addChangeListener(e -> overlayAction(sonarCoverageOverlay, coverageButton.isSelected()));
         coverageButton.setMargin(new Insets(0, 0, 0, 0));
        
+        progress("Adding sync button...", progressCallback);
+        syncButton = new JToggleButton("<html><h3>&#x1F517; &nbsp; sync</h3></html>");
+        syncButton.setPreferredSize(new Dimension(80, 33));
+        syncButton.addChangeListener(e -> interactionListenerOverlay.setActive(syncButton.isSelected()));
+        syncButton.setMargin(new Insets(0, 0, 0, 0));
+        syncButton.setToolTipText("Sync mouse position with map viewer");
+       
         progress("Adding speed spinner...", progressCallback);
         speedSpinner = new JSpinner(new SpinnerNumberModel(25, 1, 250, 1));
         speedSpinner.setPreferredSize(new Dimension(75, 33));
@@ -198,6 +205,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         leftPanel.add(measureButton);
         leftPanel.add(heightButton);
         leftPanel.add(coverageButton);
+        leftPanel.add(syncButton);
 
         rightPanel.add(speedSpinner);
         rightPanel.add(playButton);

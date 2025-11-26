@@ -90,9 +90,9 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         
         slippyMap = new SlippyMap();
         contactsMapOverlay = new ContactsMapOverlay(contactCollection);
-        pathMapOverlay = new PathMapOverlay();
-        slippyMap.addMapOverlay(pathMapOverlay);
         slippyMap.addMapOverlay(interactionMapOverlay);
+        pathMapOverlay = new PathMapOverlay();
+        slippyMap.addMapOverlay(pathMapOverlay);        
         slippyMap.addMapOverlay(contactsMapOverlay);
         
         contactsMapOverlay.setContactSelectionListener(contact -> {
@@ -469,19 +469,27 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     @Override
     public void onMouseMoved(double latitude, double longitude, Instant timestamp) {
-        log.info("Mouse moved to lat: {}, lon: {}, time: {}", latitude, longitude, timestamp);
-        interactionMapOverlay.setMouseLocation(new LocationType(latitude, longitude));
+        if (Double.isNaN(latitude) || Double.isNaN(longitude)) {
+            interactionMapOverlay.setMouseLocation(null);
+        } else {
+            log.info("Mouse moved to lat: {}, lon: {}, time: {}", latitude, longitude, timestamp);
+            interactionMapOverlay.setMouseLocation(new LocationType(latitude, longitude));
+        }
         repaint();
     }
 
     @Override
-    public void onVisibleBoundsChanged(LocationType loc1, LocationType loc2, LocationType loc3, LocationType loc4, Instant startTime,
+    public void onVisibleBoundsChanged(LocationType[] boundaryPoints, Instant startTime,
             Instant endTime) {
 
-        log.info("Visible bounds changed: loc1={}, loc2={}, loc3={}, loc4={}, startTime={}, endTime={}",
-                loc1, loc2, loc3, loc4, startTime, endTime);
-
-        interactionMapOverlay.setVisibleBounds(loc1, loc2, loc3, loc4);
+        if (boundaryPoints == null) {
+            log.info("Visible bounds cleared");
+            interactionMapOverlay.clear();
+        } else {
+            log.info("Visible bounds changed: {} points, startTime={}, endTime={}",
+                    boundaryPoints.length, startTime, endTime);
+            interactionMapOverlay.setVisibleBounds(boundaryPoints);
+        }
 
         repaint();
     }

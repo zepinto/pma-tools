@@ -347,7 +347,8 @@ public class RasterFallApp extends JFrame {
 
             // Center and show
             GuiUtils.centerOnScreen(mapViewerFrame);
-            mapViewer.setRasterfallDataSource(new RasterfallDataSource(rasterfallPanel.getWaterfall().getContactsFolder()));
+            if (rasterfallPanel != null)
+                mapViewer.setRasterfallDataSource(new RasterfallDataSource(rasterfallPanel.getWaterfall().getContactsFolder()));
             mapViewerFrame.setVisible(true);
 
         } catch (Exception ex) {
