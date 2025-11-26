@@ -32,7 +32,7 @@ public class RasterfallPreferences {
     public static final String PREF_SYSTEM_NAME = "system.name";
     public static String PREF_CONTACT_SIZE = "contact.size";
     
-    private static final String MISSION_PREFS_FILENAME = "mission-preferences.json";
+    private static final String MISSION_PREFS_FILENAME = "mission-preferences.txt";
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
 

@@ -37,9 +37,12 @@ import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.jobs.BackgroundJob;
 import pt.omst.gui.jobs.JobManager;
+import pt.omst.rasterfall.utils.IndexedRasterTiles;
+import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.IndexedRasterUtils;
+import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
 import pt.omst.rasterlib.contacts.CompressedContact;
@@ -157,7 +160,64 @@ public class RasterfallTiles extends JPanel implements Closeable {
                 return absolutePosition;
             }
         }
-        log.warning("No tile contains timestamp " + timestamp);
+        // Timestamp outside loaded tile range - this is normal, return null silently
+        return null;
+    }
+
+    /**
+     * Get the screen position for a geographic location at a given timestamp.
+     * This method calculates the slant range from the vehicle track to the target location,
+     * then converts to screen coordinates.
+     * 
+     * @param timestamp The timestamp of the observation
+     * @param targetLat Target latitude in degrees
+     * @param targetLon Target longitude in degrees
+     * @return Screen position, or null if timestamp is outside loaded tiles
+     */
+    public Point2D.Double getSlantedScreenPositionFromLocation(Instant timestamp, double targetLat, double targetLon) {
+        for (RasterfallTile tile : tiles) {
+            if (tile.containsTime(timestamp)) {
+                // Get the vehicle pose at this timestamp
+                Pose pose = tile.getPoseAtTime(timestamp);
+                if (pose == null) {
+                    return null;
+                }
+                
+                // Calculate slant range from vehicle to target location
+                LocationType vehicleLoc = new LocationType(pose.getLatitude(), pose.getLongitude());
+                LocationType targetLoc = new LocationType(targetLat, targetLon);
+                
+                // Get the horizontal distance
+                double groundRange = vehicleLoc.getHorizontalDistanceInMeters(targetLoc);
+                
+                // Determine if port or starboard based on heading and target bearing
+                double headingRad = Math.toRadians(pose.getPsi() != null ? pose.getPsi() : 0);
+                double bearing = vehicleLoc.getXYAngle(targetLoc); // Returns angle in radians
+                
+                // Calculate the angle difference to determine port/starboard
+                double angleDiff = bearing - headingRad;
+                // Normalize to [-PI, PI]
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                
+                // If angle difference is positive (0 to PI), target is to starboard (positive range)
+                // If negative (-PI to 0), target is to port (negative range)
+                double signedGroundRange = (angleDiff >= 0) ? groundRange : -groundRange;
+                
+                // Convert ground range to slant range
+                double altitude = pose.getAltitude() != null ? pose.getAltitude() : 0;
+                double slantRange = Math.sqrt(signedGroundRange * signedGroundRange + altitude * altitude);
+                if (signedGroundRange < 0) {
+                    slantRange = -slantRange;
+                }
+                
+                Point2D.Double relativePosition = tile.getSlantedRangePosition(timestamp, slantRange);
+                if (relativePosition == null) {
+                    return null;
+                }
+                return new Point2D.Double(tile.getBounds().x + relativePosition.x, tile.getBounds().y + relativePosition.y);
+            }
+        }
         return null;
     }
 
@@ -469,6 +529,67 @@ public class RasterfallTiles extends JPanel implements Closeable {
             }
         }
         return null;
+    }
+
+    /**
+     * Find other potential observations for a contact at the given position.
+     * Searches all raster tiles for other times when the vehicle passed near
+     * the same geographic location (within 2 meters).
+     * 
+     * @param position The position to search for (from a click or existing contact)
+     * @return List of potential observations at this location from other passes
+     */
+    public List<Observation> findOtherPotentialContacts(TilesPosition position) {
+        List<Observation> potentialContacts = new ArrayList<>();
+        
+        if (position == null || position.location() == null) {
+            return potentialContacts;
+        }
+
+        // Create a temporary contact to use with IndexedRasterTiles
+        Contact tempContact = new Contact();
+        tempContact.setLatitude(position.location().getLatitudeDegs());
+        tempContact.setLongitude(position.location().getLongitudeDegs());
+        
+        // Add the original observation so it gets excluded from results
+        Observation originalObs = new Observation();
+        originalObs.setTimestamp(java.time.OffsetDateTime.ofInstant(position.timestamp(), java.time.ZoneOffset.UTC));
+        tempContact.getObservations().add(originalObs);
+
+        // Search across all tiles/rasters for other passes near this location
+        for (RasterfallTile tile : tiles) {
+            IndexedRaster raster = tile.getRaster();
+            BufferedImage tileImage = tile.getImageSync();
+            if (tileImage == null) {
+                continue;
+            }
+            IndexedRasterTiles rasterTiles = new IndexedRasterTiles(raster);
+            
+            // Generate potential observations (they get added to tempContact.getObservations())
+            rasterTiles.generatePotentialObservationsFast(tempContact, potentialContacts::add);
+        }
+
+        return potentialContacts;
+    }
+
+    /**
+     * Find other potential observations for a contact at the given position,
+     * showing a message dialog with the count.
+     * 
+     * @param position The position to search for
+     * @return List of potential observations at this location from other passes
+     */
+    public List<Observation> findOtherPotentialContactsWithMessage(TilesPosition position) {
+        List<Observation> observations = findOtherPotentialContacts(position);
+        
+        String message = pt.lsts.neptus.util.I18n.text("Found " + observations.size() + " potential observations at this location");
+        try {
+            pt.lsts.neptus.util.GuiUtils.infoMessage(null, pt.lsts.neptus.util.I18n.text("Potential Observations"), message);
+        } catch (java.awt.HeadlessException e) {
+            log.info(message);
+        }
+        
+        return observations;
     }
 
     public static void main(String[] args) {

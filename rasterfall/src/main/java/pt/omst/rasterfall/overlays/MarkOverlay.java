@@ -37,9 +37,12 @@ import javax.swing.border.EmptyBorder;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.ContactEditor;
+import pt.omst.gui.jobs.BackgroundJob;
+import pt.omst.gui.jobs.JobManager;
 import pt.omst.rasterfall.RasterfallPreferences;
 import pt.omst.rasterfall.RasterfallTile;
 import pt.omst.rasterfall.RasterfallTiles;
+import pt.omst.rasterfall.RasterfallTiles.TilesPosition;
 import pt.omst.rasterlib.Annotation;
 import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
@@ -67,6 +70,8 @@ public class MarkOverlay extends AbstractOverlay {
 
     private RasterfallTiles.TilesPosition firstPosition = null, lastPosition = null;
 
+    private ArrayList<Observation> potentialContacts = new ArrayList<>();
+
     @Override
     public void cleanup(RasterfallTiles waterfall) {
         firstPoint = lastPoint = currentPoint = null;
@@ -76,6 +81,7 @@ public class MarkOverlay extends AbstractOverlay {
     public void install(RasterfallTiles waterfall) {
         this.waterfall = waterfall;
         firstPoint = lastPoint = currentPoint = null;
+        potentialContacts.clear();
     }
 
     @Override
@@ -104,6 +110,42 @@ public class MarkOverlay extends AbstractOverlay {
             g2.setColor(new Color(255, 255, 0, 30));
             g2.fillRect(x, y, width, height);
 
+            g2.dispose();
+        }
+
+        // Create a copy to avoid ConcurrentModificationException
+        List<Observation> contactsCopy = new ArrayList<>(potentialContacts);
+        for (Observation o : contactsCopy) {
+            Point2D.Double pos = waterfall.getSlantedScreenPositionFromLocation(
+                    o.getTimestamp().toInstant(),
+                    o.getLatitude(),
+                    o.getLongitude());
+            if (pos == null) {
+                // Observation is outside the loaded tile range, skip silently
+                continue;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            
+            // Draw crosshair (white 50% transparent)
+            g2.setColor(new Color(255, 255, 255, 128));
+            g2.setStroke(new BasicStroke(1.5f));
+            int crossSize = 8;
+            int x = (int) pos.getX();
+            int y = (int) pos.getY();
+            // Horizontal line
+            g2.drawLine(x - crossSize, y, x + crossSize, y);
+            // Vertical line
+            g2.drawLine(x, y - crossSize, x, y + crossSize);
+            
+            // Draw contact name in white
+            //g2.setColor(Color.WHITE);
+            String label = o.getUserName() != null ? o.getUserName() : "";
+            // Remove "_potential" suffix if present for cleaner display
+            if (label.endsWith("_potential")) {
+                label = label.substring(0, label.length() - "_potential".length());
+            }
+            g2.drawString("("+label+")", x + crossSize + 3, y + 4);
             g2.dispose();
         }
     }
@@ -615,6 +657,28 @@ public class MarkOverlay extends AbstractOverlay {
         } else {
             log.error("Failed to generate contact image for the selected area.");
         }
+
+        final TilesPosition posFinal = pos;
+        final String labelFinal = label;
+        JobManager.getInstance().submit(new BackgroundJob("Find potential markers for " + labelFinal) {
+            @Override
+            public Void doInBackground() throws Exception {
+                List<Observation> observations = waterfall.findOtherPotentialContacts(posFinal);
+                if (!observations.isEmpty()) {
+                    log.info("Found {} potential contact(s) for {}", observations.size(), labelFinal);
+                    for (Observation o : observations) {
+                        log.info("  - {} lat, {} lon, depth {} m, time {}",
+                                o.getLatitude(), o.getLongitude(), o.getDepth(), o.getTimestamp());
+                       o.setUserName(labelFinal+"_potential");
+                                potentialContacts.add(o);
+                    }
+                } else {
+                    log.info("No additional potential contacts found for {}", labelFinal);
+                }
+                return null;
+            }
+        });
+       
     }
 
     RasterContactInfo findContactAtScreenPosition(Point2D.Double screenPos) {
