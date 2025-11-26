@@ -69,7 +69,7 @@ public class ContactsOverlay extends AbstractOverlay {
             int widthLabel = fm.stringWidth(contact.getLabel());
             // draw contact label
             g.setFont(g.getFont().deriveFont(10f));
-            g.drawString(contact.getLabel(), x + width - widthLabel + 6, y + height + 12);
+            g.drawString(contact.getLabel(), x + width - widthLabel+20, y + height + 12);
         }
     }
 }

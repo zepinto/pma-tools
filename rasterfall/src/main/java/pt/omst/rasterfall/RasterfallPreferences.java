@@ -104,7 +104,7 @@ public class RasterfallPreferences {
      * @return The contact size.
      */
     public static float getContactSize() {
-        return prefs.getInt(PREF_CONTACT_SIZE, 3);
+        return prefs.getFloat(PREF_CONTACT_SIZE, 3.0f);
     }
 
     public static void setContactSize(float size) {

@@ -343,6 +343,40 @@ public class MarkOverlay extends AbstractOverlay {
         }
     }
 
+    private String generateNextLabel(String prefix) {
+        List<String> existingLabels = new ArrayList<>();
+        
+        for (CompressedContact c : waterfall.getContacts().getAllContacts()) {
+            if (c.getLabel().startsWith(prefix)) {
+                String suffix = c.getLabel().substring(prefix.length());
+                if (suffix.matches("\\d+")) {
+                    existingLabels.add(c.getLabel());
+                }
+            }
+        }
+
+        if (existingLabels.isEmpty()) {
+            return prefix + "001";
+        } else {
+            // Try to increment numeric suffix
+            int maxNumber = 0;
+            for (String label : existingLabels) {
+                String suffix = label.substring(prefix.length());
+                int number = Integer.parseInt(suffix);
+                if (number > maxNumber) {
+                    maxNumber = number;
+                }
+            }
+            int nextNumber = maxNumber + 1;
+            String newLabel;
+            do {
+                newLabel = String.format("%s%03d", prefix, nextNumber);
+                nextNumber++;
+            } while (existingLabels.contains(newLabel));
+            return newLabel;
+        }
+    }
+
     private String generateNextLabel() {
         List<String> existingLabels = new ArrayList<>();
         String lastContact = null;
@@ -395,7 +429,14 @@ public class MarkOverlay extends AbstractOverlay {
     }
 
     private void createContact(Point2D.Double topLeft, Point2D.Double bottomRight) {
-        String label = generateNextLabel();
+        String prefix = RasterfallPreferences.getContactName();
+        String label;
+
+        if (prefix.isEmpty()) {
+            label = generateNextLabel();
+        } else {
+            label = generateNextLabel(prefix);
+        }
         log.info("Creating new contact with label {}", label);
         // Calculate top-left and bottom-right coordinates
         int topLeftX = (int) Math.min(firstPoint.getX(), topLeft.getX());
@@ -462,13 +503,18 @@ public class MarkOverlay extends AbstractOverlay {
         contact.setDepth(pose.getDepth());
         contact.setUuid(UUID.randomUUID());
         contact.setLabel(label);
+        
 
         Observation obs = new Observation();
         obs.setDepth(pose.getDepth());
         obs.setLatitude(centerLocation.getLatitudeDegs());
         obs.setLongitude(centerLocation.getLongitudeDegs());
         obs.setTimestamp(OffsetDateTime.now());
-
+        obs.setUserName(UserPreferences.getUsername());
+        obs.setUuid(UUID.randomUUID());
+        obs.setSystemName(RasterfallPreferences.getSystemName());
+        obs.setUserName(UserPreferences.getUsername());
+        
         // Calculate normalized coordinates of original box within expanded image
         // Original box is centered in expanded image with EXPANSION_FACTOR padding on each side
         double normalizedPadding = EXPANSION_FACTOR / (1.0 + 2 * EXPANSION_FACTOR);
@@ -484,14 +530,13 @@ public class MarkOverlay extends AbstractOverlay {
         annotation.setNormalizedY2(boxEndY);
         annotation.setAnnotationType(AnnotationType.MEASUREMENT);
         annotation.setMeasurementType(MeasurementType.BOX);
-        obs.setAnnotations(new ArrayList<>());
         annotation.setTimestamp(obs.getTimestamp());
         annotation.setUserName(UserPreferences.getUsername());
+        
+        obs.setAnnotations(new ArrayList<>());
         obs.getAnnotations().add(annotation);
-        obs.setUserName(UserPreferences.getUsername());
+        
         contact.getObservations().add(obs);
-        
-        
 
         BufferedImage image = getContactImage(expandedMinRange, expandedMaxRange, expandedStartTime, expandedEndTime);
         List<SampleDescription> samples = getSamplesBetween(expandedStartTime, expandedEndTime);

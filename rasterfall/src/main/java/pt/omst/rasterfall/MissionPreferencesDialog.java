@@ -21,6 +21,7 @@ import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.border.EmptyBorder;
 
+import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.I18n;
 import pt.omst.util.UserPreferences;
 
@@ -28,6 +29,7 @@ import pt.omst.util.UserPreferences;
  * Dialog for editing mission-related preferences including user name,
  * campaign name, system name, and contact name prefix.
  */
+@Slf4j
 public class MissionPreferencesDialog extends JDialog {
     
     private static final long serialVersionUID = 1L;
@@ -158,6 +160,7 @@ public class MissionPreferencesDialog extends JDialog {
         JButton okButton = new JButton(I18n.text("button.ok"));
         okButton.addActionListener(e -> {
             savePreferences();
+            log.info("Mission preferences saved");
             confirmed = true;
             dispose();
         });
@@ -206,6 +209,7 @@ public class MissionPreferencesDialog extends JDialog {
         // Save contact size
         float contactSize = ((Number) contactSizeSpinner.getValue()).floatValue();
         RasterfallPreferences.setContactSize(contactSize);
+        log.info("Contact size preference set to: {} meters", contactSize);
     }
     
     public boolean isConfirmed() {
