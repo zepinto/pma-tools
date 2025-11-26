@@ -443,6 +443,11 @@ public class RasterFallApp extends JFrame {
 
                 if (!openedFile.getName().equals("rasterIndex"))
                     openedFile = new File(folder, "rasterIndex");
+                
+                // Set the mission folder for preferences (loads mission-specific settings)
+                final File missionFolder = openedFile;
+                RasterfallPreferences.setCurrentMissionFolder(missionFolder);
+                
                 // Create new rasterfall panel with selected folder (in background)
                 if (loadingPanel != null) {
                     SwingUtilities.invokeLater(() -> loadingPanel.setStatus("Initializing rasterfall panel..."));
