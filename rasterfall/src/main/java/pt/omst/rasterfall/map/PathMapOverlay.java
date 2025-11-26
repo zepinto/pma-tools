@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.event.MouseEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 
@@ -19,6 +20,7 @@ import pt.omst.gui.jobs.JobManager;
 import pt.omst.mapview.AbstractMapOverlay;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterfall.RasterfallTiles;
+import pt.omst.rasterfall.replay.LogReplay;
 import pt.omst.rasterlib.IndexedRaster;
 import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.SampleDescription;
@@ -32,6 +34,7 @@ public class PathMapOverlay extends AbstractMapOverlay {
     private volatile boolean pathReady = false;
 
     private ArrayList<LocationType> pathLocations = new ArrayList<>();
+    private ArrayList<Instant> pathTimestamps = new ArrayList<>();
 
     public void setWaterfall(RasterfallTiles waterfall) {
         this.waterfall = waterfall;
@@ -70,6 +73,7 @@ public class PathMapOverlay extends AbstractMapOverlay {
                         double[] offsets = loc.getOffsetFrom(startLocation);
                         offsetPath.lineTo(offsets[1], offsets[0]);
                         pathLocations.add(loc);
+                        pathTimestamps.add(sample.getTimestamp().toInstant());
                         sampleCount++;
                         nextTime = sample.getTimestamp().plusSeconds(1);
                        
@@ -92,17 +96,23 @@ public class PathMapOverlay extends AbstractMapOverlay {
             LocationType clickLoc = map.getRealWorldPosition(e.getX(), e.getY());
             double closestDistance = Double.MAX_VALUE;
             LocationType closestLoc = null;
-            for (LocationType loc : pathLocations) {
+            Instant closestTimestamp = null;
+            for (int i = 0; i < pathLocations.size(); i++) {
+                LocationType loc = pathLocations.get(i);
                 double distance = loc.getDistanceInMeters(clickLoc);
                 if (distance < closestDistance) {
                     closestDistance = distance;
                     closestLoc = loc;
+                    closestTimestamp = pathTimestamps.get(i);
                 }
             }
 
-            log.info("Closest location to click is at {} (distance: {} meters)",
+            log.info("Closest location to click is at {} (distance: {} meters away), at time {}",
                     closestLoc != null ? closestLoc.toString() : "N/A",
-                    closestDistance != Double.MAX_VALUE ? String.format("%.2f", closestDistance) : "N/A");
+                    closestDistance != Double.MAX_VALUE ? String.format("%.2f", closestDistance) : "N/A",
+                    closestTimestamp != null ? closestTimestamp.toString() : "N/A");
+            LogReplay.setReplayState(Instant.now(), closestTimestamp, 0);
+            
         }
         return super.processMouseEvent(e, map);
     }

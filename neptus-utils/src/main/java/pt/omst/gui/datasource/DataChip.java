@@ -112,6 +112,11 @@ public class DataChip extends JPanel {
             }
         });
         
+        // Hide remove button if data source cannot be deleted
+        if (!dataSource.isDeletable()) {
+            removeButton.setVisible(false);
+        }
+        
         add(removeButton);
         
         // Set tooltip

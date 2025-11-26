@@ -89,6 +89,9 @@ public class RasterfallReplay implements LogReplay.Listener, Closeable {
             long millisBetweenUpdates = 1000 / 30;
             timer.scheduleAtFixedRate(createTimerTask(), 0, millisBetweenUpdates);
         }
+        log.info("Replay state changed: realTime={}, replayTime={}, speed={}X", realTime, replayTime, speed);
+        goToTime(this.replayTime);
+        
     }
 
     public void stopReplay(long replayTime) {

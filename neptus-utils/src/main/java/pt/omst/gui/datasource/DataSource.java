@@ -37,4 +37,14 @@ public interface DataSource {
      * @return an icon for the source type, or null if no icon is desired
      */
     Icon getIcon();
+    
+    /**
+     * Returns whether this data source can be deleted/removed by the user.
+     * Some data sources (e.g., RasterfallDataSource) cannot be removed.
+     * 
+     * @return true if the data source can be deleted, false otherwise
+     */
+    default boolean isDeletable() {
+        return true;
+    }
 }

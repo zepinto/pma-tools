@@ -489,6 +489,8 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         // Paint all contacts
         List<CompressedContact> contactsToPaint = collection.getAllContacts();
         for (CompressedContact contact : contactsToPaint) {
+            if (contact == selectedContact)
+                continue;
             paintContact(g2d, map, contact, false);
         }
         

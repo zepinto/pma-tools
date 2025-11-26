@@ -33,6 +33,7 @@ import javax0.license3j.License;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.LoadingPanel;
+import pt.omst.gui.datasource.RasterfallDataSource;
 import pt.omst.gui.jobs.TaskStatusIndicator;
 import pt.omst.licences.LicenseChecker;
 import pt.omst.licences.LicensePanel;
@@ -512,6 +513,7 @@ public class RasterFallApp extends JFrame {
                 log.info("Syncing contacts and waterfall to MapViewer...");
                 // Load the waterfall path into the map viewer
                 mapViewer.loadWaterfall(rasterfallPanel.getWaterfall());
+                mapViewer.setRasterfallDataSource(new RasterfallDataSource(rasterfallPanel.getWaterfall().getContactsFolder()));
                 mapViewer.refresh();
                 System.out.println("Synced contacts and waterfall to MapViewer");
             } catch (Exception e) {

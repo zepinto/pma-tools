@@ -35,6 +35,7 @@ import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.contacts.browser.ContactsMapOverlay;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.reports.GenerateReportDialog;
+import pt.omst.gui.datasource.RasterfallDataSource;
 import pt.omst.gui.jobs.TaskStatusIndicator;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterfall.RasterfallTiles;
@@ -207,7 +208,10 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
                 slippyMap.repaint();
             });
         });
-        
+    }
+
+    public void setRasterfallDataSource(RasterfallDataSource rds) {
+        log.info("Setting Rasterfall data source: {}", rds.getDisplayName());
     }
 
     public void loadWaterfall(RasterfallTiles waterfall) {
