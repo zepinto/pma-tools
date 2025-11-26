@@ -26,10 +26,12 @@ import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -61,6 +63,7 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
     private final ObservationsPanel observationsPanel;
     private final JButton saveButton;
     private final JButton cancelButton;
+    private final JButton deleteButton;
     @Getter
     private final JPanel buttonPanel;
     @Getter
@@ -91,8 +94,10 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
         buttonPanel = new JPanel();
         saveButton = new JButton("Save");
         cancelButton = new JButton("Revert");
+        deleteButton = new JButton("Delete");
         buttonPanel.add(saveButton);
         buttonPanel.add(cancelButton);
+        buttonPanel.add(deleteButton);
 
         saveButton.addActionListener(e -> {
             saveContact();
@@ -107,6 +112,20 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
                 cancelButton.setEnabled(false);
             } catch (IOException ex) {
                 log.error("Error loading ZCT file", ex);
+            }
+        });
+
+        deleteButton.addActionListener(e -> {
+            java.awt.Window window = SwingUtilities.getWindowAncestor(this);
+            int result = JOptionPane.showConfirmDialog(window,
+                    "Are you sure you want to delete this contact?", "Delete Contact", JOptionPane.YES_NO_OPTION);
+            if (result == JOptionPane.YES_OPTION) {
+                try {
+                    removeZct(zctFile);                    
+                    log.info("Contact deleted from ZCT file {}", zctFile.getAbsolutePath());
+                } catch (IOException ex) {
+                    log.error("Error deleting contact from ZCT file", ex);
+                }
             }
         });
 
@@ -296,6 +315,10 @@ public class VerticalContactEditor extends JPanel implements ContactChangeListen
             log.error("Error loading ZCT file", e);
             zctFile = oldFile;
         }
+    }
+
+    public void removeZct(File file) throws IOException {
+        java.nio.file.Files.deleteIfExists(file.toPath());
     }
 
     public void loadZct(File file) throws IOException {

@@ -81,7 +81,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             }
             catch (Exception e) {
                 log.warn("Unable to load contact from disk:", e);
-            }            
+            }       
         }
     }
 
@@ -90,6 +90,9 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         if (collection != null) {
             collection.reapplyCurrentFilters();
         }
+
+        if (selectedContact != null && !selectedContact.getZctFile().exists())
+            selectedContact = null;
     }
 
 
@@ -449,17 +452,31 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         // Draw label with black border for contrast
         String label = contact.getContact().getLabel();
         int labelX = (int)screenPos[0] + halfSize;
-        int labelY = (int)screenPos[1] - halfSize;
+        int labelY = (int)screenPos[1] + halfSize;
         
+        // Draw white label on top
+        if (isSelected) {
+            g.setColor(java.awt.Color.BLACK);
+            g.setFont(g.getFont().deriveFont(java.awt.Font.BOLD));
+        } else {
+            g.setFont(g.getFont().deriveFont(java.awt.Font.PLAIN));
+            g.setColor(java.awt.Color.BLACK);
+        }
+
         // Draw black border (4 cardinal directions for efficiency)
-        g.setColor(java.awt.Color.BLACK);
+        //g.setColor(java.awt.Color.BLACK);
         g.drawString(label, labelX - 1, labelY);
         g.drawString(label, labelX + 1, labelY);
         g.drawString(label, labelX, labelY - 1);
         g.drawString(label, labelX, labelY + 1);
         
+        
         // Draw white label on top
-        g.setColor(java.awt.Color.WHITE);
+        if (isSelected) {
+            g.setColor(java.awt.Color.ORANGE);
+        } else {
+            g.setColor(java.awt.Color.WHITE);
+        }
         g.drawString(label, labelX, labelY);
     }
 

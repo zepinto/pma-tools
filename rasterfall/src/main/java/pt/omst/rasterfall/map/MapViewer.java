@@ -201,7 +201,6 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         contactsMapOverlay.setGroupingHandler(grouper);
 
         contactCollection.addChangeListener(() -> {
-            log.info("Contact collection changed, refreshing map overlay");
             SwingUtilities.invokeLater(() -> {
                 updateStatusBar();
                 contactsMapOverlay.refresh();

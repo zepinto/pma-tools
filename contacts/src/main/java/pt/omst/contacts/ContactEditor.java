@@ -10,6 +10,7 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
@@ -26,12 +27,14 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -58,7 +61,8 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
     private final JTextArea measurementsTextArea = new JTextArea(3, 20);
     private final ObservationsPanel observationsPanel;
     private final JButton saveButton;
-    private final JButton cancelButton;
+    private final JButton deleteButton;
+    private final JButton revertButton;
     @Getter
     private final JPanel buttonPanel;
     @Getter
@@ -87,29 +91,46 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
 
         buttonPanel = new JPanel();
         saveButton = new JButton("Save");
-        cancelButton = new JButton("Revert");
+        revertButton = new JButton("Revert");
+        deleteButton = new JButton("Delete");
+        
         buttonPanel.add(saveButton);
-        buttonPanel.add(cancelButton);
+        buttonPanel.add(revertButton);
+        buttonPanel.add(deleteButton);
 
         saveButton.addActionListener(e -> {
             saveContact();
             saveButton.setEnabled(false);
-            cancelButton.setEnabled(false);
+            revertButton.setEnabled(false);
         });
 
-        cancelButton.addActionListener(e -> {
+        revertButton.addActionListener(e -> {
             try {
                 loadZct(zctFile);
                 saveButton.setEnabled(false);
-                cancelButton.setEnabled(false);
+                revertButton.setEnabled(false);
             } catch (IOException ex) {
                 log.error("Error loading ZCT file", ex);
             }
         });
 
+        deleteButton.addActionListener(e -> {
+            int result = JOptionPane.showConfirmDialog((Window) SwingUtilities.getWindowAncestor(this),
+                    "Are you sure you want to delete this contact?", "Delete Contact", JOptionPane.YES_NO_OPTION);
+            if (result == JOptionPane.YES_OPTION) {
+                try {
+                    removeZct(zctFile);
+                    log.info("Contact deleted from ZCT file {}", zctFile.getAbsolutePath());
+                    SwingUtilities.getWindowAncestor(this).dispose();
+                } catch (IOException ex) {
+                    log.error("Error deleting contact from ZCT file", ex);
+                }
+            }
+        });
+
         add(buttonPanel, BorderLayout.SOUTH);
         saveButton.setEnabled(false);
-        cancelButton.setEnabled(false);
+        revertButton.setEnabled(false);
     }
 
     public void loadObservation(File folder, Observation observation) {
@@ -233,6 +254,10 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         }
     }
 
+    public void removeZct(File file) throws IOException {
+        Files.deleteIfExists(file.toPath());
+    }
+
     public void loadZct(File file) throws IOException {
         this.zctFile = file;
         Path tempDir = Files.createTempDirectory("zct");
@@ -246,26 +271,26 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         }
 
         saveButton.setEnabled(false);
-        cancelButton.setEnabled(false);
+        revertButton.setEnabled(false);
     }
 
     private final DocumentListener dummyDocumentListener = new DocumentListener() {
         @Override
         public void insertUpdate(DocumentEvent e) {
             saveButton.setEnabled(true);
-            cancelButton.setEnabled(true);
+            revertButton.setEnabled(true);
         }
 
         @Override
         public void removeUpdate(DocumentEvent e) {
             saveButton.setEnabled(true);
-            cancelButton.setEnabled(true);
+            revertButton.setEnabled(true);
         }
 
         @Override
         public void changedUpdate(DocumentEvent e) {
             saveButton.setEnabled(true);
-            cancelButton.setEnabled(true);
+            revertButton.setEnabled(true);
         }
     };
 
@@ -273,7 +298,7 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         @Override
         public void actionPerformed(ActionEvent e) {
             saveButton.setEnabled(true);
-            cancelButton.setEnabled(true);
+            revertButton.setEnabled(true);
         }
     };
 
@@ -451,7 +476,7 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
     @Override
     public void observationChanged(Observation observation) {
         saveButton.setEnabled(true);
-        cancelButton.setEnabled(true);
+        revertButton.setEnabled(true);
 
         // update dimensions
         setMeasurements(contact);
