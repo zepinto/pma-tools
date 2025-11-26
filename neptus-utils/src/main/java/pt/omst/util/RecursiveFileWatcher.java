@@ -1,4 +1,4 @@
-package pt.omst.contacts.watcher;
+package pt.omst.util;
 
 import java.io.File;
 import java.io.IOException;
@@ -10,12 +10,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class RecursiveFileWatcher implements AutoCloseable {
 
     // Callback Interface
     public interface FileListener {
-        void onEvent(String eventType, File file);
+        void fileAdded(File file);
+        void fileRemoved(File file);    
+        void fileChanged(File file);  
     }
 
     private final WatchService watchService;
@@ -32,8 +38,37 @@ public class RecursiveFileWatcher implements AutoCloseable {
     // Debounce map to handle OS event bursts
     private final Map<Path, Long> eventDebounceMap = new ConcurrentHashMap<>();
 
-    public RecursiveFileWatcher(FileListener listener) throws IOException {
-        this.listener = listener;
+    public static RecursiveFileWatcher watchFolder(File folder, String extension, Consumer<File> createdListener, Consumer<File> deletedListener, Consumer<File> modifiedListener) {
+       
+        log.warn("Starting RecursiveFileWatcher for folder: {}", folder);
+        try {
+            RecursiveFileWatcher watcher = new RecursiveFileWatcher(createdListener, deletedListener, modifiedListener);
+            watcher.addExtension(extension);
+            watcher.addRoot(folder);
+            watcher.start();
+            return watcher;
+        }
+        catch (IOException e) {
+            log.error("Failed to start RecursiveFileWatcher for folder: " + folder, e);
+            return null;
+        }
+    }
+
+    public RecursiveFileWatcher(Consumer<File> createdListener, Consumer<File> deletedListener, Consumer<File> modifiedListener) throws IOException {
+        this.listener = new FileListener() {
+            @Override
+            public void fileAdded(File file) {
+                createdListener.accept(file);
+            }
+            @Override
+            public void fileRemoved(File file) {
+                deletedListener.accept(file);
+            }
+            @Override
+            public void fileChanged(File file) {
+                modifiedListener.accept(file);
+            }
+        };
         this.watchService = FileSystems.getDefault().newWatchService();
         
         // Single background thread for 0% CPU idle waiting
@@ -156,11 +191,10 @@ public class RecursiveFileWatcher implements AutoCloseable {
                         if (isWatchedExtension(fileName.toString())) {
                             if (shouldProcess(fullPath, kind)) {
                                 String type = kind.name().replace("ENTRY_", "");
-                                System.out.println("File watcher detected event: " + type + " - " + fullPath);
-                                try {
-                                    listener.onEvent(type, fullPath.toFile());
-                                } catch (Exception e) {
-                                    e.printStackTrace(); // Don't let callback crash watcher
+                                switch (type) {
+                                    case "CREATE" -> listener.fileAdded(fullPath.toFile());
+                                    case "DELETE" -> listener.fileRemoved(fullPath.toFile());
+                                    case "MODIFY" -> listener.fileChanged(fullPath.toFile());
                                 }
                             }
                         }

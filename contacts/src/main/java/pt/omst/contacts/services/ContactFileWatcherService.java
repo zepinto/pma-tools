@@ -6,17 +6,18 @@
 
 package pt.omst.contacts.services;
 
-import lombok.extern.slf4j.Slf4j;
-import pt.omst.contacts.watcher.RecursiveFileWatcher;
-import pt.omst.rasterlib.IndexedRasterUtils;
-import pt.omst.rasterlib.contacts.ContactCollection;
-
-import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+
+import javax.swing.SwingUtilities;
+
+import lombok.extern.slf4j.Slf4j;
+import pt.omst.rasterlib.IndexedRasterUtils;
+import pt.omst.rasterlib.contacts.ContactCollection;
+import pt.omst.util.RecursiveFileWatcher;
 
 /**
  * Manages file system watching for contact files (.zct) with automatic refresh,
@@ -52,7 +53,9 @@ public class ContactFileWatcherService {
         }
 
         try {
-            fileWatcher = new RecursiveFileWatcher(this::handleFileChange);
+            fileWatcher = new RecursiveFileWatcher((file) -> handleFileChange("CREATE", file),
+                                                  (file) -> handleFileChange("DELETE", file),
+                                                  (file) -> handleFileChange("MODIFY", file));
             fileWatcher.addExtension("zct");
         } catch (IOException e) {
             log.error("Failed to create file watcher", e);
@@ -63,6 +66,9 @@ public class ContactFileWatcherService {
             fileWatcher.addRoot(folder);
             log.info("Started watching folder: {}", folder);
         }
+        
+        fileWatcher.start();
+        log.info("File watcher started");
     }
 
     /**

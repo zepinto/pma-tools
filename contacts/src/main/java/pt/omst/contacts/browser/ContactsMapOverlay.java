@@ -151,7 +151,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         }
         
         // Show tooltips when hovering over contacts
-        for (CompressedContact contact : collection.getFilteredContacts()) {
+        for (CompressedContact contact : collection.getAllContacts()) {
             double[] screenPos = map.latLonToScreen(
                 contact.getContact().getLatitude(), 
                 contact.getContact().getLongitude());
@@ -262,7 +262,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
             if (!isSameLocation) {
                 // New location - find all contacts at this location
                 contactsAtLastClick.clear();
-                for (CompressedContact contact : collection.getFilteredContacts()) {
+                for (CompressedContact contact : collection.getAllContacts()) {
                     double[] screenPos = map.latLonToScreen(
                         contact.getContact().getLatitude(), 
                         contact.getContact().getLongitude());
@@ -317,7 +317,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         int maxY = center.y + dy;
         
         // Check each contact
-        for (CompressedContact contact : collection.getFilteredContacts()) {
+        for (CompressedContact contact : collection.getAllContacts()) {
             double[] screenPos = map.latLonToScreen(
                 contact.getContact().getLatitude(), 
                 contact.getContact().getLongitude());
@@ -345,7 +345,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         double radiusMeters = centerLocation.getDistanceInMeters(edgeLocation);
         
         // Check each contact
-        for (CompressedContact contact : collection.getFilteredContacts()) {
+        for (CompressedContact contact : collection.getAllContacts()) {
             pt.lsts.neptus.core.LocationType contactLocation = new pt.lsts.neptus.core.LocationType();
             contactLocation.setLatitudeDegs(contact.getContact().getLatitude());
             contactLocation.setLongitudeDegs(contact.getContact().getLongitude());
@@ -470,7 +470,7 @@ public class ContactsMapOverlay extends AbstractMapOverlay {
         Graphics2D g2d = (Graphics2D) g.create();
         
         // Paint all contacts
-        List<CompressedContact> contactsToPaint = collection.getFilteredContacts();
+        List<CompressedContact> contactsToPaint = collection.getAllContacts();
         for (CompressedContact contact : contactsToPaint) {
             paintContact(g2d, map, contact, false);
         }

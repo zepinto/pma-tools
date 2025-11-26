@@ -477,7 +477,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private void updateStatusBar() {
         SwingUtilities.invokeLater(() -> {
             int totalContacts = contactCollection.getAllContacts().size();
-            int visibleContacts = contactCollection.getFilteredContacts().size();
+            int visibleContacts = contactCollection.getAllContacts().size();
 
             totalContactsLabel.setText("Total: " + totalContacts);
             visibleContactsLabel.setText("Visible: " + visibleContacts);
@@ -551,7 +551,7 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
             // Schedule filter panel update after a short delay to allow background
             // filtering to complete
             javax.swing.Timer filterPanelTimer = new javax.swing.Timer(350, e -> {
-                filterPanel.setContacts(contactCollection.getFilteredContacts());
+                filterPanel.setContacts(contactCollection.getAllContacts());
                 updateStatusBar();
             });
             filterPanelTimer.setRepeats(false);

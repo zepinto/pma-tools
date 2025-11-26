@@ -22,6 +22,7 @@ import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.mapview.MapPainter;
 import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterlib.AnnotationType;
+import pt.omst.util.RecursiveFileWatcher;
 
 /**
  * A collection of contacts.
@@ -30,6 +31,7 @@ import pt.omst.rasterlib.AnnotationType;
 public class ContactCollection implements MapPainter {
     private QuadTree<File, CompressedContact> quadTree = new QuadTree<>();
     private List<File> filteredContacts = new ArrayList<>();
+    private CopyOnWriteArrayList<RecursiveFileWatcher> folderWatchers = new CopyOnWriteArrayList<>();
     
     private QuadTree.Region currentRegion = null;
     private Instant currentStart = null;
@@ -76,6 +78,31 @@ public class ContactCollection implements MapPainter {
         for (Runnable listener : changeListeners) {
             listener.run();
         }
+
+        log.info("Starting folder watcher for {}", folder.getAbsolutePath());
+        folderWatchers.add(                        
+            RecursiveFileWatcher.watchFolder(folder, "zct",
+                (file) -> {
+                    try {
+                        log.info("Contact file added: {}", file.getAbsolutePath());
+                        addContact(file);
+                    } catch (IOException e) {
+                        log.error("Error adding contact from file: {}", file.getAbsolutePath(), e);
+                    }
+                },
+                (file) -> {
+                    log.info("Contact file removed: {}", file.getAbsolutePath());
+                    removeContact(file);                    
+                },
+                (file) -> {
+                    try {
+                        log.info("Contact file modified: {}", file.getAbsolutePath());
+                        updateContact(file);
+                    } catch (IOException e) {
+                        log.error("Error updating contact from file: {}", file.getAbsolutePath(), e);
+                    }
+                }
+            ));
     }
 
     public void removeRootFolder(File folder) {
@@ -87,7 +114,7 @@ public class ContactCollection implements MapPainter {
             listener.run();
         }
     }
-
+/* 
     public void applyFilters(QuadTree.Region region, Instant start, Instant end) {
         this.currentRegion = region;
         this.currentStart = start;
@@ -111,7 +138,7 @@ public class ContactCollection implements MapPainter {
         //     listener.run();
         // }
     }
-
+*/
     /**
      * Applies filters to the contacts based on region, time, and classification/confidence/label criteria.
      * Empty sets for classification/confidence/label filters mean "show all" for that criterion.
@@ -261,28 +288,32 @@ public class ContactCollection implements MapPainter {
         // NOTE: Do NOT fire change listeners here to avoid infinite loop
     }
 
-    public List<CompressedContact> getFilteredContacts() {        
-        List<CompressedContact> contacts = new ArrayList<>();
-        for (File file : filteredContacts) {
-            CompressedContact contact = quadTree.get(file);
-            if (contact != null) {
-                contacts.add(contact);
-            }
-        }
-        return contacts;
-    }
+    // public List<CompressedContact> getFilteredContacts() {        
+    //     List<CompressedContact> contacts = new ArrayList<>();
+    //     for (File file : filteredContacts) {
+    //         CompressedContact contact = quadTree.get(file);
+    //         if (contact != null) {
+    //             contacts.add(contact);
+    //         }
+    //     }
+    //     return contacts;
+    // }
 
     public void refreshContact(File zctFile) throws IOException {
         quadTree.update(zctFile, new CompressedContact(zctFile));       
     }
 
-    public static ContactCollection fromFolder(File folder) {        
-        try {
-            return new ContactCollection(folder);
-        } catch (IOException e) {
-            log.error("Error reading contacts from folder: {}", folder.getAbsolutePath(), e);
-            return new ContactCollection();
-        }
+    public static ContactCollection fromFolder(File folder) {    
+        
+        ContactCollection collection = new ContactCollection();
+        collection.addRootFolder(folder);
+        // try {
+        //     return new ContactCollection(folder);
+        // } catch (IOException e) {
+        //     log.error("Error reading contacts from folder: {}", folder.getAbsolutePath(), e);
+        //     return new ContactCollection();
+        // }
+        return collection;
     }
 
     public ContactCollection() {

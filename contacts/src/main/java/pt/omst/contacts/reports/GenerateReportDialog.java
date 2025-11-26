@@ -60,7 +60,7 @@ public class GenerateReportDialog extends JDialog {
         super(owner, "Generate Contact Report", ModalityType.APPLICATION_MODAL);
 
         // Capture filtered contacts snapshot
-        allContacts = contactCollection.getFilteredContacts();
+        allContacts = contactCollection.getAllContacts();
 
         // Create main panel
         JPanel mainPanel = new JPanel(new BorderLayout(10, 10));

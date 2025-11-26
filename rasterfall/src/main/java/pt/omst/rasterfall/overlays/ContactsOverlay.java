@@ -57,7 +57,6 @@ public class ContactsOverlay extends AbstractOverlay {
                 continue;
             }
           
-
             g.setColor(Color.white);
             
             int x = (int) Math.min(pos.getX(), pos2.getX());

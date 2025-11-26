@@ -335,9 +335,9 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     private void updateStatusBar() {
         SwingUtilities.invokeLater(() -> {
             int totalContacts = contactCollection.getAllContacts().size();
-            int visibleContacts = contactCollection.getFilteredContacts().size();
+//            int visibleContacts = contactCollection.getFilteredContacts().size();
             totalContactsLabel.setText("Total: " + totalContacts);
-            visibleContactsLabel.setText("Visible: " + visibleContacts);
+//            visibleContactsLabel.setText("Visible: " + visibleContacts);
         });
     }
 
