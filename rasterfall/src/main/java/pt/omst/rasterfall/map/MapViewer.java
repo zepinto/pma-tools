@@ -33,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.contacts.browser.ContactsMapOverlay;
+import pt.omst.gui.DataSourceManagerPanel;
+import pt.omst.gui.datasource.DataSourceEvent;
+import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.contacts.browser.editor.VerticalContactEditor;
 import pt.omst.contacts.reports.GenerateReportDialog;
 import pt.omst.gui.datasource.RasterfallDataSource;
@@ -51,12 +54,13 @@ import pt.omst.rasterlib.contacts.ContactCollection;
  */
 @Slf4j
 @Getter
-public class MapViewer extends JPanel implements AutoCloseable, RasterfallListener {
+public class MapViewer extends JPanel implements AutoCloseable, RasterfallListener, DataSourceListener {
 
     private final SlippyMap slippyMap;
     private final VerticalContactEditor contactEditor;
     private ContactCollection contactCollection;
     private final ContactsMapOverlay contactsMapOverlay;
+    private final DataSourceManagerPanel dataSourceManager;
     private final InteractionMapOverlay interactionMapOverlay = new InteractionMapOverlay();
     private final PathMapOverlay pathMapOverlay;
     private final JSplitPane mainSplitPane;
@@ -81,6 +85,9 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         prefs = Preferences.userNodeForPackage(MapViewer.class);
 
         // Initialize components
+        dataSourceManager = new DataSourceManagerPanel();
+        dataSourceManager.addDataSourceListener(this);
+        
         slippyMap = new SlippyMap();
         contactsMapOverlay = new ContactsMapOverlay(contactCollection);
         pathMapOverlay = new PathMapOverlay();
@@ -120,6 +127,10 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
         // Create status bar
         statusBar = createStatusBar();
+
+        // Create top panel with data source manager
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(dataSourceManager, BorderLayout.CENTER);
 
         // Create east panel (contact editor)
         eastPanel = createEastPanel();
@@ -162,6 +173,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         mainSplitPane.setContinuousLayout(true);
 
         // Assemble main layout
+        add(topPanel, BorderLayout.NORTH);
         add(mainSplitPane, BorderLayout.CENTER);
         add(statusBar, BorderLayout.SOUTH);
 
@@ -212,6 +224,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     public void setRasterfallDataSource(RasterfallDataSource rds) {
         log.info("Setting Rasterfall data source: {}", rds.getDisplayName());
+        dataSourceManager.addRasterfallSource(rds);
     }
 
     public void loadWaterfall(RasterfallTiles waterfall) {
@@ -465,8 +478,23 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     public void onVisibleBoundsChanged(LocationType loc1, LocationType loc2, LocationType loc3, LocationType loc4, Instant startTime,
             Instant endTime) {
 
+        log.info("Visible bounds changed: loc1={}, loc2={}, loc3={}, loc4={}, startTime={}, endTime={}",
+                loc1, loc2, loc3, loc4, startTime, endTime);
+
         interactionMapOverlay.setVisibleBounds(loc1, loc2, loc3, loc4);
 
         repaint();
+    }
+
+    @Override
+    public void sourceAdded(DataSourceEvent event) {
+        log.info("Data source added: {}", event.getDataSource().getDisplayName());
+        // Handle data source addition - subclasses or listeners can override behavior
+    }
+
+    @Override
+    public void sourceRemoved(DataSourceEvent event) {
+        log.info("Data source removed: {}", event.getDataSource().getDisplayName());
+        // Handle data source removal - subclasses or listeners can override behavior
     }
 }

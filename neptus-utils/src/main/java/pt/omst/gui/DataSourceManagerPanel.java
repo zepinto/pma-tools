@@ -9,6 +9,7 @@ package pt.omst.gui;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Window;
+import java.awt.image.Raster;
 import java.io.File;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +36,7 @@ import pt.omst.gui.datasource.DataSourceListener;
 import pt.omst.gui.datasource.DatabaseConnectionDialog;
 import pt.omst.gui.datasource.FolderDataSource;
 import pt.omst.gui.datasource.PulvisDataSource;
+import pt.omst.gui.datasource.RasterfallDataSource;
 
 /**
  * A panel for managing multiple data sources with a visual chip-based interface.
@@ -142,6 +144,21 @@ public class DataSourceManagerPanel extends JPanel {
             addDataSource(dataSource);
             log.info("Added folder data source: {}", selectedFolder.getAbsolutePath());
         }
+    }
+
+    public void addRasterfallSource(RasterfallDataSource rds) {
+        // remove any previous RasterfallDataSource
+        List<DataSource> toRemove = new ArrayList<>();
+        for (DataSource source : dataSources) {
+            if (source instanceof RasterfallDataSource) {
+                toRemove.add(source);
+            }
+        }
+        for (DataSource source : toRemove) {
+            removeDataSource(source);
+        }
+        addDataSource(rds);
+        log.info("Added Rasterfall data source: {}", rds.getDisplayName());
     }
     
     /**

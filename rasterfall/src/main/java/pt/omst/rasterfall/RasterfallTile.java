@@ -239,9 +239,9 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
         if (Double.isNaN(groundRange))
             groundRange = 0;
         if (slantRange >= 0)
-            loc.setAzimuth(pose.getPhi()+90);
+            loc.setAzimuth(pose.getPsi()+90);
         else
-            loc.setAzimuth(pose.getPhi()-90);
+            loc.setAzimuth(pose.getPsi()-90);
 
         loc.setOffsetDistance(groundRange);
         loc.convertToAbsoluteLatLonDepth();

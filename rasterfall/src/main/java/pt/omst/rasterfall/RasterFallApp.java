@@ -295,7 +295,6 @@ public class RasterFallApp extends JFrame {
                 } catch (Exception ex) {
                     System.err.println("Warning: Could not load contacts from waterfall: " + ex.getMessage());
                     contacts = new ContactCollection();
-                    rasterfallPanel.addInteractionListener(mapViewer);
                 }
             } else {
                 // No folder loaded yet, create empty collection
@@ -306,6 +305,11 @@ public class RasterFallApp extends JFrame {
             mapViewer = new MapViewer(contacts);
             if (waterfall != null) {
                 mapViewer.loadWaterfall(waterfall);
+            }
+            
+            // Register MapViewer as a RasterfallListener to receive mouse and bounds events
+            if (rasterfallPanel != null) {
+                rasterfallPanel.addInteractionListener(mapViewer);
             }
 
             // Create and setup frame
@@ -343,6 +347,7 @@ public class RasterFallApp extends JFrame {
 
             // Center and show
             GuiUtils.centerOnScreen(mapViewerFrame);
+            mapViewer.setRasterfallDataSource(new RasterfallDataSource(rasterfallPanel.getWaterfall().getContactsFolder()));
             mapViewerFrame.setVisible(true);
 
         } catch (Exception ex) {
