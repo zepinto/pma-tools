@@ -143,6 +143,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
         // Create filter panel (west panel)
         filterPanel = new ContactFilterPanel();
+        filterPanel.setContactCollection(contactCollection);
         filterPanel.addFilterListener(new ContactFilterListener() {
             @Override
             public void onFilterChanged() {
@@ -297,10 +298,8 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     public void refreshContacts() {
         contactsMapOverlay.setContactCollection(contactCollection);
         showAllContacts(); // Reapply filters with new collection
-        // Update filter panel if visible
-        if (westPanelVisible) {
-            filterPanel.setContacts(contactCollection.getAllContacts());
-        }
+        // Update filter panel with new collection
+        filterPanel.setContactCollection(contactCollection);
         updateStatusBar();
         repaint();
     }
@@ -343,8 +342,6 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         westSplitPane.setLeftComponent(westPanel);
         westSplitPane.setDividerLocation(280);
         toggleWestPanelButton.setText("◂");
-        // Update filter panel with current contacts
-        filterPanel.setContacts(contactCollection.getAllContacts());
         westSplitPane.revalidate();
         westSplitPane.repaint();
     }

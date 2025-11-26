@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.Folders;
 import pt.omst.contacts.ItemList;
 import pt.omst.rasterlib.contacts.CompressedContact;
+import pt.omst.rasterlib.contacts.ContactCollection;
 
 /**
  * Vertical panel for filtering and listing contacts.
@@ -57,6 +58,9 @@ public class ContactFilterPanel extends JPanel {
     
     private final List<ContactFilterListener> listeners;
     private final Timer debounceTimer;
+    
+    private ContactCollection contactCollection;
+    private Runnable collectionChangeListener;
 
     public ContactFilterPanel() {
         setLayout(new BorderLayout(0, 5));
@@ -365,6 +369,58 @@ public class ContactFilterPanel extends JPanel {
      */
     public void removeFilterListener(ContactFilterListener listener) {
         listeners.remove(listener);
+    }
+
+    /**
+     * Sets the contact collection to use for filtering and displaying contacts.
+     * Registers a change listener to automatically update when the collection changes.
+     * 
+     * @param collection The contact collection to bind to
+     */
+    public void setContactCollection(ContactCollection collection) {
+        // Remove listener from previous collection if any
+        if (this.contactCollection != null && this.collectionChangeListener != null) {
+            // Note: ContactCollection doesn't support removing listeners currently,
+            // but we track it anyway for potential future use
+        }
+        
+        this.contactCollection = collection;
+        
+        if (collection != null) {
+            // Create and register change listener
+            this.collectionChangeListener = () -> {
+                SwingUtilities.invokeLater(() -> {
+                    log.debug("Contact collection changed, refreshing filter panel");
+                    refreshFromCollection();
+                });
+            };
+            collection.addChangeListener(collectionChangeListener);
+            
+            // Initial population
+            refreshFromCollection();
+        } else {
+            this.collectionChangeListener = null;
+            setContacts(null);
+        }
+    }
+
+    /**
+     * Gets the currently bound contact collection.
+     * 
+     * @return The current contact collection, or null if none is bound
+     */
+    public ContactCollection getContactCollection() {
+        return contactCollection;
+    }
+
+    /**
+     * Refreshes the contact list from the bound collection.
+     * Called automatically when the collection changes.
+     */
+    private void refreshFromCollection() {
+        if (contactCollection != null) {
+            setContacts(contactCollection.getAllContacts());
+        }
     }
 
     /**

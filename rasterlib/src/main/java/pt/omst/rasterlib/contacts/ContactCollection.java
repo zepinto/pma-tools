@@ -8,6 +8,7 @@ package pt.omst.rasterlib.contacts;
 import java.awt.Graphics2D;
 import java.io.File;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,22 +43,73 @@ public class ContactCollection implements MapPainter {
 
     private CopyOnWriteArrayList<Runnable> changeListeners = new CopyOnWriteArrayList<>();
     
+    // Track selections using weak references to avoid memory leaks
+    private final List<WeakReference<ContactsSelection>> selections = new CopyOnWriteArrayList<>();
+    
     public void addChangeListener(Runnable listener) {
         changeListeners.add(listener);
     }
 
-    public void updateContact(File zctContact, CompressedContact compressedContact) throws IOException {
-        quadTree.update(zctContact, compressedContact);       
+    /**
+     * Registers a selection to receive change notifications.
+     * Uses weak references to avoid memory leaks.
+     * 
+     * @param selection The selection to register
+     */
+    void registerSelection(ContactsSelection selection) {
+        // Clean up any garbage-collected references first
+        cleanupSelections();
+        selections.add(new WeakReference<>(selection));
+    }
+
+    /**
+     * Removes garbage-collected selection references.
+     */
+    private void cleanupSelections() {
+        selections.removeIf(ref -> ref.get() == null);
+    }
+
+    /**
+     * Notifies all registered selections that the collection has changed.
+     */
+    private void notifySelections() {
+        // Collect stale references to remove after iteration
+        List<WeakReference<ContactsSelection>> staleRefs = new ArrayList<>();
+        
+        for (WeakReference<ContactsSelection> ref : selections) {
+            ContactsSelection selection = ref.get();
+            if (selection != null) {
+                selection.invalidateCache();
+            } else {
+                staleRefs.add(ref);
+            }
+        }
+        
+        // Remove stale references
+        selections.removeAll(staleRefs);
+    }
+
+    /**
+     * Notifies all change listeners and selections.
+     */
+    private void fireChangeEvent() {
+        // Notify selections first (they use weak references)
+        notifySelections();
+        
+        // Then notify regular listeners
         for (Runnable listener : changeListeners) {
             listener.run();
         }
     }
 
+    public void updateContact(File zctContact, CompressedContact compressedContact) throws IOException {
+        quadTree.update(zctContact, compressedContact);       
+        fireChangeEvent();
+    }
+
     public void updateContact(File zctContact) throws IOException {
         quadTree.update(zctContact, new CompressedContact(zctContact));       
-        for (Runnable listener : changeListeners) {
-            listener.run();
-        }
+        fireChangeEvent();
     }
 
     public static ContactCollection empty() {
@@ -75,9 +127,7 @@ public class ContactCollection implements MapPainter {
                 log.error("Error on contact {}", contactFile.getAbsolutePath(), e);                
             }
         }
-        for (Runnable listener : changeListeners) {
-            listener.run();
-        }
+        fireChangeEvent();
 
         log.info("Starting folder watcher for {}", folder.getAbsolutePath());
         folderWatchers.add(                        
@@ -110,9 +160,7 @@ public class ContactCollection implements MapPainter {
         for (File contactFile : contactFiles) {
             removeContact(contactFile);            
         }        
-        for (Runnable listener : changeListeners) {
-            listener.run();
-        }
+        fireChangeEvent();
     }
 /* 
     public void applyFilters(QuadTree.Region region, Instant start, Instant end) {
@@ -190,9 +238,7 @@ public class ContactCollection implements MapPainter {
             this.filteredContacts = newFilteredContacts;
         });
 
-        for (Runnable listener : changeListeners) {
-            listener.run();
-        }
+        fireChangeEvent();
     }
 
     /**
@@ -360,9 +406,7 @@ public class ContactCollection implements MapPainter {
     public void addContact(File zctContact) throws IOException {
         quadTree.add(zctContact, new CompressedContact(zctContact));       
         
-        for (Runnable listener : changeListeners) {
-            listener.run();
-        }
+        fireChangeEvent();
     }
 
     /**
@@ -372,9 +416,7 @@ public class ContactCollection implements MapPainter {
     public CompressedContact removeContact(File zctContact) {
         CompressedContact removed = quadTree.remove(zctContact);
 
-        for (Runnable listener : changeListeners) {
-            listener.run();
-        }
+        fireChangeEvent();
         return removed;
     }
 

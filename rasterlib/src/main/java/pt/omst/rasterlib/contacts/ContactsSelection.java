@@ -63,8 +63,8 @@ public class ContactsSelection {
         this.confidences = confidences;
         this.labels = labels;
         
-        // Listen for changes to invalidate cache
-        collection.addChangeListener(this::invalidateCache);
+        // Register with collection for change notifications (uses weak reference)
+        collection.registerSelection(this);
     }
 
     /**
