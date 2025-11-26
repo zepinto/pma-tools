@@ -95,6 +95,9 @@ public class RasterfallTiles extends JPanel implements Closeable {
         if (progressCallback != null) {
             progressCallback.accept(String.format("Loaded %d contacts.", contacts.getAllContacts().size()));
         }
+        contacts.addChangeListener(() -> {
+            contactInfoCache.clear();
+        });
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         double verticalSize = 0;
         rastersFolder = folder;

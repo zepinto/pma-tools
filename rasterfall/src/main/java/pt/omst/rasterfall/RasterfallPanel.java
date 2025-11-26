@@ -7,6 +7,8 @@ package pt.omst.rasterfall;
 
 import java.awt.AWTEvent;
 import java.awt.BorderLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -58,7 +60,17 @@ public class RasterfallPanel extends JPanel implements Closeable {
             progressCallback.accept("Overlays set up.");
         }
         overlays.installUI(layer);
-        layer.setLayerEventMask(AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_WHEEL_EVENT_MASK | AWTEvent.MOUSE_EVENT_MASK | AWTEvent.COMPONENT_EVENT_MASK);
+        layer.setLayerEventMask(AWTEvent.MOUSE_MOTION_EVENT_MASK | AWTEvent.MOUSE_WHEEL_EVENT_MASK
+                | AWTEvent.MOUSE_EVENT_MASK | AWTEvent.COMPONENT_EVENT_MASK | AWTEvent.KEY_EVENT_MASK);
+        layer.setFocusable(true);
+        // Add mouse listener to waterfall tiles to request focus on the layer
+        waterfall.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                boolean gotFocus = layer.requestFocusInWindow();
+                log.info("Focus requested on layer: " + gotFocus);
+            }
+        });
         viewport.setView(layer);
         this.scrollbar = new RasterfallScrollbar(waterfall, viewport);
         if (progressCallback != null) {

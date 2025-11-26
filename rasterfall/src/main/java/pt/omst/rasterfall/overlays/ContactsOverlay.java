@@ -65,6 +65,16 @@ public class ContactsOverlay extends AbstractOverlay {
             int height = (int) Math.abs(pos2.getY() - pos.getY());
 
             g.drawRect(x, y, width, height);
+            
+            // Draw crosshair in the center of the contact
+            int centerX = x + width / 2;
+            int centerY = y + height / 2;
+            int crossSize = 5;//Math.min(width, height) / 8;
+            g2.setColor(new Color(255, 255, 255, 128)); // semi-transparent white
+            g2.drawLine(centerX - crossSize, centerY, centerX + crossSize, centerY);
+            g2.drawLine(centerX, centerY - crossSize, centerX, centerY + crossSize);
+            
+            g.setColor(Color.white);
             int widthLabel = fm.stringWidth(contact.getLabel());
             // draw contact label
             g.setFont(g.getFont().deriveFont(10f));

@@ -29,10 +29,12 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.border.BevelBorder;
 import javax.swing.plaf.LayerUI;
 
+import lombok.extern.slf4j.Slf4j;
 import pt.omst.rasterfall.RasterfallDebug;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.replay.LogReplay;
 
+@Slf4j
 public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogReplay.Listener, Closeable {
 
     private final CopyOnWriteArrayList<AbstractOverlay> activeOverlays = new CopyOnWriteArrayList<>();
@@ -40,7 +42,7 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
 
     private JButton playButton;
     private JToggleButton measureButton, heightButton, markButton, infoButton, gridButton, rulerButton, hudButton,
-            coverageButton, syncButton;
+            coverageButton;
     private JSpinner speedSpinner;
 
     private final RulerOverlay rulerOverlay = new RulerOverlay();
@@ -172,12 +174,6 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         coverageButton.setPreferredSize(new Dimension(100, 33));
         coverageButton.addChangeListener(e -> overlayAction(sonarCoverageOverlay, coverageButton.isSelected()));
         coverageButton.setMargin(new Insets(0, 0, 0, 0));
-
-        progress("Adding sync button...", progressCallback);
-        syncButton = new JToggleButton("<html><h3>&#x1F517; &nbsp; sync</h3></html>");
-        syncButton.setPreferredSize(new Dimension(80, 33));
-        syncButton.addChangeListener(e -> interactionListenerOverlay.setActive(syncButton.isSelected()));
-        syncButton.setMargin(new Insets(0, 0, 0, 0));
        
         progress("Adding speed spinner...", progressCallback);
         speedSpinner = new JSpinner(new SpinnerNumberModel(25, 1, 250, 1));
@@ -202,7 +198,6 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
         leftPanel.add(measureButton);
         leftPanel.add(heightButton);
         leftPanel.add(coverageButton);
-        leftPanel.add(syncButton);
 
         rightPanel.add(speedSpinner);
         rightPanel.add(playButton);
@@ -309,11 +304,21 @@ public class RasterfallOverlays extends LayerUI<RasterfallTiles> implements LogR
     @Override
     protected void processKeyEvent(KeyEvent e, javax.swing.JLayer<? extends RasterfallTiles> l) {
         super.processKeyEvent(e, l);
-        if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == KeyEvent.VK_D
-                && e.isControlDown()) {
-            // Ctrl+D to toggle debug mode
-            RasterfallDebug.toggle();
-            tiles.repaint();
+        log.info("Key event: {}", e);
+        if (e.getID() == KeyEvent.KEY_PRESSED) {
+            switch (e.getKeyCode()) {
+                case KeyEvent.VK_UP:
+                    speedSpinner.setValue(Math.min(250, ((int) speedSpinner.getValue()) + 1));
+                    break;
+                case KeyEvent.VK_DOWN:
+                    speedSpinner.setValue(Math.max(1, ((int) speedSpinner.getValue()) - 1));
+                    break;
+                case KeyEvent.VK_SPACE:
+                    playAction();
+                    break;
+                default:
+                    break;
+            }
         }
     }
 
