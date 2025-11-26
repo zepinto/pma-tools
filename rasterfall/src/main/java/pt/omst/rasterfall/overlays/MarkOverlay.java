@@ -11,7 +11,6 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Point2D;
@@ -26,7 +25,6 @@ import java.util.List;
 import java.util.UUID;
 
 import javax.imageio.ImageIO;
-import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -39,6 +37,7 @@ import javax.swing.border.EmptyBorder;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.contacts.ContactEditor;
+import pt.omst.rasterfall.RasterfallPreferences;
 import pt.omst.rasterfall.RasterfallTile;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterlib.Annotation;
@@ -46,13 +45,13 @@ import pt.omst.rasterlib.AnnotationType;
 import pt.omst.rasterlib.Contact;
 import pt.omst.rasterlib.Converter;
 import pt.omst.rasterlib.IndexedRaster;
+import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
 import pt.omst.rasterlib.MeasurementType;
 import pt.omst.rasterlib.Observation;
 import pt.omst.rasterlib.Pose;
 import pt.omst.rasterlib.RasterType;
 import pt.omst.rasterlib.SampleDescription;
 import pt.omst.rasterlib.SensorInfo;
-import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
 import pt.omst.rasterlib.contacts.CompressedContact;
 import pt.omst.util.UserPreferences;
 
@@ -399,19 +398,17 @@ public class MarkOverlay extends AbstractOverlay {
         String label = generateNextLabel();
         log.info("Creating new contact with label {}", label);
         // Calculate top-left and bottom-right coordinates
-        int topLeftX = (int) Math.min(firstPoint.getX(), lastPoint.getX());
-        int topLeftY = (int) Math.min(firstPoint.getY(), lastPoint.getY());
-        
-        int bottomRightX = (int) Math.max(firstPoint.getX(), lastPoint.getX());
-        int bottomRightY = (int) Math.max(firstPoint.getY(), lastPoint.getY());
+        int topLeftX = (int) Math.min(firstPoint.getX(), topLeft.getX());
+        int topLeftY = (int) Math.min(firstPoint.getY(), topLeft.getY());
+
+        int bottomRightX = (int) Math.max(firstPoint.getX(), bottomRight.getX());
+        int bottomRightY = (int) Math.max(firstPoint.getY(), bottomRight.getY());
         int centerX = (topLeftX + bottomRightX) / 2;
         int centerY = (topLeftY + bottomRightY) / 2;
 
         double minRange = waterfall.getRangeAtScreenX(topLeftX);
         double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
-
-        
-        
+                
         // Ensure min/max are in correct order (handle inverted selections)
         if (minRange > maxRange) {
             double temp = minRange;
@@ -635,63 +632,84 @@ public class MarkOverlay extends AbstractOverlay {
         dialog.setVisible(true);
     }
 
+    protected void createContact(Point2D.Double centerPoint) {
+        // Not implemented for point clicks
+        double horizontalResolution = waterfall.getHorizontalResolution(centerPoint);
+        double verticalResolution = waterfall.getVerticalResolution(centerPoint);
+        
+        double contactSizeMeters = RasterfallPreferences.getContactSize();
+        Point2D.Double topLeft = new Point2D.Double(
+                centerPoint.getX() - (contactSizeMeters / 2.0) / horizontalResolution,
+                centerPoint.getY() - (contactSizeMeters / 2.0) / verticalResolution);
+        Point2D.Double bottomRight = new Point2D.Double(
+                centerPoint.getX() + (contactSizeMeters / 2.0) / horizontalResolution,
+                centerPoint.getY() + (contactSizeMeters / 2.0) / verticalResolution);
+        
+        log.info("Creating contact at point {},{} with size {} meters (top-left {},{} ; bottom-right {},{})",
+                centerPoint.getX(), centerPoint.getY(), contactSizeMeters,
+                topLeft.getX(), topLeft.getY(), bottomRight.getX(), bottomRight.getY());
+        createContact(topLeft, bottomRight);
+
+    }
+
     @Override
     protected void processMouseEvent(MouseEvent e, JLayer<? extends RasterfallTiles> l) {
+        
         if (e.getID() == MouseEvent.MOUSE_CLICKED) {
 
-        if (e.getClickCount() == 2) {
-            log.info("Double click detected, resetting selection.");
-            firstPoint = lastPoint = currentPoint = null;
-            waterfall.repaint();
-            return;
-        }
-        if (e.getButton() == MouseEvent.BUTTON3) {     
-            if (firstPoint != null) {
+            if (e.getClickCount() == 2) {
+                createContact(new Point2D.Double(e.getX(), e.getY()));
                 firstPoint = lastPoint = currentPoint = null;
                 waterfall.repaint();
                 return;
             }
-
-            JPopupMenu menu = new JPopupMenu();
-            // Add menu items as needed
-            RasterContactInfo contact = findContactAtScreenPosition(new Point2D.Double(e.getX(), e.getY()));
-            if (contact != null) {
-                log.info("Right-clicked on contact: {}", contact.getLabel());
-                // Add contact-specific menu items
-                String html = "<html><strong>" + contact.getLabel()+ "</strong>";
-
-                if (contact.getClassification() != null) 
-                    html += ": " + contact.getClassification().getCategory() + " / "
-                            + contact.getClassification().getConfidence().intValue() + "";
-                html += "</html>";
-                JLabel item = new JLabel(html);
-                item.setBorder(new EmptyBorder(5, 5, 5, 5));
-                menu.add(item);
-                menu.addSeparator();
-                JMenuItem editButton = new JMenuItem("Edit");
-                editButton.addActionListener(evt -> {
-                    // Open contact editor dialog
-                    editContact(contact);
-                });
-                menu.add(editButton);
-
-                JMenuItem removeButton = new JMenuItem("Remove");
-                removeButton.addActionListener(evt -> {
-                    // Remove contact
-                    contact.getContact().getZctFile().delete();
-                    waterfall.getContacts().removeContact(contact.getContact().getZctFile());
+            if (e.getButton() == MouseEvent.BUTTON3) {
+                if (firstPoint != null) {
+                    firstPoint = lastPoint = currentPoint = null;
                     waterfall.repaint();
-                });
-                menu.add(removeButton);
-               
-            } else {
-                JMenu item = new JMenu("Mark Overlay");
-                menu.add(item);
+                    return;
+                }
+
+                JPopupMenu menu = new JPopupMenu();
+                // Add menu items as needed
+                RasterContactInfo contact = findContactAtScreenPosition(new Point2D.Double(e.getX(), e.getY()));
+                if (contact != null) {
+                    log.info("Right-clicked on contact: {}", contact.getLabel());
+                    // Add contact-specific menu items
+                    String html = "<html><strong>" + contact.getLabel() + "</strong>";
+
+                    if (contact.getClassification() != null)
+                        html += ": " + contact.getClassification().getCategory() + " / "
+                                + contact.getClassification().getConfidence().intValue() + "";
+                    html += "</html>";
+                    JLabel item = new JLabel(html);
+                    item.setBorder(new EmptyBorder(5, 5, 5, 5));
+                    menu.add(item);
+                    menu.addSeparator();
+                    JMenuItem editButton = new JMenuItem("Edit");
+                    editButton.addActionListener(evt -> {
+                        // Open contact editor dialog
+                        editContact(contact);
+                    });
+                    menu.add(editButton);
+
+                    JMenuItem removeButton = new JMenuItem("Remove");
+                    removeButton.addActionListener(evt -> {
+                        // Remove contact
+                        contact.getContact().getZctFile().delete();
+                        waterfall.getContacts().removeContact(contact.getContact().getZctFile());
+                        waterfall.repaint();
+                    });
+                    menu.add(removeButton);
+
+                } else {
+                    JMenu item = new JMenu("Mark Overlay");
+                    menu.add(item);
+                }
+                menu.show(e.getComponent(), e.getX(), e.getY());
+                firstPoint = lastPoint = currentPoint = null;
+                return;
             }
-            menu.show(e.getComponent(), e.getX(), e.getY());
-            firstPoint = lastPoint = currentPoint = null;
-            return;
-        }
 
             if (lastPoint != null) {
                 // Reset for new rectangle
@@ -712,18 +730,14 @@ public class MarkOverlay extends AbstractOverlay {
                 firstPoint = lastPoint = null;
             }
         }
-        
+
         waterfall.repaint();
     }
+    
 
     @Override
     protected void processMouseWheelEvent(MouseWheelEvent e, JLayer<? extends RasterfallTiles> l) {
-        if (firstPosition != null) {
-            firstPoint = waterfall.getScreenPosition(firstPosition);
-        }
-        if (lastPoint != null) {
-            lastPoint = waterfall.getScreenPosition(lastPosition);
-        }
+        firstPoint = lastPoint = currentPoint = null;
         waterfall.repaint();
     }
 

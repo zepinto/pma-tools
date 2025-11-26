@@ -100,7 +100,7 @@ public class RasterfallPreferences {
     }
 
     /**
-     * Get the contact size preference, in pixels.
+     * Get the contact size preference, in meters.
      * @return The contact size.
      */
     public static float getContactSize() {

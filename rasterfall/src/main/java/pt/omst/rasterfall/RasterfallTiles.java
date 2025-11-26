@@ -10,6 +10,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
@@ -143,7 +144,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     public Point2D.Double getSlantedScreenPosition(Instant timestamp, double range) {
         for (RasterfallTile tile : tiles) {
-            if (tile.containstTime(timestamp)) {
+            if (tile.containsTime(timestamp)) {
                 Point2D.Double relativePosition = tile.getSlantedRangePosition(timestamp, range);
                 if (relativePosition == null) {
                     log.warning("Failed to get slanted range position for timestamp " + timestamp + " and range " + range);
@@ -159,7 +160,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     public Point2D.Double getScreenPosition(Instant timestamp, double range) {
         for (RasterfallTile tile : tiles) {
-            if (tile.containstTime(timestamp)) {
+            if (tile.containsTime(timestamp)) {
                 Point2D.Double relativePosition = tile.getGroundPosition(timestamp, range);
                 Point2D.Double absolutePosition = new Point2D.Double(tile.getBounds().x + relativePosition.x, tile.getBounds().y + relativePosition.y);
                 return absolutePosition;
@@ -239,7 +240,7 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     public Point2D.Double getScreenPosition(TilesPosition position)  {
         for (RasterfallTile tile : tiles) {
-            if (tile.containstTime(position.timestamp())) {
+            if (tile.containsTime(position.timestamp())) {
                 Point2D.Double relativePosition = tile.getSlantedRangePosition(position.range());
                 return new Point2D.Double(tile.getBounds().x + relativePosition.x, tile.getBounds().y + relativePosition.y);
             }
@@ -258,7 +259,6 @@ public class RasterfallTiles extends JPanel implements Closeable {
         log.info("No tile contains point " + point);
         return null;
     }
-
 
     @Override
     public void doLayout() {
@@ -387,6 +387,24 @@ public class RasterfallTiles extends JPanel implements Closeable {
         }
     }
 
+    public double getHorizontalResolution(Point2D.Double point) {
+        for (RasterfallTile tile : tiles) {
+            if (tile.getBounds().contains(point)) {
+                return tile.getHorizontalResolution();
+            }
+        }
+        return Double.NaN;
+    }
+
+    public double getVerticalResolution(Point2D.Double point) {
+        for (RasterfallTile tile : tiles) {
+            if (tile.getBounds().contains(point)) {
+                return tile.getVerticalResolution();
+            }
+        }
+        return Double.NaN;
+    }
+
     public double getRangeAtScreenX(int screenX) {
         for (RasterfallTile tile : tiles) {
             if (tile.getBounds().contains(screenX, 0)) {
@@ -441,9 +459,9 @@ public class RasterfallTiles extends JPanel implements Closeable {
         return contactInfos;
     }
 
-    public Pose getPositionAtTime(long timeMillis) throws IOException {
+    public Pose getPositionAtTime(long timeMillis) {
         for (RasterfallTile tile : tiles) {
-            if (tile.containstTime(Instant.ofEpochMilli(timeMillis))) {
+            if (tile.containsTime(Instant.ofEpochMilli(timeMillis))) {
                 return tile.getPoseAtTime(Instant.ofEpochMilli(timeMillis));
             }
         }

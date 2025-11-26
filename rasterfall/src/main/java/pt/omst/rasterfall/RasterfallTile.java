@@ -151,7 +151,7 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
         setBackground(Color.BLACK);
     }
 
-    public boolean containstTime(Instant time) {
+    public boolean containsTime(Instant time) {
         return time.isAfter(getStartTime().toInstant()) && time.isBefore(getEndTime().toInstant());
     }
 
@@ -182,6 +182,19 @@ public class RasterfallTile extends JPanel implements Comparable<RasterfallTile>
         int width = (int) (viewportWidth * zoom);
         int height = (int) (width * heightProportition);
         return new Dimension(width, height);
+    }
+
+    public double getHorizontalResolution() {
+        double totalRange = raster.getSensorInfo().getMaxRange() - raster.getSensorInfo().getMinRange();
+        return totalRange / getWidth();
+    }
+
+    public double getVerticalResolution() {
+
+        LocationType locStart = getLocation(0, 0);
+        LocationType locEnd = getLocation(getSamplesCount() - 1, 0);
+        double distanceTravelled = locEnd.getDistanceInMeters(locStart);
+        return distanceTravelled / getHeight();
     }
 
     public Dimension getFullResolutionSize() {

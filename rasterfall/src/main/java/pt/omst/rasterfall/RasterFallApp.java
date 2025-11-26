@@ -378,17 +378,13 @@ public class RasterFallApp extends JFrame {
 
     private void loadRasterFolder(File folder) {
         
-        if (!editMissionPrefs()) {
-            return; // User cancelled mission preferences
-        }
-        
-        // Show loading splash screen centered on this window
-        final JWindow splash = LoadingPanel.showSplashScreen("Loading raster data...", this);
+         final JWindow splash = LoadingPanel.showSplashScreen("Loading raster data...", this);
         final LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
 
-        // Force the splash screen to render before starting heavy work
-        splash.toFront();
-        splash.repaint();
+       
+        
+        // Show loading splash screen centered on this window
+       
 
         // Perform loading in background thread to keep UI responsive
         new Thread(() -> {
@@ -493,6 +489,16 @@ public class RasterFallApp extends JFrame {
                 });
             }
         }).start();
+
+        if (!editMissionPrefs()) {
+            return; // User cancelled mission preferences
+        }
+
+         // Force the splash screen to render before starting heavy work
+        splash.toFront();
+        splash.repaint();
+
+
     }
 
     /**
