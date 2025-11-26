@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.imageio.ImageIO;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.omst.mapview.MapPainter;
@@ -27,6 +28,7 @@ import pt.omst.rasterlib.SampleDescription;
 @Slf4j
 public class IndexedRasterPainter implements MapPainter {
 
+    @Getter
     private final IndexedRaster raster;
     private Image image = null;
     private BufferedImage mosaicImage = null;
@@ -44,6 +46,13 @@ public class IndexedRasterPainter implements MapPainter {
         //readPath();
         readShape();
         bounds = IndexedRasterUtils.getBounds(raster);
+    }
+
+    public long getStartTimestamp() {
+        if (raster.getSamples() != null && !raster.getSamples().isEmpty()) {
+            return raster.getSamples().getFirst().getTimestamp().toInstant().toEpochMilli();
+        }
+        return 0;
     }
 
     public void readPath() {
