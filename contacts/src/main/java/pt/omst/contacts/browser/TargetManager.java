@@ -96,8 +96,6 @@ public class TargetManager extends JPanel implements AutoCloseable, DataSourceLi
     private final SlippyMap slippyMap;
     private final DataSourceManagerPanel dataSourceManager;
     private final ZoomableTimeIntervalSelector timeSelector;
-    // private final ObservationsPanel observationsPanel;
-    // private final ContactDetailsFormPanel contactDetailsPanel;
     private final VerticalContactEditor contactEditor;
     private final ContactCollection contactCollection;
     private final ContactsMapOverlay contactsMapOverlay;

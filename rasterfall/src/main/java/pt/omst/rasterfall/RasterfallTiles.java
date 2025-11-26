@@ -499,6 +499,8 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     public List<RasterContactInfo> getVisibleContacts() {
         List<CompressedContact> allContacts = contacts.getAllContacts();
+        List<Observation> observations = new ArrayList<>();
+
         ArrayList<RasterContactInfo> contactInfos = new ArrayList<>();
         for (CompressedContact contact : allContacts) {
             // Check cache first

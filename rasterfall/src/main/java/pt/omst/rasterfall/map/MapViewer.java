@@ -33,6 +33,8 @@ import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.contacts.browser.ContactsMapOverlay;
+import pt.omst.contacts.browser.filtering.ContactFilterListener;
+import pt.omst.contacts.browser.filtering.ContactFilterPanel;
 import pt.omst.gui.DataSourceManagerPanel;
 import pt.omst.gui.datasource.DataSourceEvent;
 import pt.omst.gui.datasource.DataSourceListener;
@@ -61,12 +63,17 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     private ContactCollection contactCollection;
     private final ContactsMapOverlay contactsMapOverlay;
     private final DataSourceManagerPanel dataSourceManager;
+    private final ContactFilterPanel filterPanel;
     private final InteractionMapOverlay interactionMapOverlay = new InteractionMapOverlay();
     private final PathMapOverlay pathMapOverlay;
     private final JSplitPane mainSplitPane;
+    private final JSplitPane westSplitPane;
     private final JPanel eastPanel;
+    private final JPanel westPanel;
     private final JButton toggleEastPanelButton;
+    private final JButton toggleWestPanelButton;
     private boolean eastPanelVisible = true;
+    private boolean westPanelVisible = false; // Collapsed by default
     private final JPanel statusBar;
     private final JLabel totalContactsLabel;
     private final JLabel visibleContactsLabel;
@@ -132,14 +139,58 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(dataSourceManager, BorderLayout.CENTER);
 
+        // Create filter panel (west panel)
+        filterPanel = new ContactFilterPanel();
+        filterPanel.addFilterListener(new ContactFilterListener() {
+            @Override
+            public void onFilterChanged() {
+                applyFilters();
+            }
+
+            @Override
+            public void onContactSelected(CompressedContact contact) {
+                setContact(contact);
+                slippyMap.repaint();
+            }
+        });
+
+        // Create west panel (filter panel)
+        westPanel = new JPanel(new BorderLayout());
+        westPanel.add(new JScrollPane(filterPanel), BorderLayout.CENTER);
+        westPanel.setPreferredSize(new Dimension(280, 600));
+        westPanel.setMinimumSize(new Dimension(200, 400));
+
         // Create east panel (contact editor)
         eastPanel = createEastPanel();
         eastPanel.setPreferredSize(new Dimension(400, 600));
         eastPanel.setMinimumSize(new Dimension(300, 400));
 
-        // Create center panel with map and toggle button
+        // Create center panel with map and toggle buttons
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.add(slippyMap, BorderLayout.CENTER);
+
+        // Create toggle button for west panel (filter panel)
+        toggleWestPanelButton = new JButton("◂");
+        toggleWestPanelButton.setFocusable(false);
+        toggleWestPanelButton.setPreferredSize(new Dimension(12, 12));
+        toggleWestPanelButton.setMinimumSize(new Dimension(12, 12));
+        toggleWestPanelButton.setMaximumSize(new Dimension(12, 12));
+        toggleWestPanelButton.setMargin(new Insets(0, 0, 0, 0));
+        toggleWestPanelButton.setBorderPainted(false);
+        toggleWestPanelButton.setContentAreaFilled(false);
+        toggleWestPanelButton.setOpaque(false);
+        toggleWestPanelButton.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        toggleWestPanelButton.addActionListener(e -> {
+            if (westPanelVisible) {
+                hideFilterPanel();
+            } else {
+                showFilterPanel();
+            }
+        });
+
+        JPanel toggleWestButtonPanel = new JPanel(new BorderLayout());
+        toggleWestButtonPanel.add(toggleWestPanelButton, BorderLayout.NORTH);
+        centerPanel.add(toggleWestButtonPanel, BorderLayout.WEST);
 
         // Create toggle button for east panel (contact editor)
         toggleEastPanelButton = new JButton("▸");
@@ -164,9 +215,17 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         toggleEastButtonPanel.add(toggleEastPanelButton, BorderLayout.NORTH);
         centerPanel.add(toggleEastButtonPanel, BorderLayout.EAST);
 
-        // Create main split pane (horizontal split between center and east)
+        // Create west split pane (horizontal split between west and center)
+        westSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        westSplitPane.setLeftComponent(null); // Start collapsed
+        westSplitPane.setRightComponent(centerPanel);
+        westSplitPane.setResizeWeight(0.0);
+        westSplitPane.setOneTouchExpandable(false);
+        westSplitPane.setContinuousLayout(true);
+
+        // Create main split pane (horizontal split between west split and east)
         mainSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        mainSplitPane.setLeftComponent(centerPanel);
+        mainSplitPane.setLeftComponent(westSplitPane);
         mainSplitPane.setRightComponent(eastPanel);
         mainSplitPane.setResizeWeight(0.7);
         mainSplitPane.setOneTouchExpandable(false);
@@ -236,6 +295,10 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     public void refreshContacts() {
         contactsMapOverlay.setContactCollection(contactCollection);
         showAllContacts(); // Reapply filters with new collection
+        // Update filter panel if visible
+        if (westPanelVisible) {
+            filterPanel.setContacts(contactCollection.getAllContacts());
+        }
         updateStatusBar();
         repaint();
     }
@@ -271,6 +334,52 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         toggleEastPanelButton.setText("◂");
         mainSplitPane.revalidate();
         mainSplitPane.repaint();
+    }
+
+    public void showFilterPanel() {
+        westPanelVisible = true;
+        westSplitPane.setLeftComponent(westPanel);
+        westSplitPane.setDividerLocation(280);
+        toggleWestPanelButton.setText("◂");
+        // Update filter panel with current contacts
+        filterPanel.setContacts(contactCollection.getAllContacts());
+        westSplitPane.revalidate();
+        westSplitPane.repaint();
+    }
+
+    public void hideFilterPanel() {
+        westPanelVisible = false;
+        westSplitPane.setLeftComponent(null);
+        toggleWestPanelButton.setText("▸");
+        westSplitPane.revalidate();
+        westSplitPane.repaint();
+    }
+
+    /**
+     * Applies the current filter selections from the filter panel.
+     */
+    private void applyFilters() {
+        var classifications = filterPanel.getSelectedClassifications();
+        var confidences = filterPanel.getSelectedConfidences();
+        var labels = filterPanel.getSelectedLabels();
+
+        // Apply filters - pass null for empty sets to show all
+        contactCollection.applyFilters(
+            null, // region
+            null, // start time
+            null, // end time
+            classifications.isEmpty() ? null : classifications,
+            confidences.isEmpty() ? null : confidences,
+            labels.isEmpty() ? null : labels
+        );
+
+        // Update the filter panel's contact list with filtered results
+        filterPanel.setContacts(contactCollection.getAllContacts());
+        
+        // Update map display
+        contactsMapOverlay.refresh();
+        slippyMap.repaint();
+        updateStatusBar();
     }
 
     public void savePreferences() {
@@ -351,9 +460,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     private void updateStatusBar() {
         SwingUtilities.invokeLater(() -> {
             int totalContacts = contactCollection.getAllContacts().size();
-//            int visibleContacts = contactCollection.getFilteredContacts().size();
             totalContactsLabel.setText("Total: " + totalContacts);
-//            visibleContactsLabel.setText("Visible: " + visibleContacts);
         });
     }
 

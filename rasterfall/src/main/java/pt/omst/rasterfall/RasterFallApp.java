@@ -33,6 +33,8 @@ import javax0.license3j.License;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.omst.gui.LoadingPanel;
+import pt.omst.gui.datasource.DatabaseConnectionDialog;
+import pt.omst.gui.datasource.PulvisDataSource;
 import pt.omst.gui.datasource.RasterfallDataSource;
 import pt.omst.gui.jobs.TaskStatusIndicator;
 import pt.omst.licences.LicenseChecker;
@@ -53,6 +55,7 @@ public class RasterFallApp extends JFrame {
     // Singleton ContactManager tracking
     private static JFrame mapViewerFrame;
     private static MapViewer mapViewer;
+    private static PulvisDataSource pulvisConnection;
     private JMenuItem openLogFolderItem;
 
     public RasterFallApp() {
@@ -197,6 +200,36 @@ public class RasterFallApp extends JFrame {
 
         toolsMenu.add(mapViewerItem);
 
+        // Connect to Data Manager menu item
+        JMenuItem connectDataManagerItem = new JMenuItem("Connect to Data Manager...");
+        connectDataManagerItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                connectToDataManager();
+            }
+        });
+        toolsMenu.add(connectDataManagerItem);
+
+        // Disconnect from Data Manager menu item
+        JMenuItem disconnectDataManagerItem = new JMenuItem("Disconnect from Data Manager");
+        disconnectDataManagerItem.setEnabled(false); // Disabled until connected
+        disconnectDataManagerItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                disconnectFromDataManager();
+                disconnectDataManagerItem.setEnabled(false);
+            }
+        });
+        toolsMenu.add(disconnectDataManagerItem);
+
+        // Update disconnect menu item when connecting
+        connectDataManagerItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                disconnectDataManagerItem.setEnabled(pulvisConnection != null);
+            }
+        });
+
         openLogFolderItem = new JMenuItem("Browse Folder");
         openLogFolderItem.setEnabled(false); // Disabled until folder is loaded
         openLogFolderItem.addActionListener(new ActionListener() {
@@ -271,6 +304,42 @@ public class RasterFallApp extends JFrame {
             }
         } catch (Exception ex) {
             GuiUtils.errorMessage(this, "Error", "Failed to open log folder: " + ex.getMessage());
+        }
+    }
+
+    private void connectToDataManager() {
+        PulvisDataSource dataSource = DatabaseConnectionDialog.showDialog(this);
+        
+        if (dataSource != null) {
+            pulvisConnection = dataSource;
+            log.info("Connected to Data Manager: {}", dataSource.getDisplayName());
+            
+            // Test the connection
+            if (dataSource.refreshConnectionStatus()) {
+                GuiUtils.infoMessage(this, "Connection Successful", 
+                    "Successfully connected to Data Manager at " + dataSource.getBaseUrl());
+            } else {
+                GuiUtils.warnMessage(this, "Connection Warning", 
+                    "Data Manager connection configured but server is not responding.\n" +
+                    "The connection will be retried when needed.");
+            }
+        }
+    }
+
+    /**
+     * Gets the current Pulvis Data Manager connection, if configured.
+     * 
+     * @return the Pulvis connection, or null if not configured
+     */
+    public static PulvisDataSource getPulvisConnection() {
+        return pulvisConnection;
+    }
+
+    private void disconnectFromDataManager() {
+        if (pulvisConnection != null) {
+            log.info("Disconnected from Data Manager: {}", pulvisConnection.getDisplayName());
+            pulvisConnection = null;
+            GuiUtils.infoMessage(this, "Disconnected", "Disconnected from Data Manager.");
         }
     }
 
@@ -349,6 +418,12 @@ public class RasterFallApp extends JFrame {
             GuiUtils.centerOnScreen(mapViewerFrame);
             if (rasterfallPanel != null)
                 mapViewer.setRasterfallDataSource(new RasterfallDataSource(rasterfallPanel.getWaterfall().getContactsFolder()));
+            
+            // Add Pulvis connection to data source manager if configured
+            if (pulvisConnection != null) {
+                mapViewer.getDataSourceManager().addDataSource(pulvisConnection);
+            }
+            
             mapViewerFrame.setVisible(true);
 
         } catch (Exception ex) {
