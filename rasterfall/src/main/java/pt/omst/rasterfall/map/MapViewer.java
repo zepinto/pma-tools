@@ -46,6 +46,7 @@ import pt.omst.mapview.SlippyMap;
 import pt.omst.rasterfall.RasterfallTiles;
 import pt.omst.rasterfall.overlays.InteractionListenerOverlay.RasterfallListener;
 import pt.omst.rasterlib.contacts.CompressedContact;
+import pt.omst.rasterlib.contacts.CompositeContactCollection;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.contacts.ContactsSelection;
 
@@ -61,7 +62,8 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     private final SlippyMap slippyMap;
     private final VerticalContactEditor contactEditor;
-    private ContactCollection contactCollection;
+    private final CompositeContactCollection compositeCollection;
+    private ContactCollection rasterfallCollection;
     private ContactsSelection currentSelection;
     private final ContactsMapOverlay contactsMapOverlay;
     private final DataSourceManagerPanel dataSourceManager;
@@ -88,7 +90,13 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
      * @param contactCollection The contact collection to display
      */
     public MapViewer(ContactCollection contactCollection) {
-        this.contactCollection = contactCollection;
+        // Create composite collection and add the initial collection
+        this.compositeCollection = new CompositeContactCollection();
+        this.rasterfallCollection = contactCollection;
+        if (contactCollection != null) {
+            this.compositeCollection.addCollection(contactCollection);
+        }
+        
         setLayout(new BorderLayout(5, 0));
         
         prefs = Preferences.userNodeForPackage(MapViewer.class);
@@ -98,7 +106,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         dataSourceManager.addDataSourceListener(this);
         
         slippyMap = new SlippyMap();
-        contactsMapOverlay = new ContactsMapOverlay(contactCollection);
+        contactsMapOverlay = new ContactsMapOverlay(compositeCollection);
         slippyMap.addMapOverlay(interactionMapOverlay);
         pathMapOverlay = new PathMapOverlay();
         slippyMap.addMapOverlay(pathMapOverlay);        
@@ -115,7 +123,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         contactEditor.addSaveListener((contactId, zctFile) -> {
             log.info("Contact saved: {}, refreshing map overlay", contactId);
             try {
-                contactCollection.refreshContact(zctFile);
+                compositeCollection.refreshContact(zctFile);
             } catch (Exception e) {
                 log.error("Failed to refresh contact {} in collection after save", zctFile.getName(), e);
             }
@@ -143,7 +151,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
         // Create filter panel (west panel)
         filterPanel = new ContactFilterPanel();
-        filterPanel.setContactCollection(contactCollection);
+        filterPanel.setContactCollection(compositeCollection);
         filterPanel.addFilterListener(new ContactFilterListener() {
             @Override
             public void onFilterChanged() {
@@ -246,7 +254,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         boolean hadPreferences = loadPreferences();
 
         // If no saved preferences and we have contacts, center map on them
-        if (!hadPreferences && !contactCollection.getAllContacts().isEmpty()) {
+        if (!hadPreferences && !compositeCollection.getAllContacts().isEmpty()) {
             centerMapOnContacts();
         }
 
@@ -275,7 +283,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         });
         contactsMapOverlay.setGroupingHandler(grouper);
 
-        contactCollection.addChangeListener(() -> {
+        compositeCollection.addChangeListener(() -> {
             SwingUtilities.invokeLater(() -> {
                 updateStatusBar();
                 contactsMapOverlay.refresh();
@@ -291,15 +299,26 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     public void loadWaterfall(RasterfallTiles waterfall) {
         pathMapOverlay.setWaterfall(waterfall);
-        this.contactCollection = waterfall.getContacts();
+        
+        // Remove old rasterfall collection if present
+        if (rasterfallCollection != null) {
+            compositeCollection.removeCollection(rasterfallCollection);
+        }
+        
+        // Add new rasterfall collection
+        this.rasterfallCollection = waterfall.getContacts();
+        if (rasterfallCollection != null) {
+            compositeCollection.addCollection(rasterfallCollection);
+        }
+        
         refreshContacts();
     }
 
     public void refreshContacts() {
-        contactsMapOverlay.setContactCollection(contactCollection);
+        contactsMapOverlay.setContactCollection(compositeCollection);
         showAllContacts(); // Reapply filters with new collection
-        // Update filter panel with new collection
-        filterPanel.setContactCollection(contactCollection);
+        // Update filter panel with composite collection
+        filterPanel.setContactCollection(compositeCollection);
         updateStatusBar();
         repaint();
     }
@@ -308,13 +327,20 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
      * Reloads contacts from disk (called after grouping operations that modify files).
      */
     private void reloadContacts() {
-        if (contactCollection != null && contactCollection.getAllContacts() != null && !contactCollection.getAllContacts().isEmpty()) {
+        if (rasterfallCollection != null && rasterfallCollection.getAllContacts() != null && !rasterfallCollection.getAllContacts().isEmpty()) {
             // Get contacts folder from first contact's parent directory
-            File firstContactFile = contactCollection.getAllContacts().get(0).getZctFile();
+            File firstContactFile = rasterfallCollection.getAllContacts().get(0).getZctFile();
             File contactsFolder = firstContactFile.getParentFile();
             
             log.info("Reloading contacts from folder: {}", contactsFolder);
-            contactCollection = pt.omst.rasterlib.contacts.ContactCollection.fromFolder(contactsFolder);
+            
+            // Remove old rasterfall collection
+            compositeCollection.removeCollection(rasterfallCollection);
+            
+            // Create and add new rasterfall collection
+            rasterfallCollection = pt.omst.rasterlib.contacts.ContactCollection.fromFolder(contactsFolder);
+            compositeCollection.addCollection(rasterfallCollection);
+            
             refreshContacts();
             refresh();
         }
@@ -363,7 +389,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         var labels = filterPanel.getSelectedLabels();
 
         // Create a new selection with the specified filters
-        currentSelection = contactCollection.select(
+        currentSelection = compositeCollection.select(
             null, // region
             null, // start time
             null, // end time
@@ -458,7 +484,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     private void updateStatusBar() {
         SwingUtilities.invokeLater(() -> {
-            int totalContacts = contactCollection.getAllContacts().size();
+            int totalContacts = compositeCollection.getAllContacts().size();
             int visibleContacts = currentSelection != null ? currentSelection.size() : totalContacts;
             totalContactsLabel.setText("Total: " + totalContacts);
             visibleContactsLabel.setText("Visible: " + visibleContacts);
@@ -483,7 +509,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
      * Shows all contacts without spatial filtering.
      */
     private void showAllContacts() {
-        contactCollection.applyFilters(null, null, null, null, null, null);
+        compositeCollection.applyFilters(null, null, null, null, null, null);
         slippyMap.repaint();
     }
 
@@ -491,7 +517,7 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
      * Centers the map on all contacts.
      */
     private void centerMapOnContacts() {
-        var allContacts = contactCollection.getAllContacts();
+        var allContacts = compositeCollection.getAllContacts();
         if (allContacts.isEmpty()) {
             return;
         }
@@ -551,8 +577,8 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         fileMenu.addSeparator();
         JMenuItem generateReportItem = new JMenuItem("Generate Report...");
         generateReportItem.addActionListener(e -> {
-            if (viewer != null && viewer.contactCollection != null) {
-                GenerateReportDialog dialog = new GenerateReportDialog(frame, viewer.contactCollection);
+            if (viewer != null && viewer.compositeCollection != null) {
+                GenerateReportDialog dialog = new GenerateReportDialog(frame, viewer.compositeCollection);
                 dialog.setVisible(true);
             } else {
                 GuiUtils.errorMessage(frame, "Error", "No contact collection available.");
@@ -602,15 +628,55 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         repaint();
     }
 
+    // Map to track folder data sources and their collections
+    private final java.util.Map<File, ContactCollection> folderCollections = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public void sourceAdded(DataSourceEvent event) {
         log.info("Data source added: {}", event.getDataSource().getDisplayName());
-        // Handle data source addition - subclasses or listeners can override behavior
+        
+        // Handle folder data sources - create a new collection for the folder
+        if (event.getDataSource() instanceof pt.omst.gui.datasource.FolderDataSource) {
+            pt.omst.gui.datasource.FolderDataSource folderSource = 
+                (pt.omst.gui.datasource.FolderDataSource) event.getDataSource();
+            File folder = folderSource.getFolder();
+            
+            log.info("Creating collection for folder: {}", folder.getAbsolutePath());
+            ContactCollection folderCollection = ContactCollection.fromFolder(folder);
+            folderCollections.put(folder, folderCollection);
+            compositeCollection.addCollection(folderCollection);
+            
+            // Refresh displays
+            SwingUtilities.invokeLater(() -> {
+                contactsMapOverlay.refresh();
+                slippyMap.repaint();
+                updateStatusBar();
+            });
+        }
     }
 
     @Override
     public void sourceRemoved(DataSourceEvent event) {
         log.info("Data source removed: {}", event.getDataSource().getDisplayName());
-        // Handle data source removal - subclasses or listeners can override behavior
+        
+        // Handle folder data sources - remove the collection for the folder
+        if (event.getDataSource() instanceof pt.omst.gui.datasource.FolderDataSource) {
+            pt.omst.gui.datasource.FolderDataSource folderSource = 
+                (pt.omst.gui.datasource.FolderDataSource) event.getDataSource();
+            File folder = folderSource.getFolder();
+            
+            log.info("Removing collection for folder: {}", folder.getAbsolutePath());
+            ContactCollection folderCollection = folderCollections.remove(folder);
+            if (folderCollection != null) {
+                compositeCollection.removeCollection(folderCollection);
+            }
+            
+            // Refresh displays
+            SwingUtilities.invokeLater(() -> {
+                contactsMapOverlay.refresh();
+                slippyMap.repaint();
+                updateStatusBar();
+            });
+        }
     }
 }

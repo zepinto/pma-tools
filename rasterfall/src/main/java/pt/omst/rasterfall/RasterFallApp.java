@@ -32,6 +32,9 @@ import javax.swing.SwingUtilities;
 import javax0.license3j.License;
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.omst.contacts.browser.ConfidenceItemsEditor;
+import pt.omst.contacts.browser.ContactItemsEditor;
+import pt.omst.contacts.browser.LabelsEditor;
 import pt.omst.gui.LoadingPanel;
 import pt.omst.gui.datasource.DatabaseConnectionDialog;
 import pt.omst.gui.datasource.PulvisDataSource;
@@ -229,6 +232,37 @@ public class RasterFallApp extends JFrame {
                 disconnectDataManagerItem.setEnabled(pulvisConnection != null);
             }
         });
+
+        toolsMenu.addSeparator();
+
+        // Contact Items Editor menu item
+        JMenuItem contactItemsEditorItem = new JMenuItem("Contact Items Editor...");
+        contactItemsEditorItem.addActionListener(e -> {
+            ContactItemsEditor editor = new ContactItemsEditor();
+            editor.setLocationRelativeTo(this);
+            editor.setVisible(true);
+        });
+        toolsMenu.add(contactItemsEditorItem);
+
+        // Confidence Items Editor menu item
+        JMenuItem confidenceEditorItem = new JMenuItem("Confidence Levels Editor...");
+        confidenceEditorItem.addActionListener(e -> {
+            ConfidenceItemsEditor editor = new ConfidenceItemsEditor();
+            editor.setLocationRelativeTo(this);
+            editor.setVisible(true);
+        });
+        toolsMenu.add(confidenceEditorItem);
+
+        // Labels Editor menu item
+        JMenuItem labelsEditorItem = new JMenuItem("Labels Editor...");
+        labelsEditorItem.addActionListener(e -> {
+            LabelsEditor editor = new LabelsEditor();
+            editor.setLocationRelativeTo(this);
+            editor.setVisible(true);
+        });
+        toolsMenu.add(labelsEditorItem);
+
+        toolsMenu.addSeparator();
 
         openLogFolderItem = new JMenuItem("Browse Folder");
         openLogFolderItem.setEnabled(false); // Disabled until folder is loaded

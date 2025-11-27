@@ -95,7 +95,7 @@ public class IconCache {
                 BufferedImage image = GuiUtils.getImage("/icons/" + icon + ".png");
                 if (image == null) {
                     log.warn("Image not found: /icons/{}.png", icon);
-                    return null;
+                    image = GuiUtils.getImage("/icons/OTHER.png");                    
                 }
                 ImageIcon scaledIcon = GuiUtils.getScaledIcon(image, size, size);
                 if (scaledIcon == null) {

@@ -416,10 +416,13 @@ public class ContactFilterPanel extends JPanel {
     /**
      * Refreshes the contact list from the bound collection.
      * Called automatically when the collection changes.
+     * Notifies filter listeners to reapply filters with the updated collection.
      */
     private void refreshFromCollection() {
         if (contactCollection != null) {
-            setContacts(contactCollection.getAllContacts());
+            // Notify listeners to reapply filters - this ensures filtered views are updated
+            // rather than just showing all contacts
+            notifyFilterChanged();
         }
     }
 

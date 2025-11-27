@@ -131,14 +131,14 @@ public class DataSourceManagerPanel extends JPanel {
             File selectedFolder = fileChooser.getSelectedFile();
             
             // Check if folder or parent/child already exists
-            if (isFolderAlreadyAdded(selectedFolder)) {
-                GuiUtils.errorMessage(window, "Folder Already Added",
-                    I18n.textOrDefault("datasource.error.folder.exists", 
-                        "This folder or a parent/child folder has already been added."));
-                log.warn("Folder already added or conflicts with existing folder: {}", 
-                    selectedFolder.getAbsolutePath());
-                return;
-            }
+            // if (isFolderAlreadyAdded(selectedFolder)) {
+            //     GuiUtils.errorMessage(window, "Folder Already Added",
+            //         I18n.textOrDefault("datasource.error.folder.exists", 
+            //             "This folder or a parent/child folder has already been added."));
+            //     log.warn("Folder already added or conflicts with existing folder: {}", 
+            //         selectedFolder.getAbsolutePath());
+            //     return;
+            // }
             
             FolderDataSource dataSource = new FolderDataSource(selectedFolder);
             addDataSource(dataSource);
