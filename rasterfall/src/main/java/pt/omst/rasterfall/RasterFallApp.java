@@ -45,6 +45,7 @@ import pt.omst.licences.LicensePanel;
 import pt.omst.licences.NeptusLicense;
 import pt.omst.rasterfall.map.MapViewer;
 import pt.omst.rasterlib.IndexedRasterCreator;
+import pt.omst.rasterlib.anonymizer.DataAnonymizer;
 import pt.omst.rasterlib.contacts.ContactCollection;
 import pt.omst.rasterlib.gui.RasterFolderChooser;
 
@@ -128,6 +129,17 @@ public class RasterFallApp extends JFrame {
         });
 
         fileMenu.add(openFolderItem);
+        fileMenu.addSeparator();
+
+        // Anonymize Data menu item
+        JMenuItem anonymizeDataItem = new JMenuItem("Anonymize Data...");
+        anonymizeDataItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                anonymizeData();
+            }
+        });
+        fileMenu.add(anonymizeDataItem);
         fileMenu.addSeparator();
 
         // Preferences submenu
@@ -339,6 +351,152 @@ public class RasterFallApp extends JFrame {
         } catch (Exception ex) {
             GuiUtils.errorMessage(this, "Error", "Failed to open log folder: " + ex.getMessage());
         }
+    }
+
+    /**
+     * Opens a folder chooser dialog and anonymizes all rasterIndex/contacts folders found.
+     * Creates a mirror of the folder structure with "-anonymized" suffix.
+     */
+    private void anonymizeData() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Select Root Folder to Anonymize");
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setAcceptAllFileFilterUsed(false);
+
+        Preferences prefs = Preferences.userNodeForPackage(RasterFallApp.class);
+        String lastDir = prefs.get("lastAnonymizeFolder", null);
+        if (lastDir != null) {
+            File lastFolder = new File(lastDir);
+            if (lastFolder.exists() && lastFolder.isDirectory()) {
+                fileChooser.setCurrentDirectory(lastFolder);
+            }
+        }
+
+        int result = fileChooser.showOpenDialog(this);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFolder = fileChooser.getSelectedFile();
+            prefs.put("lastAnonymizeFolder", selectedFolder.getAbsolutePath());
+            
+            // Create destination folder as sibling with "-anonymized" suffix
+            File destinationFolder = new File(selectedFolder.getParentFile(), 
+                    selectedFolder.getName() + "-anonymized");
+            
+            // Confirm with user
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "This will anonymize all rasterIndex and contacts data in:\n" +
+                    selectedFolder.getAbsolutePath() + "\n\n" +
+                    "Output will be written to:\n" +
+                    destinationFolder.getAbsolutePath() + "\n\n" +
+                    "Continue?",
+                    "Confirm Anonymization",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                performAnonymization(selectedFolder, destinationFolder);
+            }
+        }
+    }
+
+    /**
+     * Performs the anonymization of all rasterIndex/contacts folders in background.
+     */
+    private void performAnonymization(File sourceFolder, File destinationFolder) {
+        final JWindow splash = LoadingPanel.showSplashScreen("Anonymizing data...", this);
+        final LoadingPanel loadingPanel = LoadingPanel.getLoadingPanel(splash);
+
+        new Thread(() -> {
+            try {
+                // Find all rasterIndex folders
+                List<File> rasterIndexFolders = findRasterIndexFolders(sourceFolder);
+                
+                if (rasterIndexFolders.isEmpty()) {
+                    SwingUtilities.invokeLater(() -> {
+                        LoadingPanel.hideSplashScreen(splash);
+                        GuiUtils.warnMessage(this, "No Data Found", 
+                                "No rasterIndex folders found in the selected folder.");
+                    });
+                    return;
+                }
+
+                int total = rasterIndexFolders.size();
+                int processed = 0;
+
+                for (File rasterIndexFolder : rasterIndexFolders) {
+                    processed++;
+                    final int current = processed;
+                    final String folderName = rasterIndexFolder.getParentFile().getName();
+                    
+                    if (loadingPanel != null) {
+                        SwingUtilities.invokeLater(() -> 
+                            loadingPanel.setStatus("Anonymizing " + folderName + " (" + current + "/" + total + ")..."));
+                    }
+
+                    // Calculate relative path from source to this rasterIndex folder
+                    String relativePath = getRelativePath(sourceFolder, rasterIndexFolder.getParentFile());
+                    File destParent = new File(destinationFolder, relativePath);
+                    File destRasterIndex = new File(destParent, "rasterIndex");
+                    
+                    // Create anonymizer and process
+                    DataAnonymizer anonymizer = new DataAnonymizer();
+                    anonymizer.anonymizeRasterFolder(rasterIndexFolder, destRasterIndex);
+                    
+                    log.info("Anonymized: {} -> {}", rasterIndexFolder.getAbsolutePath(), destRasterIndex.getAbsolutePath());
+                }
+
+                SwingUtilities.invokeLater(() -> {
+                    LoadingPanel.hideSplashScreen(splash);
+                    GuiUtils.infoMessage(this, "Anonymization Complete", 
+                            "Successfully anonymized " + total + " folder(s).\n\n" +
+                            "Output written to:\n" + destinationFolder.getAbsolutePath());
+                });
+
+            } catch (Exception ex) {
+                log.error("Error during anonymization", ex);
+                SwingUtilities.invokeLater(() -> {
+                    LoadingPanel.hideSplashScreen(splash);
+                    GuiUtils.errorMessage(this, "Anonymization Failed", 
+                            "Error during anonymization: " + ex.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * Finds all rasterIndex folders within the given root folder.
+     */
+    private List<File> findRasterIndexFolders(File rootFolder) {
+        List<File> result = new ArrayList<>();
+        findRasterIndexFoldersRecursive(rootFolder, result);
+        return result;
+    }
+
+    private void findRasterIndexFoldersRecursive(File folder, List<File> result) {
+        if (folder == null || !folder.isDirectory()) {
+            return;
+        }
+        
+        if (folder.getName().equalsIgnoreCase("rasterIndex")) {
+            result.add(folder);
+            return; // Don't search inside rasterIndex folders
+        }
+        
+        File[] children = folder.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    findRasterIndexFoldersRecursive(child, result);
+                }
+            }
+        }
+    }
+
+    /**
+     * Gets the relative path from base to target folder.
+     */
+    private String getRelativePath(File base, File target) {
+        return base.toURI().relativize(target.toURI()).getPath();
     }
 
     private void connectToDataManager() {

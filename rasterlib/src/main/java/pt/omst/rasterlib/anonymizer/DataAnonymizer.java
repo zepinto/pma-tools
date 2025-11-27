@@ -220,9 +220,9 @@ public class DataAnonymizer {
             }           
         }
 
-        // Process contacts folder
+        // Process contacts folder - store as sibling to destinationFolder (rasterIndex)
         if (contactsFolder.exists() && contactsFolder.isDirectory()) {
-            File destContactsFolder = new File(destinationFolder, "contacts");
+            File destContactsFolder = new File(destinationFolder.getParentFile(), "contacts");
             destContactsFolder.mkdirs();
             anonymizeContactsFolder(contactsFolder, destContactsFolder);
         }
