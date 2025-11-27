@@ -186,29 +186,46 @@ public class LicenseChecker {
     private static License mainLicense = null, activationLicense = null;
 
     /**
-     * Prompts the user to select a license file and copies it to the licenses folder
+     * Prompts the user to select a license file or folder and copies it to the licenses folder
      * @return the copied license file, or null if user cancelled
      */
     private static File promptForLicenseFile() {
-        LOG.info("Prompting user to select license file");
+        LOG.info("Prompting user to select license file or folder");
         
         JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Select License File");
-        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fileChooser.setDialogTitle("Select License File or Folder");
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
         fileChooser.setMultiSelectionEnabled(false);
         
         // Add file filter for .lic files
         FileNameExtensionFilter filter = new FileNameExtensionFilter("License Files (*.lic)", "lic");
         fileChooser.setFileFilter(filter);
+        fileChooser.setAcceptAllFileFilterUsed(true);
         
         int result = fileChooser.showOpenDialog(null);
         
         if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-            LOG.info("User selected license file: {}", selectedFile.getAbsolutePath());
+            File selected = fileChooser.getSelectedFile();
+            LOG.info("User selected: {}", selected.getAbsolutePath());
             
-            if (!selectedFile.getName().endsWith(".lic")) {
-                LOG.warn("Selected file is not a .lic file: {}", selectedFile.getName());
+            // If user selected a directory, look for .lic files in it
+            if (selected.isDirectory()) {
+                File[] licFiles = selected.listFiles((dir, name) -> name.endsWith(".lic"));
+                if (licFiles == null || licFiles.length == 0) {
+                    LOG.warn("No .lic files found in selected folder: {}", selected.getAbsolutePath());
+                    JOptionPane.showMessageDialog(null, 
+                        "No license files (.lic) found in the selected folder.",
+                        "No License Files Found",
+                        JOptionPane.ERROR_MESSAGE);
+                    return null;
+                }
+                // Use the first .lic file found
+                selected = licFiles[0];
+                LOG.info("Using license file from folder: {}", selected.getAbsolutePath());
+            }
+            
+            if (!selected.getName().endsWith(".lic")) {
+                LOG.warn("Selected file is not a .lic file: {}", selected.getName());
                 JOptionPane.showMessageDialog(null, 
                     "Please select a valid license file with .lic extension.",
                     "Invalid License File",
@@ -244,8 +261,8 @@ public class LicenseChecker {
                 }
                 
                 // Copy license file to target folder
-                File targetFile = new File(targetFolder, selectedFile.getName());
-                Files.copy(selectedFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                File targetFile = new File(targetFolder, selected.getName());
+                Files.copy(selected.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 
                 LOG.info("License file copied to: {}", targetFile.getAbsolutePath());
                 JOptionPane.showMessageDialog(null,
