@@ -1,15 +1,10 @@
-//***************************************************************************
-// Copyright 2025 OceanScan - Marine Systems & Technology, Lda.             *
-//***************************************************************************
-// Author: José Pinto                                                       *
-//***************************************************************************
 package pt.omst.rasterlib;
 
 import java.io.IOException;
 import com.fasterxml.jackson.annotation.*;
 
 public enum MeasurementType {
-    BOX, HEIGHT, LENGTH, SIZE, WIDTH;
+    BOX, HEIGHT, LENGTH, POSITION, SIZE, WIDTH;
 
     @JsonValue
     public String toValue() {
@@ -17,6 +12,7 @@ public enum MeasurementType {
             case BOX: return "box";
             case HEIGHT: return "height";
             case LENGTH: return "length";
+            case POSITION: return "position";
             case SIZE: return "size";
             case WIDTH: return "width";
         }
@@ -28,6 +24,7 @@ public enum MeasurementType {
         if (value.equals("box")) return BOX;
         if (value.equals("height")) return HEIGHT;
         if (value.equals("length")) return LENGTH;
+        if (value.equals("position")) return POSITION;
         if (value.equals("size")) return SIZE;
         if (value.equals("width")) return WIDTH;
         throw new IOException("Cannot deserialize MeasurementType");

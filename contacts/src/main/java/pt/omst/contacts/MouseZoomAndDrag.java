@@ -11,6 +11,8 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
+import pt.lsts.neptus.core.CoordinateUtil;
+
 public class MouseZoomAndDrag extends AbstractInteraction<SidescanObservationPanel> {
 
     public MouseZoomAndDrag(SidescanObservationPanel component) {
@@ -79,7 +81,9 @@ public class MouseZoomAndDrag extends AbstractInteraction<SidescanObservationPan
             
             // Format both coordinate types
             String imageText = String.format("Image: (%.4f, %.4f)", imgCoords.x, imgCoords.y);
-            String worldText = String.format("Lat/Lon: (%.6f, %.6f)", worldCoords.x, worldCoords.y);
+            String latStr = CoordinateUtil.latitudeAsPrettyString(worldCoords.x, false);
+            String lonStr = CoordinateUtil.longitudeAsPrettyString(worldCoords.y, false);
+            String worldText = String.format("%s, %s", latStr, lonStr);
             
             FontMetrics metrics = g2d.getFontMetrics();
             Rectangle2D imageBounds = metrics.getStringBounds(imageText, g2d);

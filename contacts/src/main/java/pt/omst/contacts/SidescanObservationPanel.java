@@ -82,6 +82,7 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     private final JToggleButton heightButton = new JToggleButton("<html>&#x2912;</html>");
     private final JToggleButton zoomButton = new JToggleButton("<html>&#x1F50D;</html>");
     private final JToggleButton markButton = new JToggleButton("<html>&#x26F6;</html>");
+    private final JToggleButton positionButton = new JToggleButton("<html>&#x271B;</html>");
 
     private AbstractInteraction<SidescanObservationPanel> interaction = null;
 
@@ -154,6 +155,19 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
         zoomButton.setToolTipText("<html><u>Z</u>oom and Pan");
         add(zoomButton);
         buttonGroup.add(zoomButton);
+
+        final ContactPositionEditor contactPositionEditor = new ContactPositionEditor(this);
+        positionButton.setPreferredSize(new Dimension(25, 25));
+        positionButton.addActionListener(e -> {
+            if (positionButton.isSelected())
+                setInteraction(contactPositionEditor);
+            repaint();
+            requestFocusInWindow();
+        });
+        positionButton.setMargin(new Insets(0, 0, 0, 0));
+        positionButton.setToolTipText("<html><u>P</u>osition editor");
+        add(positionButton);
+        buttonGroup.add(positionButton);
     }
 
     public SidescanObservationPanel(File folder, Observation observation) {
@@ -218,6 +232,7 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
                     case KeyEvent.VK_H -> heightButton.doClick();
                     case KeyEvent.VK_E -> markButton.doClick();
                     case KeyEvent.VK_Z -> zoomButton.doClick();
+                    case KeyEvent.VK_P -> positionButton.doClick();
                     case KeyEvent.VK_PLUS, KeyEvent.VK_PAGE_UP, KeyEvent.VK_ADD -> {
                         zoomFactorY += 0.1;
                         zoomFactorX += 0.1;
@@ -244,11 +259,12 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     @Override
     public void doLayout() {
         super.doLayout();
-        heightButton.setBounds(3, getHeight()-1-25, 25, 25);
-        widthButton.setBounds(3, getHeight()-2-50, 25, 25);
-        lengthButton.setBounds(3, getHeight()-3-75, 25, 25);
-        markButton.setBounds(3, getHeight()-4-100, 25, 25);
-        zoomButton.setBounds(3, getHeight()-5-125, 25, 25);
+        positionButton.setBounds(3, getHeight()-1-25, 25, 25);
+        heightButton.setBounds(3, getHeight()-2-50, 25, 25);
+        widthButton.setBounds(3, getHeight()-3-75, 25, 25);
+        lengthButton.setBounds(3, getHeight()-4-100, 25, 25);
+        markButton.setBounds(3, getHeight()-5-125, 25, 25);
+        zoomButton.setBounds(3, getHeight()-6-150, 25, 25);
     }
 
     Point2D.Double screenToImageCoords(Point2D.Double screenCoords) {
@@ -295,22 +311,17 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
         
         // Apply slant range correction: ground range = sqrt(slant_range² - altitude²)
         double altitude = pose.getAltitude();
-        double xOffset;
-        if (Math.abs(slantRange) > altitude) {
-            xOffset = Math.signum(slantRange) * Math.sqrt(slantRange * slantRange - altitude * altitude);
-        } else {
-            // If slant range is less than altitude (nadir zone), ground range is near zero
-            xOffset = 0;
-        }
+        double groundRange = Math.sqrt(slantRange * slantRange - altitude * altitude);
+        if (Double.isNaN(groundRange))
+            groundRange = 0;
         
         LocationType loc = new LocationType(pose.getLatitude(), pose.getLongitude());
-        loc.setOffsetDistance(xOffset);
-        if (xOffset < 0) {
-            loc.setAzimuth(Math.PI / 2 + Math.toRadians(pose.getPsi()));
-        }
-        else {
-            loc.setAzimuth(Math.PI / 2 - Math.toRadians(pose.getPsi()));
-        }
+        loc.setOffsetDistance(groundRange);
+        // Match RasterfallTile.getLocation azimuth calculation
+        if (slantRange >= 0)
+            loc.setAzimuth(pose.getPsi() + 90);
+        else
+            loc.setAzimuth(pose.getPsi() - 90);
         loc.convertToAbsoluteLatLonDepth();
         return new Point2D.Double(loc.getLatitudeDegs(), loc.getLongitudeDegs());
     }
@@ -463,6 +474,11 @@ public class SidescanObservationPanel extends JPanel implements Closeable {
     }
 
     void drawMeasurement(Annotation annotation, Graphics2D graphics2D) {
+        // POSITION annotations are handled by ContactPositionEditor
+        if (annotation.getMeasurementType() == MeasurementType.POSITION) {
+            return;
+        }
+        
         Point2D.Double pt1 = new Point2D.Double(annotation.getNormalizedX(), annotation.getNormalizedY());
         Point2D.Double pt2 = new Point2D.Double(annotation.getNormalizedX2(), annotation.getNormalizedY2());
         Point2D.Double screen1 = imageToScreenCoords(pt1);

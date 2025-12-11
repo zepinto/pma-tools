@@ -40,6 +40,7 @@ import javax.swing.event.DocumentListener;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.core.CoordinateUtil;
 import pt.lsts.neptus.util.GuiUtils;
 import pt.lsts.neptus.util.ZipUtils;
 import pt.omst.rasterlib.Annotation;
@@ -181,8 +182,7 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
             }
         }
 
-        positionTextArea.setText("Latitude: " + contact.getLatitude() + "\nLongitude: " + contact.getLongitude()
-                + "\nDepth: " + contact.getDepth());
+        positionTextArea.setText(formatPosition(contact.getLatitude(), contact.getLongitude(), contact.getDepth()));
         timestampTextField.setText(timestamp.toString());
         setMeasurements(contact);
     }
@@ -396,7 +396,7 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         userInputsPanel.add(positionLabel, gbc);
 
         positionTextArea.setEditable(false);
-        positionTextArea.setText("Latitude: N/A\nLongitude: N/A\nDepth: N/A");
+        positionTextArea.setText("Position: N/A");
         JScrollPane positionScrollPane = new JScrollPane(positionTextArea);
         gbc.gridx = 2;
         gbc.gridy = 5;
@@ -460,7 +460,7 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         String length = lengthMeasurements.isEmpty() ? "N/A" : lengthMeasurements.stream().map(e -> String.format("%.2f", e)).collect(Collectors.joining(", "));
         String width = widthMeasurements.isEmpty() ? "N/A" : widthMeasurements.stream().map(e -> String.format("%.2f", e)).collect(Collectors.joining(", "));
         String height = heightMeasurements.isEmpty() ? "N/A" : heightMeasurements.stream().map(e -> String.format("%.2f", e)).collect(Collectors.joining(", "));
-        measurementsTextArea.setText(String.format("Length: %s\nWidth: %s\nHeight: %s", length, width, height));
+        measurementsTextArea.setText(String.format("L: %s, W: %s, H: %s", length, width, height));
     }
 
     public boolean sameThing(Object o1, Object o2) {
@@ -480,8 +480,33 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
 
         // update dimensions
         setMeasurements(contact);
+        // update position from position annotation if present
+        updatePositionFromAnnotation(observation);
         // update description
         log.info("Observation changed: {}", observation.getRasterFilename());
+    }
+
+    /**
+     * Updates the position display from the position annotation if present.
+     */
+    private void updatePositionFromAnnotation(Observation observation) {
+        for (Annotation annotation : observation.getAnnotations()) {
+            if (annotation.getAnnotationType() == AnnotationType.MEASUREMENT 
+                    && annotation.getMeasurementType() == MeasurementType.POSITION) {
+                // Position annotation found - update the display with observation's lat/lon
+                positionTextArea.setText(formatPosition(observation.getLatitude(), observation.getLongitude(), observation.getDepth()));
+                return;
+            }
+        }
+    }
+
+    /**
+     * Formats position as a compact string with DM coordinates.
+     */
+    private String formatPosition(double latitude, double longitude, double depth) {
+        String latStr = CoordinateUtil.latitudeAsPrettyString(latitude, false);
+        String lonStr = CoordinateUtil.longitudeAsPrettyString(longitude, false);
+        return String.format("%s, %s, Depth: %.1f", latStr, lonStr, depth);
     }
 
     @Override
