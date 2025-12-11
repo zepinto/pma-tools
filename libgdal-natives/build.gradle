@@ -1,0 +1,47 @@
+plugins {
+    id 'java-library'
+}
+
+group 'pt.omst'
+version '2025.11.00'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Logging
+    api 'org.slf4j:slf4j-api:2.0.0'
+}
+
+// Include native libraries in the JAR
+sourceSets {
+    main {
+        resources {
+            srcDirs = ['src/main/resources', 'natives']
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach { 
+    options.encoding = 'UTF-8' 
+}
+
+// Configure publishing for this library
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                name = 'GDAL Native Libraries'
+                description = 'GDAL native libraries for Windows and Linux'
+                packaging = 'jar'
+            }
+        }
+    }
+}

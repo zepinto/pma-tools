@@ -74,7 +74,11 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
     public static List<File> findRasterFiles(File parentFolder) {
         List<File> files = new ArrayList<>();
-        for (File file : parentFolder.listFiles()) {
+        File[] children = parentFolder.listFiles();
+        if (children == null) {
+            return files;
+        }
+        for (File file : children) {
             if (file.isDirectory()) {
                 files.addAll(findRasterFiles(file));
             } else if (file.getName().endsWith(".json")
@@ -140,6 +144,11 @@ public class RasterfallTiles extends JPanel implements Closeable {
 
         if (progressCallback != null) {
             progressCallback.accept(String.format("%d Tiles loaded.", tiles.size()));
+        }
+
+        if (tiles.isEmpty()) {
+            heightProportion = 1.0;
+            return;
         }
 
         double width = tiles.getFirst().getPreferredSize().getWidth();
@@ -343,16 +352,22 @@ public class RasterfallTiles extends JPanel implements Closeable {
     }
 
     public long getStartTime() {
+        if (tiles.isEmpty())
+            return -1;
         long startTime = tiles.getLast().getStartTime().toInstant().toEpochMilli();
         return startTime;
     }
 
     public long getEndTime() {
+        if (tiles.isEmpty())
+            return -1;
         long endTime = tiles.getFirst().getEndTime().toInstant().toEpochMilli();        
         return endTime;
     }
 
     public BufferedImage getScrollImage(int width, Consumer<Void> loadingCallback) {
+        if (tiles.isEmpty())
+            return null;
         double verticalSize = 0;
         for (RasterfallTile tile : tiles) {
             verticalSize += tile.getSamplesCount();

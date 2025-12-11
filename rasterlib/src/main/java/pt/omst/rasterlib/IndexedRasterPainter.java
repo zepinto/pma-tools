@@ -227,7 +227,7 @@ public class IndexedRasterPainter implements MapPainter {
         SlippyMap renderer = new SlippyMap();
         GuiUtils.testFrame(renderer, "Indexed Raster Painter");
 
-        File folder = new File("/LOGS/");
+        File folder = new File("/LOGS/REP/");
         LocationType center = null;
         
         // Use an executor for parallel processing of raster files

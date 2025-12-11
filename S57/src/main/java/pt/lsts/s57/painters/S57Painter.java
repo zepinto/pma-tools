@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2004-2016 Laboratório de Sistemas e Tecnologia Subaquática and Authors
+ * All rights reserved.
+ * Faculdade de Engenharia da Universidade do Porto
+ * Departamento de Engenharia Electrotécnica e de Computadores
+ * Rua Dr. Roberto Frias s/n, 4200-465 Porto, Portugal
+ *
+ * For more information please see <http://whale.fe.up.pt/neptus>.
+ *
+ * Created by Hugo Dias
+ * 22 de Nov de 2013
+ */
+package pt.lsts.s57.painters;
+
+import java.util.List;
+
+import pt.lsts.s57.entities.S57Map;
+
+/**
+ * @author Hugo Dias
+ */
+public interface S57Painter {
+    public List<S57Map> getCurrentMaps();
+
+    public boolean isCacheValid();
+
+    public void setCacheValid(boolean cacheValid);
+}

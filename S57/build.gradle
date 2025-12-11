@@ -1,0 +1,101 @@
+plugins {
+    id 'java-library'
+    id 'application'
+    id "io.freefair.lombok" version "8.10.2"
+}
+
+group 'pt.omst'
+version '2025.11.00'
+
+application {
+    mainClass = project.findProperty('mainClass') ?: 'pt.lsts.s57.S57MapViewer'
+}
+
+// Configure run task to include GDAL libraries in library path
+tasks.named('run') {
+    environment 'LD_LIBRARY_PATH', "${projectDir}/resources/gdal/linux/x64"
+    jvmArgs "-Djava.library.path=${projectDir}/resources/gdal/linux/x64"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    
+    flatDir {
+        dirs rootProject.file('lib')
+    }
+    
+    maven {
+        url "https://omst.direct.quickconnect.to/software/maven"
+    }
+    
+    // GeoSolutions repository for GDAL native bindings
+    maven {
+        url "https://repo.osgeo.org/repository/release/"
+    }
+}
+
+dependencies {    
+
+    implementation project(':neptus-utils')
+    
+    // Logging
+    api 'org.slf4j:slf4j-api:2.0.0'
+    implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.4.12'
+    
+    // Compression utilities
+    implementation group: 'org.apache.commons', name: 'commons-compress', version: '1.10'
+    
+    // Stream utilities
+    implementation group: 'commons-io', name: 'commons-io', version: '2.4'
+    
+    // Commons Configuration and Lang
+    implementation 'commons-configuration:commons-configuration:1.10' 
+    implementation 'org.apache.commons:commons-lang3:3.14.0'
+    
+    // CSV Reader
+    implementation 'net.sourceforge.javacsv:javacsv:2.0'
+    
+    // SVG Salamander
+    implementation 'com.formdev:svgSalamander:1.1.4'
+    
+    // MigLayout
+    implementation 'com.miglayout:miglayout-swing:11.3'
+
+    // GDAL Java bindings
+    implementation 'org.gdal:gdal:3.11.0'
+    
+   // Testing
+    testImplementation(platform('org.junit:junit-bom:5.11.1'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher')
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach { 
+    options.encoding = 'UTF-8' 
+}
+
+compileJava.options.encoding = 'UTF-8' 
+
+// Configure publishing for this library
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                name = 'S57 Charting Library'
+                description = 'OMST S57 Charting Library'
+                packaging = 'jar'
+            }
+        }
+    }
+}

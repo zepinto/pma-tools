@@ -100,7 +100,11 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
         });
         
         setPreferredSize(new Dimension(scrollWidth, height));
-        log.info("scroll image updated, size is " + scrollImage.getWidth() + "x" + scrollImage.getHeight()+" preferred size: " + getPreferredSize());
+        if (scrollImage != null) {
+            log.info("scroll image updated, size is " + scrollImage.getWidth() + "x" + scrollImage.getHeight()+" preferred size: " + getPreferredSize());
+        } else {
+            log.info("No tiles loaded, scrollbar will be empty");
+        }
     }
 
     public void addGuiHooks() {
@@ -254,6 +258,8 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
     }
 
     public Date yToTimestamp(double y) {
+        if (scrollImage == null)
+            return new Date(0);
         double relativePosition = (double) position / (getHeight());
         int extraHeight = scrollImage.getHeight() - getHeight();
         int startPixel = (int) (relativePosition * extraHeight);
@@ -316,6 +322,8 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
      * This is the inverse of yToTimestamp logic.
      */
     private double timestampToScrollbarY(long timestamp) {
+        if (scrollImage == null)
+            return 0;
         long startTime = getStartTime();
         long endTime = getEndTime();
         int height = scrollImage.getHeight() - scrollHeight;
@@ -325,11 +333,19 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
 
     @Override
     public void paint(Graphics g) {
+        super.paint(g);
+        if (scrollImage == null) {
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setColor(Color.DARK_GRAY);
+            g2d.fillRect(0, 0, getWidth(), getHeight());
+            g2d.setColor(Color.GRAY);
+            g2d.drawString("No data", 10, getHeight() / 2);
+            return;
+        }
         double relativePosition = (double) position / (getHeight()-scrollHeight);
         int extraHeight = scrollImage.getHeight() - getHeight();
         int startPixel = (int) (relativePosition * extraHeight);
         startPixel = Math.max(0, startPixel);
-        super.paint(g);
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);

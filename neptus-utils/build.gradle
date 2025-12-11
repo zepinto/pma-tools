@@ -26,6 +26,9 @@ repositories {
 }
 
 dependencies {
+    // GDAL native loader
+    implementation project(':libgdal-natives')
+    
     // Logging
     api 'org.slf4j:slf4j-api:2.0.0'
     implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.4.12'
@@ -40,7 +43,7 @@ dependencies {
     implementation group: 'commons-io', name: 'commons-io', version: '2.4'
     
     // GDAL for GeoTIFF support
-    implementation 'org.gdal:gdal:3.8.0'
+    implementation 'org.gdal:gdal:3.11.0'
     
     // PDF generation dependencies
     implementation 'org.jsoup:jsoup:1.18.1'

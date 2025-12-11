@@ -11,6 +11,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
@@ -34,15 +35,15 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.prefs.Preferences;
 
 import javax.imageio.ImageIO;
-import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.slf4j.Slf4j;
 import pt.lsts.neptus.core.LocationType;
 import pt.lsts.neptus.util.GuiUtils;
+import pt.lsts.neptus.util.MapTileUtil;
 
 @Slf4j
-public class SlippyMap extends JPanel implements AutoCloseable {
+public class SlippyMap extends StateRenderer2D implements AutoCloseable{
     
     private int z = 2;              // Initial zoom level
     private double cx = 512.0;      // Center x at z=2 (mapWidth = 1024)
@@ -891,6 +892,11 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         return Math.cos(latitude * Math.PI / 180) * 2 * Math.PI * 6378137 / mapSize(levelOfDetail);
     }
 
+    public LocationType getCenter() {
+        double[] latLon = pixelToLatLon(cx, cy, z);
+        return new LocationType(latLon[0], latLon[1]);
+    }
+
     double getCenterLatitude() {
         double[] latLon = pixelToLatLon(cx, cy, z);
         return latLon[0];
@@ -1050,7 +1056,13 @@ public class SlippyMap extends JPanel implements AutoCloseable {
                 bounds[3] - bounds[1], bounds[2] - bounds[0]);
     }
 
-    
+    public double getMapScale() {
+        return MapTileUtil.mapScale(getCenterLatitude(), getLevelOfDetail(), Toolkit.getDefaultToolkit().getScreenResolution());
+    }
+
+    public LocationType getRealWorldLocation(Point2D point) {
+        return getRealWorldPosition((int)point.getX(), (int)point.getY());
+    }
 
     public static void main(String[] args) {
         GuiUtils.setTheme("light");

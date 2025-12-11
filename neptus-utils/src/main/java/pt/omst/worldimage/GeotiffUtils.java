@@ -12,7 +12,9 @@ import org.gdal.gdal.gdal;
 import org.gdal.gdalconst.gdalconst;
 
 import lombok.extern.slf4j.Slf4j;
+import pt.lsts.neptus.colormap.ColorMap;
 import pt.lsts.neptus.core.LocationType;
+import pt.omst.gdal.GdalNativeLoader;
 
 /**
  * Utility class for exporting BufferedImage objects as GeoTIFF files using
@@ -22,7 +24,8 @@ import pt.lsts.neptus.core.LocationType;
 public class GeotiffUtils {
 
     static {
-        // Initialize GDAL library
+        // Load native libraries first, then initialize GDAL
+        GdalNativeLoader.load();
         gdal.AllRegister();
     }
 
@@ -324,6 +327,23 @@ public class GeotiffUtils {
             if (worldFile.exists()) {
                 worldFile.delete();
             }
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            String inputTif = "input_geotiff.tif";
+            String outputTif = "output_geotiff.tif";
+            // Read GeoTIFF
+            pt.lsts.neptus.colormap.ColorMap colorMap = pt.lsts.neptus.colormap.ColorMapFactory.createJetColorMap();
+            WorldImage worldImage = readGeoTiff(inputTif, colorMap, 5, 2);
+    
+            // Export GeoTIFF
+            exportTif(worldImage, outputTif);
+    
+            System.out.println("GeoTIFF read and exported successfully.");
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }
