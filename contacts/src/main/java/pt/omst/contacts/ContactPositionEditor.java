@@ -213,22 +213,6 @@ public class ContactPositionEditor extends MouseZoomAndDrag {
         // Draw text
         g2d.setColor(Color.CYAN);
         g2d.drawString(positionText, textX, textY);
-        
-        // Debug info - show raster range info
-        double minRange = component.getRaster().getSensorInfo().getMinRange();
-        double maxRange = component.getRaster().getSensorInfo().getMaxRange();
-        String debugText = String.format("Raster range: %.1f to %.1f m (center slant: %.1f m)", 
-                minRange, maxRange, minRange + (maxRange - minRange) * 0.5);
-        
-        Rectangle2D debugBounds = metrics.getStringBounds(debugText, g2d);
-        int debugX = (int) (component.getWidth() - debugBounds.getWidth()) / 2;
-        int debugY = component.getHeight() - 50;
-        
-        g2d.setColor(new Color(0, 0, 0, 180));
-        g2d.fillRect(debugX - padding, debugY - (int) debugBounds.getHeight() - padding,
-                (int) debugBounds.getWidth() + padding * 2, (int) debugBounds.getHeight() + padding * 2);
-        g2d.setColor(Color.YELLOW);
-        g2d.drawString(debugText, debugX, debugY);
     }
 
     private void drawCrosshair(Graphics2D g2d, int x, int y) {
