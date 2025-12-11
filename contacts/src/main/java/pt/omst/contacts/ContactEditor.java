@@ -58,8 +58,8 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
     private JComboBox<String> confidenceComboBox;
     private JComboBox<String> typeComboBox;
     private final JTextField timestampTextField = new JTextField(15);
-    private final JTextArea positionTextArea = new JTextArea(3, 20);
-    private final JTextArea measurementsTextArea = new JTextArea(3, 20);
+    private final JTextArea positionTextArea = new JTextArea(1, 20);
+    private final JTextArea measurementsTextArea = new JTextArea(1, 20);
     private final ObservationsPanel observationsPanel;
     private final JButton saveButton;
     private final JButton deleteButton;
@@ -362,12 +362,17 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         descriptionLabel.setHorizontalAlignment(SwingConstants.RIGHT);
         userInputsPanel.add(descriptionLabel, gbc);
 
-        descriptionTextArea = new JTextArea(3, 30);
+        descriptionTextArea = new JTextArea(2, 30);
+        descriptionTextArea.setLineWrap(true);
+        descriptionTextArea.setWrapStyleWord(true);
         JScrollPane descriptionScrollPane = new JScrollPane(descriptionTextArea);
+        descriptionScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        descriptionScrollPane.setPreferredSize(new Dimension(200, 45));
+        descriptionScrollPane.setMinimumSize(new Dimension(100, 45));
         gbc.gridx = 2;
         gbc.gridy = 3;
         gbc.gridwidth = 2;
-        gbc.fill = GridBagConstraints.BOTH;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         userInputsPanel.add(descriptionScrollPane, gbc);
 
         JLabel timestampLabel = new JLabel("Timestamp:");
@@ -398,10 +403,12 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         positionTextArea.setEditable(false);
         positionTextArea.setText("Position: N/A");
         JScrollPane positionScrollPane = new JScrollPane(positionTextArea);
+        positionScrollPane.setPreferredSize(new Dimension(200, 24));
+        positionScrollPane.setMinimumSize(new Dimension(100, 24));
         gbc.gridx = 2;
         gbc.gridy = 5;
         gbc.gridwidth = 2;
-        gbc.fill = GridBagConstraints.BOTH;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         userInputsPanel.add(positionScrollPane, gbc);
 
         JLabel measurementsLabel = new JLabel("Size:");
@@ -416,11 +423,13 @@ public class ContactEditor extends JPanel implements ContactChangeListener {
         measurementsTextArea.setEditable(false);
         measurementsTextArea.setText("Length: 0.0\nWidth: 0.0\nHeight: 0.0");
         JScrollPane measurementsScrollPane = new JScrollPane(measurementsTextArea);
+        measurementsScrollPane.setPreferredSize(new Dimension(200, 24));
+        measurementsScrollPane.setMinimumSize(new Dimension(100, 24));
         gbc.gridx = 2;
         gbc.gridy = 6;
         gbc.gridwidth = 2;
         gbc.weightx = 1.0;
-        gbc.fill = GridBagConstraints.BOTH;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         userInputsPanel.add(measurementsScrollPane, gbc);
 
         typeComboBox.addActionListener(dummyActionListener);
