@@ -356,6 +356,7 @@ public class IndexedRasterUtils {
     public static class RasterContactInfo {
         private String label;
         private Annotation boxAnnotation = null;
+        private Annotation positionAnnotation = null;
         private Annotation classification = null;
         private SensorInfo sensorInfo = null;
         @Getter
@@ -366,6 +367,43 @@ public class IndexedRasterUtils {
         private long startTimeStamp;
         private long endTimeStamp;        
         private CompressedContact contact;
+        
+        /**
+         * Returns true if this contact has a customized position measurement.
+         */
+        public boolean hasCustomPosition() {
+            return positionAnnotation != null;
+        }
+        
+        /**
+         * Gets the customized position latitude if available, otherwise returns null.
+         */
+        public Double getCustomLatitude() {
+            if (positionAnnotation != null && contact != null) {
+                Optional<Observation> obs = contact.getContact().getObservations().stream()
+                    .filter(o -> o.getRasterFilename() != null)
+                    .findFirst();
+                if (obs.isPresent()) {
+                    return obs.get().getLatitude();
+                }
+            }
+            return null;
+        }
+        
+        /**
+         * Gets the customized position longitude if available, otherwise returns null.
+         */
+        public Double getCustomLongitude() {
+            if (positionAnnotation != null && contact != null) {
+                Optional<Observation> obs = contact.getContact().getObservations().stream()
+                    .filter(o -> o.getRasterFilename() != null)
+                    .findFirst();
+                if (obs.isPresent()) {
+                    return obs.get().getLongitude();
+                }
+            }
+            return null;
+        }
     }
 
     public static RasterContactInfo getContactInfo(CompressedContact contact) {
@@ -396,6 +434,14 @@ public class IndexedRasterUtils {
                     .findFirst();
             if (boxOptional.isPresent()) {
                 boxAnnotation = boxOptional.get();
+            }
+            // Check for position measurement annotation
+            Optional<Annotation> positionOptional = sssObservation.getAnnotations().stream()
+                    .filter(ann -> ann.getAnnotationType() == AnnotationType.MEASUREMENT
+                            && ann.getMeasurementType() == MeasurementType.POSITION)
+                    .findFirst();
+            if (positionOptional.isPresent()) {
+                info.positionAnnotation = positionOptional.get();
             }
             try {
                 InputStream is = ZipUtils.getFileInZip(contact.getZctFile().getAbsolutePath(),

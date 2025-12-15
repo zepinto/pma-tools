@@ -56,6 +56,15 @@ public class ContactsOverlay extends AbstractOverlay {
                 log.warn("Skipping contact {} - null position: pos={}, pos2={}", contact.getLabel(), pos, pos2);
                 continue;
             }
+            
+            // Check if contact has a customized position measurement
+            Point2D.Double customPos = null;
+            if (contact.hasCustomPosition() && contact.getCustomLatitude() != null && contact.getCustomLongitude() != null) {
+                // Use the customized position from the position annotation
+                Instant timestamp = Instant.ofEpochMilli((contact.getStartTimeStamp() + contact.getEndTimeStamp()) / 2);
+                customPos = waterfall.getSlantedScreenPositionFromLocation(timestamp, 
+                    contact.getCustomLatitude(), contact.getCustomLongitude());
+            }
           
             g.setColor(Color.white);
             
@@ -66,11 +75,20 @@ public class ContactsOverlay extends AbstractOverlay {
 
             g.drawRect(x, y, width, height);
             
-            // Draw crosshair in the center of the contact
-            int centerX = x + width / 2;
-            int centerY = y + height / 2;
+            // Draw crosshair - use custom position if available, otherwise use center of box
+            int centerX, centerY;
+            if (customPos != null) {
+                centerX = (int) customPos.x;
+                centerY = (int) customPos.y;
+                // Draw custom position crosshair in a different color (cyan) to distinguish it
+                g2.setColor(new Color(0, 255, 255, 200)); // brighter cyan for custom position
+            } else {
+                centerX = x + width / 2;
+                centerY = y + height / 2;
+                g2.setColor(new Color(255, 255, 255, 128)); // semi-transparent white
+            }
+            
             int crossSize = 5;//Math.min(width, height) / 8;
-            g2.setColor(new Color(255, 255, 255, 128)); // semi-transparent white
             g2.drawLine(centerX - crossSize, centerY, centerX + crossSize, centerY);
             g2.drawLine(centerX, centerY - crossSize, centerX, centerY + crossSize);
             
