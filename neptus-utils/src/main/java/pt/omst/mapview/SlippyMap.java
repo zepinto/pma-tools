@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -425,20 +427,22 @@ public class SlippyMap extends JPanel implements AutoCloseable {
 
     public void addRasterPainter(MapPainter painter) {
         rasterPainters.add(painter);
-        // Sort painters by timestamp if they're IndexedRasterPainter instances
-        rasterPainters.sort((p1, p2) -> {
-            if (p1.getClass().getSimpleName().equals("IndexedRasterPainter") && 
-                p2.getClass().getSimpleName().equals("IndexedRasterPainter")) {
-                try {
-                    long t1 = (long) p1.getClass().getMethod("getStartTimestamp").invoke(p1);
-                    long t2 = (long) p2.getClass().getMethod("getStartTimestamp").invoke(p2);
-                    return Long.compare(t1, t2);
-                } catch (Exception e) {
-                    return 0;
-                }
-            }
-            return 0;
-        });
+        
+        Collections.sort(rasterPainters);
+        // // Sort painters by timestamp if they're IndexedRasterPainter instances
+        // rasterPainters.sort((p1, p2) -> {
+        //     if (p1.getClass().getSimpleName().equals("IndexedRasterPainter") && 
+        //         p2.getClass().getSimpleName().equals("IndexedRasterPainter")) {
+        //         try {
+        //             long t1 = (long) p1.getClass().getMethod("getStartTimestamp").invoke(p1);
+        //             long t2 = (long) p2.getClass().getMethod("getStartTimestamp").invoke(p2);
+        //             return Long.compare(t1, t2);
+        //         } catch (Exception e) {
+        //             return 0;
+        //         }
+        //     }
+        //     return 0;
+        // });
         log.info("Added raster painter: {}", painter.getClass().getSimpleName());
     }
 

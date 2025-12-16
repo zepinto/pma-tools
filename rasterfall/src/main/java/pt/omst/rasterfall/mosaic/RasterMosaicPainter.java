@@ -39,15 +39,17 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
     // The image associated with the raster
     //private BufferedImage image = null;
     // The generated mosaic image at the current resolution
-    private BufferedImage mosaicImage = null;
+    private volatile BufferedImage mosaicImage = null;
     // The northwest corner location of the mosaic
-    private LocationType mosaicNWcorner = null;
+    private volatile LocationType mosaicNWcorner = null;
+    // The resolution of the current mosaicImage (for correct scaling while painting)
+    private volatile int currentImageResolution = 0;
 
     // The shape representing the raster, painted when zoomed out
     private final MultiPointGeometry shape = new MultiPointGeometry();
     // The parent folder where raster images are stored
     private final File parentFolder;
-    // The currently built resolution of the mosaic (pixels per meter)
+    // The target resolution being built (pixels per meter)
     private final AtomicInteger mosaicResolution = new AtomicInteger(0);
     // The geographic bounds of the raster
     private final Rectangle2D.Double bounds;
@@ -134,7 +136,7 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
             return;
         
         mosaicResolution.set(resolution);
-        mosaicImage = null;
+        // Don't clear mosaicImage here - keep displaying old one while building new
         BufferedImage img = readImage();
             
         
@@ -160,13 +162,14 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
             return;
         }        
 
-        // Store topLeft for painting
-        mosaicNWcorner = topLeft;
-
         log.info("Generating raster mosaic: {}x{} pixels at resolution {} px/m", imgWidth, imgHeight,
                 resolution);
-        mosaicImage = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g2 = mosaicImage.createGraphics();
+        
+        // Build new mosaic in local variable
+        BufferedImage newMosaic = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
+        LocationType newNWcorner = topLeft;
+        
+        Graphics2D g2 = newMosaic.createGraphics();
         //g2.setComposite(MaxAlphaComposite.INSTANCE);
         g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
         AffineTransform identity = g2.getTransform();
@@ -243,13 +246,19 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
         } catch (Exception e) {
             log.error("Error generating sidescan mosaic", e);
             e.printStackTrace();
+            return; // Don't swap in incomplete mosaic
         } finally {
             g2.dispose();
         }
 
         // Fill gaps in the mosaic (transparent lines between scanlines)
-        if (mosaicImage != null) {
-            GapFillFilter.fillGaps(mosaicImage, 5); // Fill gaps up to 10 pixels
+        GapFillFilter.fillGaps(newMosaic, 5);
+
+        // Only swap in the new mosaic if resolution hasn't changed during generation
+        if (resolution == mosaicResolution.get()) {
+            mosaicNWcorner = newNWcorner;
+            mosaicImage = newMosaic;
+            currentImageResolution = resolution;
         }
     }
 
@@ -271,13 +280,16 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
 
     private void paintMosaic(Graphics2D g, SlippyMap renderer) {
         AffineTransform before = g.getTransform();
-        if (mosaicImage != null) {
-            double[] cornerPos = renderer.latLonToScreen(mosaicNWcorner.getLatitudeDegs(),
-                    mosaicNWcorner.getLongitudeDegs());
-            Point2D corner = new Point2D.Double(cornerPos[0], cornerPos[1]);
-            g.translate(corner.getX(), corner.getY());
-            g.scale(renderer.getZoom() / mosaicResolution.get(), renderer.getZoom() / mosaicResolution.get());
-            g.drawImage(mosaicImage, 0, 0, null);
+        BufferedImage img = mosaicImage;
+        LocationType corner = mosaicNWcorner;
+        int imgResolution = currentImageResolution;
+        if (img != null && corner != null && imgResolution > 0) {
+            double[] cornerPos = renderer.latLonToScreen(corner.getLatitudeDegs(),
+                    corner.getLongitudeDegs());
+            Point2D cornerPt = new Point2D.Double(cornerPos[0], cornerPos[1]);
+            g.translate(cornerPt.getX(), cornerPt.getY());
+            g.scale(renderer.getZoom() / imgResolution, renderer.getZoom() / imgResolution);
+            g.drawImage(img, 0, 0, null);
             g.setTransform(before);
         }
     }
@@ -295,6 +307,7 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
         mosaicImage = null;
         mosaicNWcorner = null;
         mosaicResolution.set(0);
+        currentImageResolution = 0;
         log.debug("Closed RasterMosaicPainter for {}", raster.getFilename());
     }
 

@@ -221,6 +221,14 @@ public class IndexedRasterPainter implements MapPainter {
         g.fill(new Rectangle2D.Double(position.getX() - 3, position.getY() - 3, 6, 6));
     }
 
+    @Override
+    public int compareTo(MapPainter o) {
+        if (o instanceof IndexedRasterPainter) {
+            IndexedRasterPainter other = (IndexedRasterPainter) o;
+            return Long.compare(this.getStartTimestamp(), other.getStartTimestamp());
+        }
+        return getName().compareTo(o.getName());
+    }
 
 
     public static void main(String[] args) {
