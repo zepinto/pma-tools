@@ -10,6 +10,7 @@ import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -123,18 +124,33 @@ public class IndexedRasterUtils {
     }
 
     public static Rectangle2D.Double getBounds(IndexedRaster raster) {
-        Point2D.Double[] shape = getShape(raster);
-        double minLat = shape[0].x;
-        double maxLat = shape[0].x;
-        double minLon = shape[0].y;
-        double maxLon = shape[0].y;
-
-        for (Point2D.Double point : shape) {
-            minLat = Math.min(minLat, point.x);
-            maxLat = Math.max(maxLat, point.x);
-            minLon = Math.min(minLon, point.y);
-            maxLon = Math.max(maxLon, point.y);
+        int numSamples = raster.getSamples().size();
+        if (numSamples == 0) {
+            return new Rectangle2D.Double(0, 0, 0, 0);
         }
+        
+        // Initialize with first line position
+        Point2D.Double[] firstPos = getLinePosition(raster, 0);
+        double minLat = Math.min(firstPos[0].x, firstPos[1].x);
+        double maxLat = Math.max(firstPos[0].x, firstPos[1].x);
+        double minLon = Math.min(firstPos[0].y, firstPos[1].y);
+        double maxLon = Math.max(firstPos[0].y, firstPos[1].y);
+
+        int step = Math.max(1, numSamples / 100); // At most 100 samples
+        for (int i = step; i < numSamples; i += step) {
+            Point2D.Double[] pos = getLinePosition(raster, i);
+            minLat = Math.min(minLat, Math.min(pos[0].x, pos[1].x));
+            maxLat = Math.max(maxLat, Math.max(pos[0].x, pos[1].x));
+            minLon = Math.min(minLon, Math.min(pos[0].y, pos[1].y));
+            maxLon = Math.max(maxLon, Math.max(pos[0].y, pos[1].y));
+        }
+        
+        // Always include last line
+        Point2D.Double[] lastPos = getLinePosition(raster, numSamples - 1);
+        minLat = Math.min(minLat, Math.min(lastPos[0].x, lastPos[1].x));
+        maxLat = Math.max(maxLat, Math.max(lastPos[0].x, lastPos[1].x));
+        minLon = Math.min(minLon, Math.min(lastPos[0].y, lastPos[1].y));
+        maxLon = Math.max(maxLon, Math.max(lastPos[0].y, lastPos[1].y));
 
         return new Rectangle2D.Double(minLon, minLat, maxLon - minLon, maxLat - minLat);
     }
@@ -350,6 +366,21 @@ public class IndexedRasterUtils {
             }
         }
         return files;
+    }
+
+    public static List<IndexedRaster> loadRasters(File folder) {
+        List<File> rasterFiles = findRasterFiles(folder);
+        List<IndexedRaster> rasters = new ArrayList<>();
+        for (File file : rasterFiles) {
+            try {
+                String json = Files.readString(file.toPath());
+                IndexedRaster raster = Converter.IndexedRasterFromJsonString(json);
+                rasters.add(raster);
+            } catch (IOException e) {
+                log.error("Error loading raster file: " + file.getAbsolutePath(), e);
+            }
+        }
+        return rasters;
     }
 
     @Data

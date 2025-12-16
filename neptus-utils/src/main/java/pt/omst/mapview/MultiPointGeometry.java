@@ -232,7 +232,7 @@ public class MultiPointGeometry implements MapPainter {
         GeneralPath screenPath = buildScreenPath(map);        
         g.setColor(color.darker().darker());
         g.setStroke(stroke);
-        g.draw(screenPath);
+        //g.draw(screenPath);
         g.setColor(color);
         g.fill(screenPath);
     }

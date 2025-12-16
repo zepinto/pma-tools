@@ -34,11 +34,13 @@ import java.util.Map;
 
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JLayer;
 import javax.swing.JPanel;
 import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 
 import lombok.extern.java.Log;
+import pt.omst.rasterfall.overlays.RasterfallOverlays;
 import pt.omst.rasterfall.replay.LogReplay;
 import pt.omst.rasterlib.IndexedRasterUtils;
 import pt.omst.rasterlib.IndexedRasterUtils.RasterContactInfo;
@@ -470,9 +472,12 @@ public class RasterfallScrollbar extends JComponent implements LogReplay.Listene
 
     public static void main(String[] args) {
         RasterfallTiles waterfall = new RasterfallTiles(new File("/LOGS/REP/REP24/lauv-omst-2/20240913/075900_mwm-omst2/rasterIndex"), null);
+        RasterfallOverlays overlays = new RasterfallOverlays(waterfall);
+        JLayer<RasterfallTiles> layer = new JLayer<>(waterfall, overlays);
+        overlays.installUI(layer);
         JPanel panel = new JPanel(new BorderLayout());
         JViewport viewport = new JViewport();
-        viewport.setView(waterfall);
+        viewport.setView(layer);
         panel.add(viewport, BorderLayout.CENTER);
         panel.add(new RasterfallScrollbar(waterfall, viewport), BorderLayout.EAST);
         JFrame frame = new JFrame("Timeline");

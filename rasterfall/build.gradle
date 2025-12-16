@@ -27,6 +27,17 @@ run {
     systemProperties System.properties
 }
 
+// Task for debugging with remote debugger
+tasks.register('runDebug', JavaExec) {
+    group = 'application'
+    description = 'Runs the application with debug enabled on port 5005'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'pt.omst.rasterfall.RasterFallApp'
+    workingDir = rootProject.projectDir
+    systemProperties System.properties
+    jvmArgs = ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005']
+}
+
 repositories {
     mavenLocal()
     mavenCentral()
@@ -59,6 +70,7 @@ dependencies {
     
     // Image processing
     implementation 'com.jhlabs:filters:2.0.235-1'
+    implementation 'org.imgscalr:imgscalr-lib:4.2'
     
     // Testing
     testImplementation(platform('org.junit:junit-bom:5.11.1'))

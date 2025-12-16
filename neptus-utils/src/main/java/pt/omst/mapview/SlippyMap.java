@@ -442,10 +442,6 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         log.info("Added raster painter: {}", painter.getClass().getSimpleName());
     }
 
-    public void addPainter(MapPainter painter) {
-        painter.paint((Graphics2D) getGraphics(), this);
-    }
-
     public void addMapOverlay(AbstractMapOverlay overlay) {
         getOverlayManager().activateOverlay(overlay);
     }

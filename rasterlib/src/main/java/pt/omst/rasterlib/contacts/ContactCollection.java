@@ -495,7 +495,7 @@ public class ContactCollection implements MapPainter {
         ContactCollection collection = new ContactCollection(folder);
         System.out.println("Found " + collection.getAllContacts().size() + " contacts in " + (System.currentTimeMillis() - startMillis) + "ms");
         SlippyMap renderer = new SlippyMap();
-        renderer.addPainter(collection);
+        renderer.addRasterPainter(collection);
         GuiUtils.testFrame(renderer, "Contacts Viewer");
        
     }
