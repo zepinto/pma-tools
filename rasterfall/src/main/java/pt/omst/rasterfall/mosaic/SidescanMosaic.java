@@ -76,8 +76,8 @@ public class SidescanMosaic implements MapPainter, AutoCloseable {
 
     public static void main(String[] args) {
         SlippyMap map = new SlippyMap();
-        //File folder = new File("/LOGS/091526_harbour-survey/rasterIndex");
-        File folder = new File("/LOGS/102124_survey3/rasterIndex");
+        File folder = new File("/LOGS/091526_harbour-survey/rasterIndex");
+        //File folder = new File("/LOGS/102124_survey3/rasterIndex");
         List<IndexedRaster> rasters = IndexedRasterUtils.loadRasters(folder);
         SidescanMosaic mosaic = new SidescanMosaic(rasters, folder);
         // Don't use CachedMapPainter - SidescanMosaic has its own caching/regeneration

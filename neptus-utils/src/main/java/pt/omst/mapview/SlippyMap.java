@@ -874,8 +874,8 @@ public class SlippyMap extends JPanel implements AutoCloseable {
         return new double[]{x, y};
     }
 
-    private static int mapSize(int levelOfDetail) {
-        return 256 << levelOfDetail;
+    private static long mapSize(int levelOfDetail) {
+        return 256L << levelOfDetail;
     }
 
     private static double clip(double n, double minValue, double maxValue) {

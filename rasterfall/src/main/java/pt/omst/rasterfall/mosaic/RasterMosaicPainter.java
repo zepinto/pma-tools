@@ -246,6 +246,11 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
         } finally {
             g2.dispose();
         }
+
+        // Fill gaps in the mosaic (transparent lines between scanlines)
+        if (mosaicImage != null) {
+            GapFillFilter.fillGaps(mosaicImage, 5); // Fill gaps up to 10 pixels
+        }
     }
 
     public void readShape() {
@@ -306,18 +311,18 @@ public class RasterMosaicPainter implements MapPainter, AutoCloseable {
             return;
         }
 
-        if (renderer.getZoom() < 1) {
-            shape.paint(g, renderer);
-        }
-
-        // Cap resolution at 20 - higher zoom levels will just scale the level 20 image
-        int resolution = Math.min(20, (int) renderer.getZoom());
+        // Cap resolution between 1 and 21 - zoom < 1 scales down LOD 1, zoom > 21 scales up LOD 21
+        int resolution = Math.max(1, Math.min(20, (int) renderer.getZoom()));
         if (mosaicResolution.get() != resolution) {
             cancelMosaicTask();
             IndexedRasterUtils.background(() -> createMosaic(resolution));            
+        }
+        // Always paint the existing mosaic (scaled) while new resolution is being generated
+        if (mosaicImage != null) {
+            paintMosaic(g, renderer);
+        } else {
             shape.paint(g, renderer);
-        } else
-            paintMosaic(g, renderer);        
+        }
     }
 
     public static void main(String[] args) {
