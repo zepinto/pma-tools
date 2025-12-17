@@ -25,6 +25,8 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JToggleButton;
+import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
@@ -70,6 +72,8 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
     private final ContactFilterPanel filterPanel;
     private final InteractionMapOverlay interactionMapOverlay = new InteractionMapOverlay();
     private final PathMapOverlay pathMapOverlay;
+    private final SidescanMosaicMapOverlay sidescanMosaicMapOverlay;
+    private final JToolBar overlayToolbar;
     private final JSplitPane mainSplitPane;
     private final JSplitPane westSplitPane;
     private final JPanel eastPanel;
@@ -107,10 +111,31 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         
         slippyMap = new SlippyMap();
         contactsMapOverlay = new ContactsMapOverlay(compositeCollection);
-        slippyMap.addMapOverlay(interactionMapOverlay);
         pathMapOverlay = new PathMapOverlay();
-        slippyMap.addMapOverlay(pathMapOverlay);        
-        slippyMap.addMapOverlay(contactsMapOverlay);
+        sidescanMosaicMapOverlay = new SidescanMosaicMapOverlay();
+        
+        // Register overlays with the overlay manager (creates toggle buttons)
+        slippyMap.addMapOverlay(interactionMapOverlay); // Always active, no toggle needed
+        
+        JToggleButton mosaicButton = slippyMap.registerOverlay(sidescanMosaicMapOverlay, false);
+        mosaicButton.setSelected(true);
+        slippyMap.getOverlayManager().activateOverlay(sidescanMosaicMapOverlay);
+        
+        JToggleButton pathButton = slippyMap.registerOverlay(pathMapOverlay, false);
+        pathButton.setSelected(true);
+        slippyMap.getOverlayManager().activateOverlay(pathMapOverlay);
+        
+        JToggleButton contactsButton = slippyMap.registerOverlay(contactsMapOverlay, false);
+        contactsButton.setSelected(true);
+        slippyMap.getOverlayManager().activateOverlay(contactsMapOverlay);
+        
+        // Create overlay toolbar
+        overlayToolbar = new JToolBar();
+        overlayToolbar.setFloatable(false);
+        overlayToolbar.add(new JLabel("Overlays: "));
+        overlayToolbar.add(mosaicButton);
+        overlayToolbar.add(pathButton);
+        overlayToolbar.add(contactsButton);        
         
         contactsMapOverlay.setContactSelectionListener(contact -> {
             log.info("Contact selected: {}", contact.getContact().getLabel());
@@ -145,9 +170,10 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
         // Create status bar
         statusBar = createStatusBar();
 
-        // Create top panel with data source manager
+        // Create top panel with data source manager and overlay toolbar
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(dataSourceManager, BorderLayout.CENTER);
+        topPanel.add(overlayToolbar, BorderLayout.SOUTH);
 
         // Create filter panel (west panel)
         filterPanel = new ContactFilterPanel();
@@ -299,7 +325,9 @@ public class MapViewer extends JPanel implements AutoCloseable, RasterfallListen
 
     public void loadWaterfall(RasterfallTiles waterfall) {
         pathMapOverlay.setWaterfall(waterfall);
-        
+        sidescanMosaicMapOverlay.setRastersAndFolder(
+                waterfall.getRasters(), waterfall.getRastersFolder());
+
         // Remove old rasterfall collection if present
         if (rasterfallCollection != null) {
             compositeCollection.removeCollection(rasterfallCollection);
