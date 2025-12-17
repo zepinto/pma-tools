@@ -204,6 +204,7 @@ public class MarkOverlay extends AbstractOverlay {
 
     public BufferedImage getContactImage(double minRange, double maxRange, Instant startTime, Instant endTime) {
         if (waterfall == null || waterfall.getTiles().isEmpty()) {
+            log.warn("No tiles available in waterfall to generate contact image.");
             return null;
         }
         
@@ -480,55 +481,50 @@ public class MarkOverlay extends AbstractOverlay {
             label = generateNextLabel(prefix);
         }
         log.info("Creating new contact with label {}", label);
-        // Calculate top-left and bottom-right coordinates
-        int topLeftX = (int) Math.min(firstPoint.getX(), topLeft.getX());
-        int topLeftY = (int) Math.min(firstPoint.getY(), topLeft.getY());
-
-        int bottomRightX = (int) Math.max(firstPoint.getX(), bottomRight.getX());
-        int bottomRightY = (int) Math.max(firstPoint.getY(), bottomRight.getY());
-        int centerX = (topLeftX + bottomRightX) / 2;
-        int centerY = (topLeftY + bottomRightY) / 2;
-
-        double minRange = waterfall.getRangeAtScreenX(topLeftX);
-        double maxRange = waterfall.getRangeAtScreenX(bottomRightX);
-                
-        // Ensure min/max are in correct order (handle inverted selections)
-        if (minRange > maxRange) {
-            double temp = minRange;
-            minRange = maxRange;
-            maxRange = temp;
-        }
         
-        Instant startTime = waterfall.getTimeAtScreenY(bottomRightY);
-        Instant endTime = waterfall.getTimeAtScreenY(topLeftY);
+        // Calculate actual screen bounds from the two points (works for any drag direction)
+        int minScreenX = (int) Math.min(topLeft.getX(), bottomRight.getX());
+        int maxScreenX = (int) Math.max(topLeft.getX(), bottomRight.getX());
+        int minScreenY = (int) Math.min(topLeft.getY(), bottomRight.getY());
+        int maxScreenY = (int) Math.max(topLeft.getY(), bottomRight.getY());
+        minScreenX = (int) Math.max(0, minScreenX);
+        maxScreenX = (int) Math.min(waterfall.getWidth() - 1, maxScreenX);
+        int centerX = (minScreenX + maxScreenX) / 2;
+        int centerY = (minScreenY + maxScreenY) / 2;
+
+        // Get ranges from screen X coordinates
+        double rangeAtMinX = waterfall.getRangeAtScreenX(minScreenX);
+        double rangeAtMaxX = waterfall.getRangeAtScreenX(maxScreenX);
         
-        // Ensure start/end are in correct order
-        if (startTime.isAfter(endTime)) {
-            Instant temp = startTime;
-            startTime = endTime;
-            endTime = temp;
-        }
+        double minRange = Math.min(rangeAtMinX, rangeAtMaxX);
+        double maxRange = Math.max(rangeAtMinX, rangeAtMaxX);
+        
+        // Get times from screen Y coordinates
+        Instant timeAtMinY = waterfall.getTimeAtScreenY(minScreenY);
+        Instant timeAtMaxY = waterfall.getTimeAtScreenY(maxScreenY);
+        
+        Instant startTime = timeAtMinY.isBefore(timeAtMaxY) ? timeAtMinY : timeAtMaxY;
+        Instant endTime = timeAtMinY.isBefore(timeAtMaxY) ? timeAtMaxY : timeAtMinY;
 
         double width = maxRange - minRange;
         double height = (endTime.toEpochMilli() - startTime.toEpochMilli()) / 1000.0; // in seconds
-
+        
         // expand by EXPANSION_FACTOR on each side
         double expandX = width * EXPANSION_FACTOR;
         double expandY = height * EXPANSION_FACTOR;
-        double expandedMinRange = Math.max(0, minRange - expandX);
+        double expandedMinRange = minRange - expandX;
         double expandedMaxRange = maxRange + expandX;
 
-        if (minRange < 0)
-            expandedMinRange = minRange - expandX; // allow negative ranges
-        if (maxRange < 0)
-            expandedMaxRange = Math.min(0, maxRange + expandX); // allow negative ranges
-        
-        // Ensure expanded ranges are still in correct order
-        if (expandedMinRange > expandedMaxRange) {
-            double temp = expandedMinRange;
-            expandedMinRange = expandedMaxRange;
-            expandedMaxRange = temp;
-        }
+        log.info("Selected area: time {} to {}, range {} m to {} m",
+                startTime, endTime, minRange, maxRange);
+        log.info("Expanded area: time {} to {}, range {} m to {} m",
+                startTime.minusMillis((long) (expandY * 1000)),
+                endTime.plusMillis((long) (expandY * 1000)),
+                expandedMinRange, expandedMaxRange);
+        if (expandedMinRange < -waterfall.getRange(startTime.toEpochMilli()))
+            expandedMinRange = -waterfall.getRange(startTime.toEpochMilli());
+        if (expandedMaxRange > waterfall.getRange(startTime.toEpochMilli()))
+            expandedMaxRange = waterfall.getRange(startTime.toEpochMilli());
         
         Instant expandedStartTime = startTime.minusMillis((long) (expandY * 1000));
         Instant expandedEndTime = endTime.plusMillis((long) (expandY * 1000));

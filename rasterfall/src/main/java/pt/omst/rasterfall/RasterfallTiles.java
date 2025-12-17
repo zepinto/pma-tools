@@ -478,6 +478,16 @@ public class RasterfallTiles extends JPanel implements Closeable {
         return Double.NaN;
     }
 
+    public double getRange(long timeMillis) {
+        double minRange = Double.MAX_VALUE;
+        for (RasterfallTile tile : tiles) {
+            if (tile.containsTime(Instant.ofEpochMilli(timeMillis))) {
+                return tile.getRange();
+            }
+        }
+        return minRange;
+    }
+
     public Instant getTimeAtScreenY(int screenY) {
         for (RasterfallTile tile : tiles) {
             if (tile.getBounds().contains(0, screenY)) {
