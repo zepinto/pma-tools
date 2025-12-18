@@ -63,7 +63,7 @@ public class RasterFallApp extends JFrame {
     private JMenuItem openLogFolderItem;
 
     public RasterFallApp() {
-        setTitle("Sidescan RasterFall");
+        setTitle("RasterFall " + getApplicationVersion());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1200, 800);
         setLocationRelativeTo(null);
@@ -77,6 +77,17 @@ public class RasterFallApp extends JFrame {
         add(welcomePanel, BorderLayout.CENTER);
         statusIndicator = new TaskStatusIndicator(this);
         setupMenubar();
+    }
+
+    private String getApplicationVersion() {
+        String v = System.getProperty("rasterfall.version");
+        if (v != null && !v.isBlank()) {
+            return v;
+        }
+
+        // Works when running from a packaged JAR with Implementation-Version in MANIFEST.MF
+        v = RasterFallApp.class.getPackage().getImplementationVersion();
+        return (v != null && !v.isBlank()) ? v : "development";
     }
     
     /**
@@ -730,7 +741,7 @@ public class RasterFallApp extends JFrame {
                     add(rasterfallPanel, BorderLayout.CENTER);
 
                     // Update window title
-                    setTitle("Sidescan RasterFall - " + folder.getName());
+                    setTitle("Sidescan RasterFall " + getApplicationVersion() + " - " + folder.getName());
 
                     // Enable "Open Log Folder" menu item
                     if (openLogFolderItem != null) {

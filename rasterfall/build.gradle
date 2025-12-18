@@ -8,7 +8,7 @@ plugins {
 }
 
 group 'pt.omst'
-version '2025.11.00'
+version '2025.12.00'
 
 java {
     toolchain {
@@ -25,6 +25,8 @@ run {
     workingDir = rootProject.projectDir
     // Pass system properties to the application
     systemProperties System.properties
+    // Inject Gradle project version for runtime access
+    systemProperty 'rasterfall.version', project.version.toString()
 }
 
 // Task for debugging with remote debugger
@@ -35,6 +37,8 @@ tasks.register('runDebug', JavaExec) {
     mainClass = 'pt.omst.rasterfall.RasterFallApp'
     workingDir = rootProject.projectDir
     systemProperties System.properties
+    // Inject Gradle project version for runtime access
+    systemProperty 'rasterfall.version', project.version.toString()
     jvmArgs = ['-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005']
 }
 
